@@ -1,0 +1,2 @@
+Libs\X.xml
+[Game]\Guides.xml
