@@ -112,6 +112,20 @@ function M.install(sb, cfg)
   local function item_count(id_or_name) return player():item_count(id_or_name) end
   env.GetItemCount = item_count
   env.C_Item = trap(sb, "C_Item", { GetItemCount = item_count })
+  -- WoWPro_CompatUtil.lua:325-331 (C_Item_GetItemInfo prefers the GetItemInfo global). Read by
+  -- AutoComplete.lua:210-212 (loot tracker, on every RowUpdate of an L step), Markup.lua:41,
+  -- Widgets.lua:317, Broker.lua:859: only name (1), link (2) and texture (10) are used.
+  -- Name from the catalog; nil for items it does not know, as the client does for uncached items.
+  local QUESTION_MARK_ICON = 134400 -- Interface\Icons\INV_Misc_QuestionMark file id
+  env.GetItemInfo = function(item)
+    local catalog = sb.world.catalog
+    if not catalog then return nil end
+    local id = tonumber(item) or catalog:item_id(item)
+    local it = id and catalog:item(id)
+    if not (it and it.name) then return nil end
+    local link = "|cffffffff|Hitem:" .. id .. "::::::::1:::::::|h[" .. it.name .. "]|h|r"
+    return it.name, link, 1, 1, 0, "", "", 1, "", QUESTION_MARK_ICON, 0
+  end
   -- WoWPro_Broker.lua:3341 (IsPlayerSpell)
   env.IsPlayerSpell = function(id) return player().spells[id] == true end
   -- WoW client GetBindLocation: the hearth location text, nil when unbound
@@ -241,6 +255,13 @@ function M.install(sb, cfg)
     local s = player().skills[name]
     return name, 0, s.rank, s.max, 0, 0, SKILL_LINES[name], 0
   end
+
+  -- WoWPro_Broker.lua:3883 (CompleteStep plays the check sound before it records completion at :3888,
+  -- so a missing global aborts every completion). Client returns willPlay; headless plays nothing.
+  env.PlaySoundFile = function() return true end
+  -- WoWPro_Events.lua:689, :743, :753, :787 (compared with == to the step name). GetTitleText is the open
+  -- NPC quest dialog's title; the harness opens no dialog (no QUEST_DETAIL/QUEST_COMPLETE), so "".
+  env.GetTitleText = function() return "" end
 
   -- FrameXML constant. WoWPro_Widgets.lua:510 (CreateScrollbar border colour)
   env.TOOLTIP_DEFAULT_COLOR = { r = 1, g = 1, b = 1 }

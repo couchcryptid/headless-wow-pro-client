@@ -4,6 +4,7 @@ local addon_info = require("hwc.addon_info")
 local sandbox = require("hwc.sandbox")
 local toc = require("hwc.toc")
 local World = require("hwc.world")
+local catalog = require("hwc.catalog")
 local stubs = require("hwc.stubs.core")
 local hbd = require("hwc.stubs.hbd")
 local standins = require("hwc.stubs.standins")
@@ -109,7 +110,9 @@ function M.run(cfg)
 
   local sb = sandbox.new(cfg)
   local env = sb.env
-  sb.world = World.new(cfg, nil, sb.clock)
+  -- World facts come from the catalog (design spec §6); absent sources are
+  -- recorded in catalog.sources, never fatal.
+  sb.world = World.new(cfg, catalog.load(cfg), sb.clock)
   stubs.install(sb, cfg)
   env.math = seeded_math(cfg.seed)
   local function phase(name)
@@ -121,7 +124,7 @@ function M.run(cfg)
     addon = { path = cfg.addon_path, branch = info.branch, commit = info.commit, dirty = info.dirty },
     files_loaded = 0, files_failed = {}, skipped = {},
     errors = sb.errors, missing_order = sb.missing_order, standin_calls = sb.standin_calls,
-    sb = sb,
+    sb = sb, world = sb.world,
   }
   result.addon_events = {}
 

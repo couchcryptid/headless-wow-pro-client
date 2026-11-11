@@ -51,6 +51,30 @@ describe("stubs", function()
     assert.same({ "hi" }, sb.chat)
   end)
 
+  it("plays sounds silently and has no quest dialog title", function()
+    assert.is_true(env.PlaySoundFile("Sound/Interface/MapPing.ogg"))
+    assert.equal("", env.GetTitleText())
+  end)
+
+  it("answers GetItemInfo from the catalog by id, numeric string or name", function()
+    sb.world.catalog = {
+      item = function(_, id) return tonumber(id) == 750 and { id = 750, name = "Tough Wolf Meat" } or nil end,
+      item_id = function(_, name) return name == "Tough Wolf Meat" and 750 or nil end,
+    }
+    local name, link, _, _, _, _, _, _, _, texture = env.GetItemInfo(750)
+    assert.equal("Tough Wolf Meat", name)
+    assert.matches("|Hitem:750:", link, 1, true)
+    assert.matches("[Tough Wolf Meat]", link, 1, true)
+    assert.is_not_nil(texture)
+    assert.equal("Tough Wolf Meat", (env.GetItemInfo("750")))
+    assert.equal("Tough Wolf Meat", (env.GetItemInfo("Tough Wolf Meat")))
+    assert.is_nil(env.GetItemInfo(1))
+  end)
+
+  it("returns nil from GetItemInfo without a catalog", function()
+    assert.is_nil(env.GetItemInfo(750))
+  end)
+
   it("returns strings for zone text and a map position", function()
     assert.is_string(env.GetSubZoneText())
     assert.is_string(env.GetZoneText())
