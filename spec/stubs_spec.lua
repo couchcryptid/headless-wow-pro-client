@@ -58,11 +58,11 @@ describe("stubs", function()
   end)
 
   it("records unstubbed namespaced reads as misses", function()
-    assert.is_nil(env.C_QuestLog.GetQuestObjectives)
-    assert.is_nil(env.C_QuestLog.GetQuestObjectives)
-    assert.is_true(sb.missing["C_QuestLog.GetQuestObjectives"])
+    assert.is_nil(env.C_QuestLog.GetQuestLogRewardXP)
+    assert.is_nil(env.C_QuestLog.GetQuestLogRewardXP)
+    assert.is_true(sb.missing["C_QuestLog.GetQuestLogRewardXP"])
     local n = 0
-    for _, k in ipairs(sb.missing_order) do if k == "C_QuestLog.GetQuestObjectives" then n = n + 1 end end
+    for _, k in ipairs(sb.missing_order) do if k == "C_QuestLog.GetQuestLogRewardXP" then n = n + 1 end end
     assert.equal(1, n)
   end)
 
@@ -71,6 +71,12 @@ describe("stubs", function()
     assert.is_nil(env.C_QuestLog.GetInfo(1))
     assert.is_false(env.C_QuestLog.IsQuestFlaggedCompleted(1))
     assert.is_false(env.C_QuestLog.IsQuestFlaggedCompletedOnAccount(1))
+    assert.same({}, env.C_QuestLog.GetQuestObjectives(1))
+    assert.is_false(env.C_QuestLog.IsFailed(1))
+    assert.equal(0, env.GetNumQuestLeaderBoards(1))
+    assert.equal(0, env.GetQuestProgressBarPercent(1))
+    assert.equal(1, env.LE_QUEST_FREQUENCY_DAILY)
+    assert.same({ Default = 0, Daily = 1, Weekly = 2 }, env.Enum.QuestFrequency)
   end)
 
   it("routes a timer callback's error to the error handler and keeps running", function()

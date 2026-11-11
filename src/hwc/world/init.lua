@@ -1,5 +1,6 @@
 -- The simulated world behind the WoW client stubs (design spec §5).
 local Player = require("hwc.world.player")
+local QuestLog = require("hwc.world.questlog")
 
 local World = {}
 World.__index = World
@@ -17,6 +18,7 @@ function World.new(cfg, catalog, clock)
   -- Applied before any event is recorded or clock is attached: the starting state.
   for _, p in ipairs(cfg.professions or {}) do self.player:learn_skill(p.name, p.rank, p.max) end
   self.events = {}
+  self.log = QuestLog.new(self)
   return self
 end
 
