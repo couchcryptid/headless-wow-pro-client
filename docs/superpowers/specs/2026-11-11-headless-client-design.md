@@ -58,6 +58,18 @@ Today the only way to check a WoW-Pro guide fix is to level an alt in the game c
   - **Findings in the profession variants:** a gated quest the guide still asks the character to turn in without the skill is recorded as `accept-refused` or `did-not-advance`. A gated quest the guide never offers when the character does have the skill is recorded as `never-shown-accept`.
   - **The exact variant set** is left to the builder (§11), provided every Camping 101 quest in the 1–25 guides is covered by at least one variant.
 
+- **Rank (user's decision, 2026-11-11):** a single rank, the default **rank 2**.
+  - **Why it's rank 2:** a fresh character has no `WoWProCharDB.Rank` overrides, so `WoWPro.GuideRank` (`WoWPro_Broker.lua:602`) falls through to the profile default `rank = 2` (`WoWPro.lua:345`).
+  - **Out of scope:** comparing ranks, a rank matrix, or any work on the engine's rank capability or the guides' `|RANK|` flags. That's routing work.
+  - **Guard:** the findings header records the rank, and one check asserts the engine reports rank 2.
+- **Dungeons (user's decision, 2026-11-11):** guide and engine defaults, with no dungeon flag, no dungeon runs and no instance XP this pass.
+  - **Faithful default:** with the default `EnableDungeons = true`, the engine auto-completes every `|DUNGEON|` accept ("No optional Dungeon quests desired", `WoWPro_Broker.lua:2588–2592`). The condition looks inverted against its own comment.
+  - **The client reproduces it.** It becomes one engine-bug finding, with the hidden accepts (9 in `19_25_Alliance`, 2 in `12_20_Darkshore`) linked under it.
+  - **Deferred to routing and rank work:**
+    - **Trigger:** a dungeon run happens at the guide's note level or a little above, before the lowest-level quest in the bundle turns grey.
+    - **XP:** a five-person full clear (elite ×2, ×1.4 ÷ 5 per member).
+    - **Quests:** all of that dungeon's quests are completed in one run.
+
 ## 4. Architecture
 
 Three layers. All the Lua runs in one LuaJIT (Lua 5.1) state per character run.
@@ -101,7 +113,8 @@ Its job is to let the addon load and run as if it were in the game, with the WoW
 ### 4.2 Loading the addon
 
 - Parse `WoWPro/WoWPro.toc` and `WoWPro_Leveling/WoWPro_Leveling.toc` ourselves, expand XML `<Script file=…/>` and `<Include …/>`, and substitute `[Game]` = `Forever`, matching on-disk case. Run each file as a chunk with the addon varargs (`addonName`, private table), in TOC order.
-- **Skip list** (UI-only, from discovery): Templates, Widgets, GuideList, CurrentGuide, Tutorial, Config, Command, Pets, `WoWPro_Leveling_Config`, `WoWPro_Leveling_Frames`. `WoWPro_Frames.lua` and `WoWPro_RowUpdate.lua` **are loaded**, because row state is part of the engine's behaviour. The skip list is configuration, and each entry records why it's skipped.
+- **Skip list** (UI-only, from discovery): Templates, GuideList, Tutorial, Config, Command, Pets, `WoWPro_Leveling_Config`, `WoWPro_Leveling_Frames`. `WoWPro_Frames.lua`, `WoWPro_RowUpdate.lua`, `WoWPro_Widgets.lua` and `WoWPro_CurrentGuide.lua` **are loaded**, because row state is part of the engine's behaviour.
+  - *Amended 2026-11-11 during Plan 1:* Widgets and CurrentGuide were taken off the skip list. `WoWPro_Frames.lua:1767` builds every row from Widgets constructors, and `WoWPro_Broker.lua:1880` reads `CurrentGuideFrame:IsVisible()` on every update. The skip list is configuration, and each entry records why it's skipped.
 - **Stand-ins for what skipped files define and the engine calls:** `WoWPro.RefreshConfig` and `WoWPro.SetDefaults`, which `OnInitialize`'s AceDB callbacks require. Without them CallbackHandler errors (`CallbackHandler-1.0.lua:101–102`). Also `WoWPro:InitializeTutorial` and `QueueTutorial`, `CreateConfig`, and minimap and binding calls. Each is a no-op that logs, kept in one file so they're easy to review.
 - **Guides:** load all Forever `Alliance` and `Neutral` `Guides.xml` files as the TOC does. Faction filtering is the engine's (`WoWPro_GuideRegistry.lua:266`).
 - **Saved variables:** start each run with a fresh character: `WoWProCharDB = { QID2Guide = {} }` before the guide files load, and AceDB creating the rest. Pin `WoWProCharDB.DebugLevel = 0`, because the default of 1 turns `;` comment lines into steps (`WoWPro_Parser.lua:691`) and changes step indices. Seed `math.random` (`SelectHearthstone`).
