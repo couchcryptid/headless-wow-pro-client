@@ -1,0 +1,75 @@
+local polyfills = require("hwc.polyfills")
+
+describe("polyfills", function()
+    local env
+    before_each(function()
+        env = {}
+        polyfills.install(env)
+    end)
+
+    describe("strsplit", function()
+        it("treats the delimiter as a set of characters", function()
+            assert.are.same({ "1", "2", "3" }, { env.strsplit("^&", "1&2^3") })
+        end)
+
+        it("keeps empty pieces, including a trailing one", function()
+            assert.are.equal(4, select("#", env.strsplit("&", "a&&b&")))
+            assert.are.same({ "a", "", "b", "" }, { env.strsplit("&", "a&&b&") })
+        end)
+
+        it("honours the piece limit, leaving the remainder in the last piece", function()
+            assert.are.same({ "a", "b c" }, { env.strsplit(" ", "a b c", 2) })
+        end)
+
+        it("returns the whole string when no delimiter is present", function()
+            assert.are.equal(1, select("#", env.strsplit("|", "abc")))
+            assert.are.equal("abc", (env.strsplit("|", "abc")))
+        end)
+
+        it("takes Lua pattern magic characters literally", function()
+            assert.are.same({ "a", "b" }, { env.strsplit(".", "a.b") })
+            assert.are.same({ "a", "b" }, { env.strsplit("%", "a%b") })
+            assert.are.same({ "a", "b" }, { env.strsplit("^", "a^b") })
+        end)
+
+        it("supports the method form (delims):split(str)", function()
+            assert.are.same({ env.strsplit(";", "a;b") }, { (";"):split("a;b") })
+            assert.are.same({ "a", "b" }, { (";"):split("a;b") })
+        end)
+    end)
+
+    describe("strtrim", function()
+        it("trims whitespace by default", function()
+            assert.are.equal("x", env.strtrim("  x \t\n"))
+        end)
+        it("trims a custom character set", function()
+            assert.are.equal("a", env.strtrim("xxaxx", "x"))
+        end)
+        it("is available as string.trim", function()
+            assert.are.equal("x", (" x "):trim())
+        end)
+    end)
+
+    it("strjoin joins varargs with the separator", function()
+        assert.are.equal("a-b-c", env.strjoin("-", "a", "b", "c"))
+    end)
+
+    it("wipe empties the table and returns it", function()
+        local t = { 1, 2, a = 3 }
+        assert.are.equal(t, env.wipe(t))
+        assert.is_nil(next(t))
+    end)
+
+    it("installs the aliases", function()
+        assert.are.equal(table.insert, env.tinsert)
+        assert.are.equal(table.remove, env.tremove)
+        assert.are.equal(table.sort, env.sort)
+        assert.are.equal(math.floor, env.floor)
+        assert.are.equal(string.format, env.format)
+        assert.are.equal(string.gsub, env.gsub)
+        assert.are.equal(os.date, env.date)
+        assert.are.equal(os.time, env.time)
+        assert.is_function(env.debugstack)
+        assert.are.equal("", env.debuglocals())
+    end)
+end)
