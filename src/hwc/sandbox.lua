@@ -46,6 +46,15 @@ function M.new(cfg)
   end })
   polyfills.install(env)
 
+  -- Ace libs (e.g. CallbackHandler-1.0) build code with loadstring; compile it
+  -- into the sandbox so it cannot reach the real _G or skip the missing trap.
+  local real_loadstring = loadstring
+  function env.loadstring(src, chunkname)
+    local fn, err = real_loadstring(src, chunkname)
+    if not fn then return nil, err end
+    return setfenv(fn, env)
+  end
+
   local custom
   local function handler(msg)
     sb:record(msg, "call")
