@@ -59,6 +59,7 @@ describe("boot", function()
       if s.action == "A" and s.step == "Dwarven Outfitters" and s.qid == "179" then found = true end
     end
     assert.is_true(found, "A Dwarven Outfitters (179) not among the first steps")
+    assert.is_false(r.settle.hit_limit)
     assert.same({}, harness_errors(r))
   end)
 
@@ -67,7 +68,15 @@ describe("boot", function()
     print_addon_errors(r)
     assert.equal("ClassicDunMorogh0112", r.guide.gid)
     assert.is_true(r.guide.loaded)
+    assert.is_false(r.settle.hit_limit)
     assert.same({}, harness_errors(r))
+  end)
+
+  it("captured chat lines carry no wall-clock time", function()
+    for _, line in ipairs(dwarf.sb.chat) do
+      local stamp = line:match("^(%d%d%d%d%d%d) ")
+      if stamp then assert.matches("^0000", stamp) end
+    end
   end)
 
   it("refuses a checkout without git identity", function()

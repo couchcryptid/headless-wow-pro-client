@@ -14,13 +14,12 @@ local BUILTIN_NAMES = {
   "string", "table", "math", "pairs", "ipairs", "select", "type", "tostring",
   "tonumber", "pcall", "xpcall", "error", "assert", "setmetatable",
   "getmetatable", "rawget", "rawset", "rawequal", "next", "unpack",
-  "loadstring", "setfenv", "getfenv", "coroutine", "bit", "print",
+  "loadstring", "setfenv", "coroutine", "bit",
 }
 
 local function build_builtins()
   local b = {}
   for _, name in ipairs(BUILTIN_NAMES) do b[name] = _G[name] end
-  b.os = { date = os.date, time = os.time, clock = os.clock }
   return b
 end
 
@@ -32,6 +31,9 @@ function M.new(cfg)
   sb.clock = clock.new()
   -- script errors go to the current error handler, as in the client
   -- unknown frame getters are reported as missing like globals ("Frame:GetX")
+  -- MUST stay a tail call: it keeps this closure out of the stack, so the
+  -- handler's debug.traceback(..., 3) starts at the addon frame and boot's
+  -- is_harness_error classifies script/timer errors as addon errors.
   sb.frames = frames.new(sb.clock, function(e) return sb.env.geterrorhandler()(e) end,
     function(name) sb.missing[name] = true; sb.missing_order[#sb.missing_order + 1] = name end)
 
@@ -48,6 +50,33 @@ function M.new(cfg)
     return nil
   end })
   polyfills.install(env)
+
+  -- Virtual time: a fixed epoch plus the virtual clock; never the wall clock.
+  -- clock:now() starts at 1000.0 (clock.lua START).
+  local EPOCH, CLOCK_START = 1767225600, 1000.0
+  local function vtime() return EPOCH + math.floor(sb.clock:now() - CLOCK_START) end
+  local function vdate(fmt, t)
+    fmt = fmt or "%c"
+    if fmt:sub(1, 1) ~= "!" then fmt = "!" .. fmt end
+    return os.date(fmt, t or vtime())
+  end
+  local function vclock() return sb.clock:now() - CLOCK_START end
+  env.date, env.time = vdate, vtime
+  builtins.os = { date = vdate, time = vtime, clock = vclock }
+
+  -- print goes to the chat frame in WoW, never stdout
+  function env.print(...)
+    local parts = {}
+    for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
+    sb.chat[#sb.chat + 1] = table.concat(parts, " ")
+  end
+
+  -- getfenv(0) / bare getfenv at a sandboxed chunk's top level is the sandbox
+  local real_getfenv = getfenv
+  function env.getfenv(f)
+    if f == nil or f == 0 then return env end
+    return real_getfenv(f)
+  end
 
   -- Ace libs (e.g. CallbackHandler-1.0) build code with loadstring; compile it
   -- into the sandbox so it cannot reach the real _G or skip the missing trap.
