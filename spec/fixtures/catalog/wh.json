@@ -1,0 +1,12 @@
+{"quest": {
+  "1001": {"xp": 900, "level": 20, "reqlevel": null, "reqclass": 0, "reqrace": 0},
+  "1003": {"xp": null, "level": null, "reqlevel": 7, "reqclass": 0, "reqrace": 0},
+  "1004": {"xp": 300, "level": 4, "reqlevel": 1, "reqclass": 64, "reqrace": 0},
+  "90001": {"xp": 500, "level": 10, "reqlevel": 8, "reqclass": 0, "reqrace": 8589934592},
+  "90002": {"xp": 510, "level": 11, "reqlevel": 8, "reqclass": 0, "reqrace": 8},
+  "1007": {"xp": 50, "level": 2, "reqlevel": 1, "reqclass": 0, "reqrace": 2},
+  "1002": {"xp": 100, "level": 1, "reqlevel": 1, "reqclass": 8, "reqrace": 0}
+ },
+ "item": {
+  "5001": {"drops": [[2003, 0.25, 100, null, null], [2001, 0.5, 90, null, null]]}
+ }}

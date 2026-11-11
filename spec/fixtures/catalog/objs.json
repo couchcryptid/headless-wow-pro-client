@@ -1,0 +1,3 @@
+{"1001": [{"kind": "item", "ids": [5001], "count": 4, "text": "Fixture Pelt"},
+          {"kind": "npc", "ids": [2003], "count": 1, "text": "Fixture Boss", "from_db_only": true}],
+ "1003": []}
