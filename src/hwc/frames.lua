@@ -13,9 +13,14 @@ end
 
 -- Runs a frame script. With an on_error hook (the client's error handler),
 -- an error is reported and the caller carries on, as in the client.
-local function run_script(owner, fn, ...)
+-- `where` ("OnEvent"/"OnUpdate") is published as owner.where while the script
+-- runs, so the error hook can tag the error's origin; nested runs restore it.
+local function run_script(owner, where, fn, ...)
   if not owner.on_error then return fn(...) end
+  local prev = owner.where
+  owner.where = where
   xpcall(fn, owner.on_error, ...)
+  owner.where = prev
 end
 
 local function ensure_ticker(self)
@@ -23,7 +28,7 @@ local function ensure_ticker(self)
   if s.ticker then return end
   s.ticker = s.owner.clock:add_ticker(function(elapsed)
     local fn = s.scripts.OnUpdate
-    if fn and self:IsVisible() then run_script(s.owner, fn, self, elapsed) end
+    if fn and self:IsVisible() then run_script(s.owner, "OnUpdate", fn, self, elapsed) end
   end)
 end
 
@@ -253,7 +258,7 @@ function Frames:fire(event, ...)
     if (r.event == event or r.event == true) and not seen[r.frame] then
       seen[r.frame] = true
       local handler = r.frame._s.scripts.OnEvent
-      if handler then run_script(self, handler, r.frame, event, ...) end
+      if handler then run_script(self, "OnEvent", handler, r.frame, event, ...) end
     end
   end
 end

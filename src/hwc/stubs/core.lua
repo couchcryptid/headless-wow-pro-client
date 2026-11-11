@@ -47,7 +47,13 @@ function M.install(sb, cfg, player)
   -- AceTimer-3.0.lua:30 captures GetTime and C_Timer.After as upvalues at load, so install before any library
   env.GetTime = function() return clock:now() end
   -- The client reports a timer callback's error to the error handler and keeps running.
-  local function fire(fn, ...) xpcall(fn, env.geterrorhandler(), ...) end
+  -- frames.where tags the error's origin for the handler (sandbox.lua)
+  local function fire(fn, ...)
+    local prev = frames.where
+    frames.where = "timer"
+    xpcall(fn, env.geterrorhandler(), ...)
+    frames.where = prev
+  end
   local function new_timer(delay, fn)
     local t = { cancelled = false }
     function t:Cancel() self.cancelled = true end

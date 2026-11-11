@@ -192,3 +192,73 @@ describe("sandbox error classification", function()
     assert.is_false(require("hwc.boot").is_harness_error(sb.errors[1]))
   end)
 end)
+
+describe("sandbox getfenv/setfenv confinement", function()
+  it("getfenv(2) from a sandboxed chunk and getfenv(print) return env", function()
+    local sb = sandbox.new({})
+    local p = tmpfile("local function f() return getfenv(2) end; R = f(); P = getfenv(print); L = getfenv(loadstring)")
+    assert.is_true(sb:run_file(p)); os.remove(p)
+    assert.equal(sb.env, sb.env.R)
+    assert.equal(sb.env, sb.env.P)
+    assert.equal(sb.env, sb.env.L)
+  end)
+
+  it("setfenv refuses the real _G and otherwise works", function()
+    local sb = sandbox.new({})
+    local function f() end
+    local ok, err = pcall(sb.env.setfenv, f, _G)
+    assert.is_false(ok)
+    assert.matches("hwc: setfenv to real _G refused", err)
+    local t = {}
+    sb.env.setfenv(f, t)
+    assert.equal(t, getfenv(f))
+  end)
+end)
+
+describe("sandbox error recording", function()
+  it("keeps recording after sb:record throws inside the error handler", function()
+    local sb = sandbox.new({})
+    local real = sb.record
+    sb.record = function() error("record broke") end
+    sb.env.geterrorhandler()("first")
+    sb.record = real
+    sb:call(function() error("x") end)
+    local found = false
+    for _, e in ipairs(sb.errors) do if e.msg:find("x", 1, true) then found = true end end
+    assert.is_true(found)
+    -- and the handler re-entry guard is clear: a handler call records again
+    local n = #sb.errors
+    sb.env.geterrorhandler()("again")
+    assert.equal(n + 1, #sb.errors)
+  end)
+
+  it("tags frame script and timer errors with where", function()
+    local sb = sandbox.new({})
+    sb.env.CreateFrame = function() return sb.frames:create("Frame") end
+    sb.env.Boom = function(msg) error(msg) end
+    local p = tmpfile([[
+      local f = CreateFrame()
+      f:RegisterEvent("FOO")
+      f:SetScript("OnEvent", function() Boom("ev") end)
+      f:SetScript("OnUpdate", function() Boom("up"); f:SetScript("OnUpdate", nil) end)
+    ]])
+    assert.is_true(sb:run_file(p)); os.remove(p)
+    sb.frames:fire("FOO")
+    sb.clock:after(0.1, function() sb.env.geterrorhandler() end)
+    sb.clock:settle({ max_virtual = 1 })
+    local where = {}
+    for _, e in ipairs(sb.errors) do where[e.msg:match("ev") and "ev" or "up"] = e.where end
+    assert.equal("OnEvent", where.ev)
+    assert.equal("OnUpdate", where.up)
+  end)
+
+  it("tags C_Timer callback errors with where = timer", function()
+    local cfg = require("hwc.config").load({ race = "Dwarf", class = "WARRIOR" })
+    local sb = sandbox.new(cfg)
+    local stubs = require("hwc.stubs.core")
+    stubs.install(sb, cfg, stubs.player_from(cfg))
+    sb.env.C_Timer.After(0.1, function() error("tick") end)
+    sb.clock:settle({ max_virtual = 1 })
+    assert.equal("timer", sb.errors[1].where)
+  end)
+end)
