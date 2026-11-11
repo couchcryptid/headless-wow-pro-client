@@ -73,7 +73,8 @@ function M.files(addon_root, toc_relpath, game)
     if rel:lower():match("%.xml$") and not reason then
       if stack[rel] then error("hwc.toc: XML include cycle at " .. rel, 0) end
       stack[rel] = true
-      local text = read_file(addon_root .. "/" .. rel)
+      -- the client ignores commented-out entries, so strip <!-- ... --> before matching
+      local text = read_file(addon_root .. "/" .. rel):gsub("<!%-%-.-%-%->", "")
       local xdir = dirname(rel)
       -- document order across both tags: collect (position, file) pairs
       local refs = {}
