@@ -1,4 +1,6 @@
 -- Simulated player state (design spec §5). The stubs read this on every call.
+local xp = require("hwc.world.xp")
+
 local Player = {}
 Player.__index = Player
 
@@ -26,8 +28,31 @@ function Player.new(cfg, record)
   }, Player)
 end
 
--- Interim: the level-1 value. Task 3 replaces this body with the XP table.
-function Player:xp_max() return 400 end
+-- XP needed for the current level; 0 at the cap, where to_next is undefined.
+function Player:xp_max()
+  if self.level >= xp.CAP_LEVEL then return 0 end
+  return xp.to_next(self.level)
+end
+
+-- Adds n XP, carrying the remainder across levels. XP is discarded once the cap level is reached.
+-- Returns the number of levels gained.
+function Player:add_xp(n)
+  local gained = 0
+  while n > 0 and self.level < xp.CAP_LEVEL do
+    local need = xp.to_next(self.level) - self.xp
+    if n < need then
+      self.xp = self.xp + n
+      n = 0
+    else
+      n = n - need
+      self.level = self.level + 1
+      self.xp = 0
+      gained = gained + 1
+    end
+  end
+  if self.level >= xp.CAP_LEVEL then self.xp = 0 end
+  return gained
+end
 
 function Player:set_zone(zone, subzone, map_id, x, y)
   self.zone, self.subzone, self.map_id, self.x, self.y = zone, subzone, map_id, x, y

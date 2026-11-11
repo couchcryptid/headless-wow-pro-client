@@ -60,7 +60,7 @@ describe("Player behind the stubs", function()
     p:learn_flight_point("Ironforge")
     assert.is_true(p.flight_points.Ironforge)
     p.level, p.xp = 5, 12
-    assert.same({ 5, 12, 400 }, { env.UnitLevel(), env.UnitXP(), env.UnitXPMax() })
+    assert.same({ 5, 12, 2800 }, { env.UnitLevel(), env.UnitXP(), env.UnitXPMax() })
   end)
 
   it("reports Night Elf identity from the Alliance table", function()
