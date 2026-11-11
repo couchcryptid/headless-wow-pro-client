@@ -68,7 +68,8 @@ function xp.mob_xp(char_level, mob_level, elite, party_size)
     local zd = xp.zero_diff(c)
     v = base * (zd - (c - m)) / zd
   end
-  if elite then v = v * 2 * modifier / party_size else v = v * modifier / party_size end
+  -- Non-elite kills are always solo (sim.py:340-359): the party share applies only to elites.
+  if elite then v = v * 2 * modifier / party_size end
   return v
 end
 
