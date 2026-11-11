@@ -10,7 +10,7 @@ describe("stubs", function()
     local cfg = config.load({ race = "Dwarf", class = "WARRIOR" })
     sb = sandbox.new(cfg)
     env = sb.env
-    stubs.install(sb, cfg, stubs.player_from(cfg))
+    stubs.install(sb, cfg)
   end)
 
   it("reports the Forever build and player identity", function()

@@ -36,6 +36,14 @@ describe("config.load", function()
     os.execute("rm -rf '" .. dir .. "'")
   end)
 
+  it("defaults to no professions and keeps a professions list", function()
+    local dir = fake_addon()
+    assert.same({}, config.load({ addon_path = dir }).professions)
+    local profs = { { name = "First Aid", rank = 1, max = 75 } }
+    assert.same(profs, config.load({ addon_path = dir, professions = profs }).professions)
+    os.execute("rm -rf '" .. dir .. "'")
+  end)
+
   it("missing addon path errors", function()
     assert.has_error(function()
       config.load { addon_path = "/nonexistent" }

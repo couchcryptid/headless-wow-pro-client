@@ -3,6 +3,7 @@
 local addon_info = require("hwc.addon_info")
 local sandbox = require("hwc.sandbox")
 local toc = require("hwc.toc")
+local World = require("hwc.world")
 local stubs = require("hwc.stubs.core")
 local hbd = require("hwc.stubs.hbd")
 local standins = require("hwc.stubs.standins")
@@ -108,7 +109,8 @@ function M.run(cfg)
 
   local sb = sandbox.new(cfg)
   local env = sb.env
-  stubs.install(sb, cfg, stubs.player_from(cfg))
+  sb.world = World.new(cfg, nil, sb.clock)
+  stubs.install(sb, cfg)
   env.math = seeded_math(cfg.seed)
   local function phase(name)
     if cfg.on_phase then cfg.on_phase(name, sb) end
