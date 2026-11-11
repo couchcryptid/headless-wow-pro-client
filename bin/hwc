@@ -1,4 +1,6 @@
 #!/bin/sh
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-export LUA_PATH="$REPO/src/?.lua;$REPO/src/?/init.lua;;"
-exec /opt/homebrew/bin/luajit "$REPO/src/hwc/cli.lua" "$@"
+ROCKS="$HOME/.luarocks"
+export LUA_PATH="$REPO/src/?.lua;$REPO/src/?/init.lua;$ROCKS/share/lua/5.1/?.lua;$ROCKS/share/lua/5.1/?/init.lua;;"
+export LUA_CPATH="$ROCKS/lib/lua/5.1/?.so;;"
+exec /opt/homebrew/bin/luajit "$REPO/bin/hwc.lua" "$@"

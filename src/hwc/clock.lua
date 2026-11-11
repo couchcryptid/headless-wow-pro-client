@@ -64,16 +64,22 @@ function Clock:settle(opts)
   local tick = opts.tick or DEFAULT_TICK
   local max_virtual = opts.max_virtual or DEFAULT_MAX_VIRTUAL
   local start = self._now
+  -- busy(): optional predicate for OnUpdate-driven work with no timer queued
+  -- (e.g. WoWPro_Broker.lua:4840-4874 lockdown release); frames keep ticking while it holds.
+  local busy = opts.busy or function() return false end
   local ran, hit_limit = 0, false
 
-  while #self._timers > 0 do
+  while #self._timers > 0 or busy() do
     if self._now - start >= max_virtual then
       hit_limit = true
       break
     end
     local idx = self:_earliest()
-    local timer = self._timers[idx]
-    if timer.due > self._now then
+    local timer = idx and self._timers[idx]
+    if not timer then
+      self._now = self._now + tick
+      self:_run_tickers(tick)
+    elseif timer.due > self._now then
       local gap = timer.due - self._now
       if gap <= tick then
         self._now = timer.due

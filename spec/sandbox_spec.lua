@@ -87,6 +87,16 @@ describe("sandbox", function()
     assert.matches("y", seen)
   end)
 
+  -- WoWPro.lua:200-211 captures geterrorhandler() and its replacement chains back to it
+  it("a custom handler chaining to the previous handler records once", function()
+    local prev = sb.env.geterrorhandler()
+    local calls = 0
+    sb.env.seterrorhandler(function(m) calls = calls + 1; return prev(m) end)
+    xpcall(function() error("w") end, sb.env.geterrorhandler())
+    assert.equal(1, #sb.errors)
+    assert.equal(1, calls)
+  end)
+
   it("call() is protected and records", function()
     assert.is_false(sb:call(function() error("z") end))
     assert.matches("z", sb.errors[1].msg)

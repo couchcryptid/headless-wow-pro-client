@@ -30,7 +30,10 @@ function M.new(cfg)
     chat = {}, standin_calls = {},
   }, Sandbox)
   sb.clock = clock.new()
-  sb.frames = frames.new(sb.clock)
+  -- script errors go to the current error handler, as in the client
+  -- unknown frame getters are reported as missing like globals ("Frame:GetX")
+  sb.frames = frames.new(sb.clock, function(e) return sb.env.geterrorhandler()(e) end,
+    function(name) sb.missing[name] = true; sb.missing_order[#sb.missing_order + 1] = name end)
 
   local env = sb.env
   local builtins = build_builtins()
@@ -55,10 +58,16 @@ function M.new(cfg)
     return setfenv(fn, env)
   end
 
-  local custom
+  -- A custom handler may chain back to the one it replaced (WoWPro.lua:200-211
+  -- captures geterrorhandler() before seterrorhandler), so re-entry while the
+  -- custom handler runs returns at once instead of recursing.
+  local custom, active = nil, false
   local function handler(msg)
+    if active then return msg end
+    active = true
     sb:record(msg, "call")
     if custom then pcall(custom, msg) end
+    active = false
     return msg
   end
   function env.geterrorhandler() return handler end

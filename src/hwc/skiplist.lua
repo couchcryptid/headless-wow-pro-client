@@ -17,11 +17,13 @@ local prefixes = {
   { ACE .. "AceDBOptions-3.0/", "Ace UI part; options dialogs not rendered" },
 }
 
+-- Not skipped: WoWPro/WoWPro_Widgets.lua. WoWPro_Frames.lua:1767 (CreateRow) builds each row from its
+-- constructors (CreateCheck/CreateStep/CreateNote...), and the row check state is read by WoWPro_RowUpdate.lua.
+-- Not skipped: WoWPro/WoWPro_CurrentGuide.lua. It creates WoWPro.CurrentGuideFrame hidden at load (:46-47), and
+-- WoWPro_Broker.lua:1880 (UpdateGuideReal) calls WoWPro.CurrentGuideFrame:IsVisible() unconditionally.
 local exact = {
   ["WoWPro/WoWPro_Templates.xml"] = "frame templates; UI only",
-  ["WoWPro/WoWPro_Widgets.lua"] = "widget construction; UI only",
   ["WoWPro/WoWPro_GuideList.lua"] = "guide list window; UI only",
-  ["WoWPro/WoWPro_CurrentGuide.lua"] = "current guide window; UI only",
   ["WoWPro/WoWPro_Tutorial.lua"] = "tutorial UI",
   ["WoWPro/WoWPro_Config.lua"] = "options UI",
   ["WoWPro/WoWPro_Command.lua"] = "slash command UI",

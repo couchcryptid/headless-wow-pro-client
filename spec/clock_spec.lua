@@ -76,6 +76,24 @@ describe("clock", function()
     assert.is_true(c:now() - 1000.0 >= 5 - 1e-9)
   end)
 
+  -- OnUpdate-driven work (WoWPro_Broker.lua:4840-4874 lockdown) has no timer to wait on
+  it("keeps ticking with an empty queue while busy() holds", function()
+    local c = clock.new()
+    local left = 1.5
+    c:add_ticker(function(dt) if left then left = left - dt; if left < 0 then left = nil; c:after(0.25, function() end) end end end)
+    local r = c:settle({ busy = function() return left ~= nil end })
+    assert.is_nil(left)
+    assert.equal(1, r.ran)
+    assert.is_false(r.hit_limit)
+    assert.is_true(c:now() - 1000.0 >= 1.75 - 1e-9)
+  end)
+
+  it("hits the limit when busy() never clears", function()
+    local c = clock.new()
+    local r = c:settle({ max_virtual = 2, busy = function() return true end })
+    assert.is_true(r.hit_limit)
+  end)
+
   it("propagates callback errors", function()
     local c = clock.new()
     c:after(0.1, function() error("boom") end)
