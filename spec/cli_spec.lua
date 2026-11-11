@@ -46,3 +46,21 @@ describe("cli", function()
     pending("addon checkout absent at " .. ADDON)
   end
 end)
+
+describe("cli determinism", function()
+  if not present then
+    pending("addon checkout absent at " .. ADDON)
+    return
+  end
+  it("boot --json is byte-identical across separate processes", function()
+    local function run()
+      local p = assert(io.popen("bin/hwc boot --race Dwarf --class WARRIOR --json 2>&1"))
+      local s = p:read("*a")
+      p:close()
+      return s
+    end
+    local a, b = run(), run()
+    assert.is_true(#a > 100)
+    assert.equal(a, b)
+  end)
+end)

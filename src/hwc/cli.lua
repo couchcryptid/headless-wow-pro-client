@@ -90,7 +90,7 @@ local function run_boot(opts, out)
   local cfg = config.load({ addon_path = opts.addon, race = opts.race, class = opts.class })
   local r = boot.run(cfg)
   if opts.json then
-    out:write(require("dkjson").encode(json_result(r, boot), { indent = true }), "\n")
+    out:write(require("hwc.json").encode(json_result(r, boot), { indent = true }), "\n")
   else
     print_text(out, r, boot)
   end
