@@ -107,7 +107,8 @@ function Frame:GetChecked() return self._s.checked end
 Frame.__index = function(self, key)
   local method = rawget(Frame, key)
   if method ~= nil then return method end
-  if type(key) == "string" and key:match("^Create") then
+  if type(key) ~= "string" or not key:match("^%u") then return nil end
+  if key:match("^Create") then
     return function(me)
       return new_frame(me._s.owner, key:sub(7), nil, me)
     end
