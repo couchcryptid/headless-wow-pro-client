@@ -5,7 +5,7 @@ local M = {}
 
 function M.install(sb, _player)
   local env = sb.env
-  env.C_QuestLog = {
+  env.C_QuestLog = require("hwc.stubs.core").trap(sb, "C_QuestLog", {
     -- CompatUtil:123 (QuestLog_GetInfo); nil for any index ends PopulateQuestLog's loop
     GetInfo = function() return nil end,
     -- CompatUtil:173 (QuestLog_GetNumQuestLogEntries); numEntries, numQuests
@@ -20,7 +20,7 @@ function M.install(sb, _player)
     IsQuestFlaggedCompletedOnAccount = function() return false end,
     -- CompatUtil:204 (ForAccount fallback)
     IsQuestFlaggedCompletedForAccount = function() return false end,
-  }
+  })
 end
 
 return M
