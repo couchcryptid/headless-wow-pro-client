@@ -1,0 +1,4 @@
+#!/bin/sh
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+export LUA_PATH="$REPO/src/?.lua;$REPO/src/?/init.lua;;"
+exec /opt/homebrew/bin/luajit "$REPO/src/hwc/cli.lua" "$@"
