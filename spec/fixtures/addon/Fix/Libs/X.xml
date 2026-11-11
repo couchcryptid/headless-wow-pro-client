@@ -1,0 +1,9 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+	<Script file="A.lua"/>
+	<!--<Script file="Hidden.lua"/>-->
+	<Include file="Sub\Y.xml"/>
+	<!--
+	<Script file="Hidden.lua"/>
+	-->
+	<Script file="B.lua"/>
+</Ui>
