@@ -1,0 +1,5 @@
+.superpowers/
+local/
+out/
+findings/*.json
+evidence/
