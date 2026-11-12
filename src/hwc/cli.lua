@@ -149,6 +149,11 @@ local function mkdirs(path)
   end
 end
 
+-- The CLI's closing line: both files and the character count.
+function M.wrote_line(stem, n)
+  return "hwc: wrote " .. stem .. ".md and " .. stem .. ".json (" .. n .. (n == 1 and " character" or " characters") .. ")\n"
+end
+
 local function write_file(path, text)
   local f = assert(io.open(path, "wb"))
   f:write(text)
@@ -220,7 +225,7 @@ local function play(combos, scope, opts, out)
   local md = render.markdown(findings, header)
   write_file(stem .. ".md", md)
   write_file(stem .. ".json", json.encode(report.build(findings, header), { indent = true }) .. "\n")
-  out:write("hwc: wrote ", stem, ".md and ", stem, ".json (", #logs, " characters)\n")
+  out:write(M.wrote_line(stem, #logs))
   return 0
 end
 

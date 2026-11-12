@@ -84,13 +84,12 @@ describe("findings determinism across processes #slow", function()
 
   it("rewrites a relative --addon against a --relative-to that is not the cwd", function()
     local cwd = lfs.currentdir()
-    local abs = flow.ADDON
     local rel = "local/addon/main"
     if lfs.attributes(cwd .. "/" .. rel .. "/WoWPro/WoWPro.toc", "mode") == nil then
       pending("no addon checkout at " .. rel)
       return
     end
-    abs = cwd .. "/" .. rel
+    local abs = cwd .. "/" .. rel
     local base = cwd .. "/local/addon"
     local dir = os.tmpname()
     os.remove(dir)

@@ -81,6 +81,11 @@ describe("cli", function()
     end
   end)
 
+  it("the wrote line names both files and pluralises the character count", function()
+    assert.equal("hwc: wrote out/s.md and out/s.json (1 character)\n", cli.wrote_line("out/s", 1))
+    assert.equal("hwc: wrote out/s.md and out/s.json (2 characters)\n", cli.wrote_line("out/s", 2))
+  end)
+
   it("USAGE documents --relative-to", function()
     local out, text = capture()
     cli.main({ "--help" }, out)

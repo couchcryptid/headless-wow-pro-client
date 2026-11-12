@@ -42,9 +42,11 @@ function M.relative(p, base)
   return table.concat(out, "/")
 end
 
+-- Characters that may follow a root for it to count as the whole path. "."
+-- is deliberately absent: "/p/x" must not rewrite inside "/p/x.bak".
 local function boundary(c)
   return c == "" or c == "/" or c == ":" or c == "'" or c == '"'
-    or c == ")" or c:match("^%s$") ~= nil
+    or c == ")" or c == "]" or c == "," or c == ";" or c:match("^%s$") ~= nil
 end
 
 local function replace_root(s, root, repl)

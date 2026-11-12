@@ -49,6 +49,12 @@ describe("hwc.paths", function()
         paths.rewrite("'/p/x' (/p/w) ok", { "/p/x", "/p/w", "", false }, "/p/x", "/p/x"))
     end)
 
+    it("treats , ; and ] as boundaries but not .", function()
+      assert.equal("[w, w; w] w",
+        paths.rewrite("[/p/w, /p/w; /p/w] /p/w", { "/p/w" }, "/p", "/p"))
+      assert.equal("/p/x.bak", paths.rewrite("/p/x.bak", { "/p/x" }, "/p", "/p"))
+    end)
+
     it("turns a bare base root into a dot", function()
       assert.equal("cwd is .", paths.rewrite("cwd is /p/x", { "/p/x" }, "/p/x", "/p/x"))
     end)
