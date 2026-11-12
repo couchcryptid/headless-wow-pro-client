@@ -683,7 +683,10 @@ local OTHER_HANDLERS = {
 -- Actions whose completion is expected to need a right-click (Task 6 splits
 -- manual-completion into expected and unexpected with this). A step whose note says
 -- "Manually check this step off" is also expected: see actions.expects_manual.
-actions.EXPECTED_MANUAL = { N = true, D = true, ["="] = true, r = true, ["*"] = true }
+-- = is not here: opening the trainer completes it (perform_trainer), so an = step that
+-- still doesn't advance is a did-not-advance, unless its note says to check it off by
+-- hand (actions.expects_manual), as the guides' class-training notes do.
+actions.EXPECTED_MANUAL = { N = true, D = true, r = true, ["*"] = true }
 
 function actions.expects_manual(step)
   if actions.EXPECTED_MANUAL[step.action] then return true end

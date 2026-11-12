@@ -279,6 +279,8 @@ describe("actions.perform: level and training", function()
     assert.is_true(sb.env.IsPlayerSpell("3273"))
     assert.are.same({ "SKILL_LINES_CHANGED", "SPELLS_CHANGED" }, names(E))
     E.fired = {}
+    -- A tag-only step (an A with no QID does nothing itself) shows that the SPELL tag
+    -- teaches nothing once the spell is known; = can't show it, it always opens the trainer.
     assert.are.equal("noop", actions.perform(ctx, step("A", {}, t)).kind)
     assert.are.same({}, E.fired)
   end)
@@ -318,10 +320,10 @@ describe("actions.perform: noops and EXPECTED_MANUAL", function()
     assert.are.same({}, names(E))
   end)
 
-  it("EXPECTED_MANUAL names N, D, = and r", function()
+  it("EXPECTED_MANUAL names N, D and r; = is not (opening the trainer completes it)", function()
     assert.is_true(actions.EXPECTED_MANUAL["N"])
     assert.is_true(actions.EXPECTED_MANUAL["D"])
-    assert.is_true(actions.EXPECTED_MANUAL["="])
+    assert.is_nil(actions.EXPECTED_MANUAL["="])
     assert.is_true(actions.EXPECTED_MANUAL["r"])
     assert.is_nil(actions.EXPECTED_MANUAL["C"])
   end)

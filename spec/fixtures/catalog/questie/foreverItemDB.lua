@@ -12,4 +12,5 @@ QuestieDB.itemData = [[return {
 [5002] = {'Fixture Fang',{2001,2002}},
 [5003] = {'Fixture Fang',nil},
 [5004] = {'Fixture Keg',nil,nil,nil,nil,{179}},
+[4990] = {'Fixture Mug',nil,nil,nil,nil,{179}},
 }]]
