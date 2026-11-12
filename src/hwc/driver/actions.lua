@@ -66,6 +66,38 @@ local function after_levels(ctx, levels)
   if levels and levels > 0 then ctx.engine:update_guide() end
 end
 
+-- Bag changes (Ruling Z). An item objective's progress is the bag count, so a bag
+-- change that moves an in-log quest's item objective is also a quest-log change:
+-- the client fires QUEST_LOG_UPDATE with the BAG_UPDATE (the engine re-reads the quest
+-- log on QUEST_LOG_UPDATE, WoWPro_Events.lua:888 on main). Every bag change in
+-- an action goes through add_item / remove_item, which mark the first event index
+-- after such a change; actions.perform fires QUEST_LOG_UPDATE at the end when none
+-- followed the mark. The in-game order of the two events is not confirmed.
+local function mark_bags(ctx, out, id)
+  if out.objective_mark == nil and ctx.world.log:counts_item(id) then out.objective_mark = #out.events end
+end
+
+local function add_item(ctx, out, id, n)
+  ctx.world.player:add_item(id, n)
+  mark_bags(ctx, out, id)
+end
+
+local function remove_item(ctx, out, id, n)
+  if not ctx.world.player:remove_item(id, n) then return false end
+  mark_bags(ctx, out, id)
+  return true
+end
+
+local function finish_bags(ctx, out)
+  local mark = out.objective_mark
+  out.objective_mark = nil
+  if mark == nil then return end
+  for i = mark + 1, #out.events do
+    if out.events[i] == "QUEST_LOG_UPDATE" then return end
+  end
+  fire(ctx, out, "QUEST_LOG_UPDATE")
+end
+
 local function log_index(world, qid)
   for i, e in ipairs(world.log:entries()) do
     if e.id == qid then return i end
@@ -77,7 +109,10 @@ end
 -- engine splits it (AutoComplete.lua:385-388). Each part follows the engine's
 -- OBJECTIVE_PATTERN "^(%d*)([<=>]*)(%d*)$" (Broker.lua:369): N, N>k / N>=k (count
 -- >= k), N=k, N<k / N<=k (count <= k) (Broker.lua:420-441, 532-551).
--- Returns a list of { index, op, target } or nil without a QO tag.
+-- Returns a list of { index, op, target }, or nil without a QO tag or when no part
+-- parses (treated as no QO: the engine's ValidObjective rejects such parts too,
+-- WoWPro_Broker.lua:381-391 called at WoWPro_AutoComplete.lua:405 on main, so it
+-- cannot complete the step by them).
 local function parse_qo(questtext)
   if type(questtext) ~= "string" then return nil end
   local out = {}
@@ -86,6 +121,7 @@ local function parse_qo(questtext)
     n = tonumber(n)
     if n then out[#out + 1] = { index = n, op = op or "", target = tonumber(target) } end
   end
+  if #out == 0 then return nil end
   return out
 end
 
@@ -99,10 +135,10 @@ local function placeholder_count(qo)
 end
 
 local function in_log_qid(world, qids)
-  for _, q in ipairs(qids) do
+  for _, q in ipairs(qids or {}) do
     if world.log:get(q) then return q end
   end
-  return qids[1]
+  return qids and qids[1]
 end
 
 local function is_camping(quest)
@@ -145,7 +181,7 @@ end
 local function turn_in(ctx, out, qid)
   local w = ctx.world
   w.dialog = { qid = qid, kind = "complete" }
-  local ok, reason, gained, levels = w.log:turn_in(qid)
+  local ok, reason, gained, levels, bags = w.log:turn_in(qid)
   if not ok then
     w.dialog = nil
     return false, reason
@@ -153,6 +189,8 @@ local function turn_in(ctx, out, qid)
   out.levels = out.levels + levels
   fire(ctx, out, "QUEST_TURNED_IN", qid, gained, 0)
   fire(ctx, out, "QUEST_LOG_UPDATE")
+  -- The objective items (and a held source item) left the bags with the turn-in.
+  if bags then fire(ctx, out, "BAG_UPDATE", 0) end
   after_levels(ctx, levels)
   w.dialog = nil
   return true
@@ -237,7 +275,7 @@ local function perform_accept(ctx, step, out)
   -- order of the item push against QUEST_ACCEPTED is not confirmed.
   local src = w.log:get(qid).quest.source_item
   if src and w.player:item_count(src) == 0 then
-    w.player:add_item(src, 1)
+    add_item(ctx, out, src, 1)
     fire(ctx, out, "BAG_UPDATE", 0)
   end
 
@@ -259,7 +297,7 @@ local function perform_accept(ctx, step, out)
 end
 
 -- Credits one objective's progress delta: kill XP (drop kills for items) and the items.
-local function credit_objective(ctx, obj, delta)
+local function credit_objective(ctx, out, obj, delta)
   local w = ctx.world
   local party = (ctx.cfg and ctx.cfg.party_size) or 1
   local partial = { kind = obj.kind, ids = obj.ids, count = delta }
@@ -271,7 +309,7 @@ local function credit_objective(ctx, obj, delta)
   end
   local items = false
   if obj.kind == "item" and obj.ids and obj.ids[1] then
-    w.player:add_item(obj.ids[1], delta)
+    add_item(ctx, out, obj.ids[1], delta)
     items = true
   end
   return levels, elite, items
@@ -348,16 +386,16 @@ local function perform_objectives(ctx, step, out)
   for _, t in ipairs(todo) do
     local obj = quest.objectives[t.index]
     if obj then
-      local have = entry.have[t.index]
+      local have = w.log:have(qid, t.index)
       local delta = (t.cap or wanted(obj, have, t.part)) - have
       if delta > 0 and t.bought then
-        -- Bought, not looted: the item and its progress, no drop kills.
-        w.player:add_item(obj.ids[1], delta)
-        w.log:progress(qid, t.index, delta)
+        -- Bought, not looted: the item (its progress is the bag count), no drop kills.
+        add_item(ctx, out, obj.ids[1], delta)
         items_changed = true
       elseif delta > 0 then
-        local levels, elite, items = credit_objective(ctx, obj, delta)
-        w.log:progress(qid, t.index, delta)
+        local levels, elite, items = credit_objective(ctx, out, obj, delta)
+        -- An item objective's progress is the bag count credit_objective just changed.
+        if not items then w.log:progress(qid, t.index, delta) end
         out.levels = out.levels + levels
         out.elite = out.elite or elite
         items_changed = items_changed or items
@@ -492,7 +530,7 @@ local function perform_use(ctx, step, out)
     if it.id == use then is_loot = true end
   end
   -- The L tag supplies a use item that is also looted (see apply_item_tag).
-  if use and not is_loot and w.player:item_count(use) == 0 then w.player:add_item(use, 1) end
+  if use and not is_loot and w.player:item_count(use) == 0 then add_item(ctx, out, use, 1) end
   fire(ctx, out, "BAG_UPDATE", 0)
   local qid
   for _, q in ipairs(step.qids or {}) do
@@ -502,7 +540,38 @@ local function perform_use(ctx, step, out)
   perform_objectives(ctx, step, out)
   if not use then return end
   if is_loot then return end
-  if w.player:remove_item(use, 1) then fire(ctx, out, "BAG_UPDATE", 0) end
+  if remove_item(ctx, out, use, 1) then fire(ctx, out, "BAG_UPDATE", 0) end
+end
+
+-- l (loot) and B (buy) through the item rule (Ruling Z): the L item is added by
+-- apply_item_tag, which runs for every step; a B step with a QO and no L tag buys
+-- the item of each QO-named catalog item objective, up to what the QO part asks.
+-- The engine completes such a B step by its QO (QID filled from ACTIVE with a QO,
+-- WoWPro_Parser.lua:834-836; partial completion, WoWPro_AutoComplete.lua:397-414 on main).
+local function perform_item_step(ctx, step, out)
+  if step.action ~= "B" or #parse_loot(step.tags and step.tags.lootitem) > 0 then return end
+  local parts = parse_qo(step.tags and step.tags.questtext)
+  if not parts then return end
+  local w = ctx.world
+  local qid = in_log_qid(w, step.qids)
+  local entry = qid and w.log:get(qid)
+  if not entry then return end
+  out.qid = qid
+  local added = false
+  for _, p in ipairs(parts) do
+    local obj = entry.quest.objectives[p.index]
+    if obj and obj.kind == "item" and obj.ids and obj.ids[1] then
+      local have = w.log:have(qid, p.index)
+      local delta = wanted(obj, have, p) - have
+      if delta > 0 then
+        add_item(ctx, out, obj.ids[1], delta)
+        added = true
+      end
+    end
+  end
+  if not added then return end
+  out.kind = "acted"
+  fire(ctx, out, "BAG_UPDATE", 0)
 end
 
 local function perform_level(ctx, step, out)
@@ -527,7 +596,7 @@ local function apply_item_tag(ctx, step, out)
   for _, it in ipairs(items) do
     local need = it.n - ctx.world.player:item_count(it.id)
     if need > 0 then
-      ctx.world.player:add_item(it.id, need)
+      add_item(ctx, out, it.id, need)
       added = true
     end
   end
@@ -555,6 +624,7 @@ local QUEST_HANDLERS = { A = perform_accept, C = perform_objectives, K = perform
 local OTHER_HANDLERS = {
   R = perform_travel, F = perform_arrival, b = perform_arrival, P = perform_arrival, H = perform_travel,
   f = perform_flight_point, h = perform_bind, U = perform_use, L = perform_level,
+  l = perform_item_step, B = perform_item_step,
 }
 
 -- Actions whose completion is expected to need a right-click (Task 6 splits
@@ -595,6 +665,7 @@ function actions.perform(ctx, step)
     apply_item_tag(ctx, step, out)
     apply_training_tags(ctx, step, out)
   end
+  finish_bags(ctx, out)
   out.elite = out.elite or (step.tags ~= nil and step.tags.elite ~= nil and step.tags.elite ~= false)
   out.settle = ctx.engine:settle()
   ctx.world.dialog = nil

@@ -76,9 +76,14 @@ function M.accept(r, qid)
   return M.settle(r)
 end
 
+-- With an item, the objective is an item objective: its progress is the bag count
+-- (Ruling Z), so only the bags change.
 function M.progress(r, qid, index, amount, item)
-  assert(r.world.log:progress(qid, index, amount), "progress " .. qid)
-  if item then r.world.player:add_item(item, amount) end
+  if item then
+    r.world.player:add_item(item, amount)
+  else
+    assert(r.world.log:progress(qid, index, amount), "progress " .. qid)
+  end
   M.fire(r, "QUEST_LOG_UPDATE")
   M.fire(r, "BAG_UPDATE", 0)
   return M.settle(r)

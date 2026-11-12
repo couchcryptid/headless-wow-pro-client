@@ -11,9 +11,10 @@ function M.install(sb)
   local function log() return sb.world.log end
   local function entry_at(i) return log():entries()[i] end
 
+  -- have is the log's own read (Ruling Z: an item objective is the bag count).
   local function objective(e, i)
     local obj = e.quest.objectives[i]
-    local have = e.have[i]
+    local have = log():have(e.id, i)
     return {
       text = (obj.text or "") .. ": " .. have .. "/" .. obj.count,
       type = OBJECTIVE_TYPE[obj.kind] or "object",

@@ -12,6 +12,7 @@ Engine.SETTLE_MAX_VIRTUAL = 60
 -- Per-index tag arrays copied into Step.tags: engine key per tag, as
 -- DefineTag(tag, key, ...) names them (WoWPro_Parser.lua:460-590).
 Engine.TAG_KEYS = {
+  "active",    -- ACTIVE :469 (qid fallback, see Engine.qids_of)
   "questtext", -- QO   Parser:511
   "use",       -- U    :529
   "lootitem",  -- L    :491
@@ -114,9 +115,22 @@ local function split_qids(s)
   return out
 end
 
+-- Ruling Z: actions whose qids fall back to the ACTIVE tag. The engine fills QID
+-- from ACTIVE only when the step has a QO (WoWPro_Parser.lua:834-837), so an
+-- ACTIVE-only K/C/l/B/U step (e.g. `K Vagash|ACTIVE|314|L|3627|`) has no QID; the
+-- quest it works on is still the ACTIVE one.
+Engine.ACTIVE_FALLBACK = { C = true, K = true, l = true, B = true, U = true }
+
+-- The step's quest ids: QID, else ACTIVE for the fallback actions.
+function Engine.qids_of(action, qid, active)
+  local qids = split_qids(qid)
+  if #qids == 0 and Engine.ACTIVE_FALLBACK[action] then qids = split_qids(active) end
+  return qids
+end
+
 function Engine:step(i)
   local W = self:W()
-  local qids = split_qids(W.QID and W.QID[i])
+  local qids = Engine.qids_of(W.action and W.action[i], W.QID and W.QID[i], W.active and W.active[i])
   local tags = {}
   for _, key in ipairs(Engine.TAG_KEYS) do
     local arr = W[key]
@@ -133,7 +147,7 @@ function Engine:step(i)
     local occurrence = 1
     for j = 1, i - 1 do
       if W.action[j] == step.action and W.step[j] == step.name
-        and split_qids(W.QID and W.QID[j])[1] == qids[1] then
+        and Engine.qids_of(W.action[j], W.QID and W.QID[j], W.active and W.active[j])[1] == qids[1] then
         occurrence = occurrence + 1
       end
     end

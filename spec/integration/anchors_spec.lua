@@ -243,6 +243,28 @@ describe("travel arrival on main (F/b with TZ) #slow", function()
   end)
 end)
 
+-- Ruling Z (final review C2): an item objective's progress is the bag count, so the
+-- ACTIVE-only `K Vagash|ACTIVE|314|L|3627|` and `l Hops|ACTIVE|116|L|1274 5|` (the
+-- hops quest 117 asks for) complete their quests and the T steps turn them in.
+describe("item objectives follow the bags on main #slow", function()
+  local why = absent("main")
+  if why then
+    pending(why)
+    return
+  end
+
+  it("turns in Protecting the Herd (314) and Thunderbrew Lager (117) and leaves neither in the log", function()
+    local r = run_of("main")
+    assert.is_true(r.world.log.history[314] == true, "314 was never turned in")
+    assert.is_true(r.world.log.history[117] == true, "117 was never turned in")
+    for _, s in ipairs(r.log.signals) do
+      if s.signal == "leftover-quests" or s.signal == "did-not-advance" then
+        assert.is_true(s.qid ~= 314 and s.qid ~= 117, s.signal .. " for " .. tostring(s.qid))
+      end
+    end
+  end)
+end)
+
 describe("anchor: dungeon accepts and harness completeness on main #slow", function()
   local why = absent("main")
   if why then

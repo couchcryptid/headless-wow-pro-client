@@ -55,6 +55,21 @@ describe("driver.engine", function()
     assert.equal("179^180", E:step(3).qid)
   end)
 
+  -- Ruling Z: the engine fills QID from ACTIVE only with a QO (Parser.lua:834-836).
+  it("falls back to the ACTIVE tag for the qids of C/K/l/B/U steps without a QID", function()
+    local r = fake()
+    local W = r.sb.env.WoWPro
+    W.action[5], W.step[5], W.active = "K", "Vagash", { [5] = "314", [6] = "116^117", [7] = "99" }
+    W.action[6], W.step[6] = "l", "Hops"
+    W.action[7], W.step[7] = "R", "Kharanos"
+    local E = Engine.new(r)
+    assert.same({ 314 }, E:step(5).qids)
+    assert.equal("314", E:step(5).tags.active)
+    assert.same({ 116, 117 }, E:step(6).qids)
+    assert.same({}, E:step(7).qids)
+    assert.same({ 179 }, E:step(1).qids)
+  end)
+
   it("copies tags as the engine parsed them", function()
     local E = Engine.new((fake()))
     local s = E:step(2)
