@@ -109,4 +109,51 @@ describe("driver.engine", function()
     assert.same(before, snapshot(W))
     assert.same({ [750] = 8 }, W.lootitem[2])
   end)
+
+  describe("when the addon call fails", function()
+    -- sb:call returns false and the sandbox has recorded the error
+    local function failing(name)
+      local r = fake()
+      r.sb.errors = { { msg = "boom in " .. name } }
+      local real = r.sb.call
+      r.sb.call = function(self, fn, ...)
+        if fn == r.sb.env.WoWPro[name] then return false end
+        return real(self, fn, ...)
+      end
+      return Engine.new(r)
+    end
+
+    it("current() and rows() return nil, err rather than assuming 0 sticky rows", function()
+      local E = failing("GetActiveStickyCount")
+      assert.same({ nil, "boom in GetActiveStickyCount" }, { E:current() })
+      local rows, err = E:rows()
+      assert.is_nil(rows)
+      assert.equal("boom in GetActiveStickyCount", err)
+    end)
+
+    it("rank() returns nil, err", function()
+      local rank, err = failing("GuideRank"):rank()
+      assert.is_nil(rank)
+      assert.equal("boom in GuideRank", err)
+    end)
+
+    it("complete_manual and update_guide return false, err", function()
+      assert.same({ false, "boom in CompleteStep" }, { failing("CompleteStep"):complete_manual(4) })
+      assert.same({ false, "boom in UpdateGuide" }, { failing("UpdateGuide"):update_guide() })
+    end)
+
+    it("return true on success", function()
+      local E = Engine.new((fake()))
+      assert.is_true(E:complete_manual(4))
+      assert.is_true(E:update_guide())
+    end)
+  end)
+
+  it("completed() is false when the guide's saved data is absent", function()
+    local r = fake()
+    r.sb.env.WoWProCharDB.Guide.G = nil
+    assert.is_false(Engine.new(r):completed(1))
+    r.sb.env.WoWProCharDB.Guide.G = {}
+    assert.is_false(Engine.new(r):completed(1))
+  end)
 end)

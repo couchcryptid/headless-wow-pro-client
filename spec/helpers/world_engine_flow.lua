@@ -41,7 +41,8 @@ function M.settle(r) return Engine.new(r):settle() end
 -- The step the engine itself treats as current (adapter: the row after the
 -- sticky rows). Returns { index, action, step, qid } or an empty table.
 function M.current(r)
-  local s = Engine.new(r):current()
+  local s, err = Engine.new(r):current()
+  assert(s or not err, err)
   if not s then return {} end
   return { index = s.index, action = s.action, step = s.name, qid = s.qid }
 end
@@ -90,7 +91,7 @@ function M.turn_in(r, qid)
   M.fire(r, "QUEST_TURNED_IN", qid, xp, 0)
   M.fire(r, "QUEST_LOG_UPDATE")
   -- The addon has no level-up handler (design spec §5.2): force an update.
-  if levels and levels > 0 then Engine.new(r):update_guide() end
+  if levels and levels > 0 then assert(Engine.new(r):update_guide()) end
   return M.settle(r), levels
 end
 

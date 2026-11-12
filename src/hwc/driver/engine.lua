@@ -141,23 +141,37 @@ function Engine:step(i)
   return step
 end
 
+-- The newest error the sandbox recorded (the failed call put it there).
+function Engine:last_error()
+  local errs = self.sb.errors
+  local e = errs and errs[#errs]
+  return e and e.msg or "engine call failed"
+end
+
+-- Returns the count, or nil, err when the addon call raised. A failed call must
+-- never read as 0 (that would treat a sticky row as the current step).
 function Engine:sticky_count()
   local W = self:W()
   local ok, n = call(self.sb, W.GetActiveStickyCount, W)
-  return ok and n or 0
+  if not ok then return nil, self:last_error() end
+  return n or 0
 end
 
 -- The step the engine itself treats as current: the first row after the sticky
--- rows (WoWPro_Events.lua:742, 752, 776, 786).
+-- rows (WoWPro_Events.lua:742, 752, 776, 786). Returns nil when there is none,
+-- or nil, err when the sticky-count call failed.
 function Engine:current()
   local W = self:W()
-  local row = W.rows[self:sticky_count() + 1]
+  local sticky, err = self:sticky_count()
+  if not sticky then return nil, err end
+  local row = W.rows[sticky + 1]
   return row and row.index and self:step(row.index) or nil
 end
 
 function Engine:rows()
   local W = self:W()
-  local sticky = self:sticky_count()
+  local sticky, err = self:sticky_count()
+  if not sticky then return nil, err end
   local out = {}
   for n, row in ipairs(W.rows) do
     local visible = row.IsVisible == nil or row:IsVisible()
@@ -179,7 +193,9 @@ end
 
 function Engine:completed(i)
   local gid = self:gid()
-  return self.env.WoWProCharDB.Guide[gid].completion[i] and true or false
+  local char = rawget(self.env, "WoWProCharDB")
+  local saved = char and char.Guide and char.Guide[gid]
+  return saved and saved.completion and saved.completion[i] and true or false
 end
 
 function Engine:why(i)
@@ -188,20 +204,26 @@ function Engine:why(i)
 end
 
 -- Player equivalent of right-clicking the step (WoWPro_Broker.lua:3857).
+-- Returns true, or false, err when the addon raised (the error is also in
+-- sb.errors; the driver records it as a finding and carries on).
 function Engine:complete_manual(i)
   local W = self:W()
-  return (call(self.sb, W.CompleteStep, i, "Right-Click"))
+  if not call(self.sb, W.CompleteStep, i, "Right-Click") then return false, self:last_error() end
+  return true
 end
 
+-- Same return contract as complete_manual.
 function Engine:update_guide()
   local W = self:W()
-  return (call(self.sb, W.UpdateGuide, W, "sim:level"))
+  if not call(self.sb, W.UpdateGuide, W, "sim:level") then return false, self:last_error() end
+  return true
 end
 
 -- The engine's own rank lookup for the current guide (WoWPro_Broker.lua:602-618).
 function Engine:rank()
   local W = self:W()
-  local _, rank = call(self.sb, W.GuideRank, self:gid())
+  local ok, rank = call(self.sb, W.GuideRank, self:gid())
+  if not ok then return nil, self:last_error() end
   return rank
 end
 
