@@ -90,3 +90,15 @@ Generated from the Plan 3 SDD ledger at branch completion (2026-11-12). Plan 4 s
 - Parked: player location persists between travel steps → a repeated F/R step can auto-complete via the engine's "already there" check (Broker.lua:2531-2537) without being acted on — Ruling AD: park; add as a findings-header gap in the next plan and rule there on moving the player per step Z/M — cost if wrong: hidden defects on repeated travel steps.
 - Parked: multi-id item objectives add to ids[1] while progress reads the most-held id (rare) — Ruling: defer.
 - Parked: ordinal fallback uses engine occurrence when no source line matches; `*`/`=` steps never map to a source line — Ruling: defer.
+
+## Future enhancements (user, 2026-11-12)
+
+- **Subzone (area) modelling.** No catalog source maps a coordinate to a subzone (QuestieDB spawns stop at the zone, e.g. Innkeeper Belm under zone 1). The player's subzone comes only from `R` steps. Walking within the same zone and map keeps it; a new zone or map clears it.
+  - **What stays hidden:** steps gated by `IZ|<subzone>` stay hidden unless an `R` step named that subzone. In the 1-25 guides these are only the class-training notes: `IZ|Anvilmar`, `IZ|Kharanos`, `IZ|City of Ironforge` (`01_12_Dun_Morogh.lua:35,186-228`). They teach nothing tracked, so no finding changes.
+  - **Options:**
+    1. A hand-checked local area table (map, centre, radius) with readings taken in game.
+    2. Subzone polygons from client data, if a licence-compatible source turns up.
+    3. Start-subzone per race.
+  - **Also unverified:** whether `IZ|City of Ironforge` ever matches in the live client, where the zone text reads "Ironforge". That needs a human in game.
+- **Repair/sell (`r`) steps auto-completing on vendor interaction.** The engine completes an `r` row on `MERCHANT_SHOW` when `CanMerchantRepair()` is true (`WoWPro_Events.lua:515-526`). The world needs to know whether the vendor at the step can repair. One way is to resolve the NPC at the step's coordinates through QuestieDB spawns and npcFlags; that needs a uiMap → AreaTable zone mapping. Until then `r` steps stay manual check-offs, as the guides' own notes say.
+- Training (`=`) steps now auto-complete on interaction: the driver fires `TRAINER_SHOW`/`TRAINER_CLOSED` and the engine's `AutoCompleteTrain` completes the step.

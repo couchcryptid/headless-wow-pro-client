@@ -262,7 +262,7 @@ describe("actions.perform: level and training", function()
     local o = actions.perform(ctx, step("=", {}, { prof = "Engineering;202" }))
     assert.are.equal("acted", o.kind)
     assert.is_true(w.player:knows_skill("Engineering"))
-    assert.are.same({ "SKILL_LINES_CHANGED", "SPELLS_CHANGED" }, names(E))
+    assert.are.same({ "TRAINER_SHOW", "TRAINER_CLOSED", "SKILL_LINES_CHANGED", "SPELLS_CHANGED" }, names(E))
   end)
 
   it("a SPELL tag learns the spell id; a known one is a noop", function()
@@ -279,15 +279,21 @@ describe("actions.perform: level and training", function()
     assert.is_true(sb.env.IsPlayerSpell("3273"))
     assert.are.same({ "SKILL_LINES_CHANGED", "SPELLS_CHANGED" }, names(E))
     E.fired = {}
-    assert.are.equal("noop", actions.perform(ctx, step("=", {}, t)).kind)
+    -- A tag-only step (an A with no QID does nothing itself) shows that the SPELL tag
+    -- teaches nothing once the spell is known; = can't show it, it always opens the trainer.
+    assert.are.equal("noop", actions.perform(ctx, step("A", {}, t)).kind)
     assert.are.same({}, E.fired)
   end)
 
-  it("= without P or SPELL (class training) learns nothing and is a noop", function()
+  -- A player at a trainer opens the trainer window; the engine completes the first
+  -- visible = row on TRAINER_SHOW (WoWPro_Events.lua:809-811, AutoCompleteTrain at
+  -- WoWPro_AutoComplete.lua:199-210). Class training teaches no tracked skill.
+  it("= (class training) opens and closes the trainer window and learns nothing", function()
     local ctx, E, w = setup()
     local o = actions.perform(ctx, step("=", {}, { note = "Manually check this step off." }, "Level 2 Training"))
-    assert.are.equal("noop", o.kind)
-    assert.are.same({}, E.fired)
+    assert.are.equal("acted", o.kind)
+    assert.are.same({ "TRAINER_SHOW", "TRAINER_CLOSED" }, names(E))
+    assert.are.same({}, w.player.skills)
   end)
 end)
 
@@ -314,10 +320,10 @@ describe("actions.perform: noops and EXPECTED_MANUAL", function()
     assert.are.same({}, names(E))
   end)
 
-  it("EXPECTED_MANUAL names N, D, = and r", function()
+  it("EXPECTED_MANUAL names N, D and r; = is not (opening the trainer completes it)", function()
     assert.is_true(actions.EXPECTED_MANUAL["N"])
     assert.is_true(actions.EXPECTED_MANUAL["D"])
-    assert.is_true(actions.EXPECTED_MANUAL["="])
+    assert.is_nil(actions.EXPECTED_MANUAL["="])
     assert.is_true(actions.EXPECTED_MANUAL["r"])
     assert.is_nil(actions.EXPECTED_MANUAL["C"])
   end)

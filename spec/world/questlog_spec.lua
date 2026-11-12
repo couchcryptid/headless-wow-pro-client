@@ -28,6 +28,7 @@ for i = 1, 45 do
 end
 local catalog = {
   quest = function(_, id) return QUESTS[id] end,
+  quest_rewards = function(_, id) return id == 179 and { 2686 } or {} end,
   placeholder = function(_, id, n)
     local o = {}
     for i = 1, n do o[i] = { kind = "other", count = 1, text = "Objective " .. i } end
@@ -243,5 +244,15 @@ describe("QuestLog", function()
     local kinds = {}
     for _, e in ipairs(w.events) do kinds[#kinds + 1] = e.kind end
     assert.same({ "quest_accept", "quest_progress", "quest_progress", "xp", "quest_turn_in" }, kinds)
+  end)
+
+  it("turn-in puts the quest's reward items in the bags and reports the bag change", function()
+    local _, _, w = setup()
+    w.log:accept(179)
+    w.player:add_item(750, 8)
+    local ok, _, _, _, bags = w.log:turn_in(179)
+    assert.is_true(ok)
+    assert.is_true(bags)
+    assert.equal(1, w.player:item_count(2686))
   end)
 end)

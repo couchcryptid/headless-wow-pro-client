@@ -661,17 +661,32 @@ local function apply_training_tags(ctx, step, out)
   if (learn.skill or learn.spell) and train(ctx, out, learn) then out.kind = "acted" end
 end
 
+-- = (training): a player at a trainer opens the trainer window. The engine completes
+-- the first visible = row on TRAINER_SHOW (WoWPro_Events.lua:809-811, AutoCompleteTrain
+-- at WoWPro_AutoComplete.lua:199-210). P/SPELL tags then teach what they name
+-- (apply_training_tags). r (repair/sell) steps stay manual: the engine completes them
+-- on MERCHANT_SHOW only when CanMerchantRepair() is true (WoWPro_Events.lua:515-526),
+-- and the world can't tell yet whether the vendor at a step repairs.
+local function perform_trainer(ctx, step, out)
+  out.kind = "acted"
+  fire(ctx, out, "TRAINER_SHOW")
+  fire(ctx, out, "TRAINER_CLOSED")
+end
+
 local QUEST_HANDLERS = { A = perform_accept, C = perform_objectives, K = perform_objectives, T = perform_turn_in }
 local OTHER_HANDLERS = {
   R = perform_travel, F = perform_arrival, b = perform_arrival, P = perform_arrival, H = perform_travel,
   f = perform_flight_point, h = perform_bind, U = perform_use, L = perform_level,
-  l = perform_item_step, B = perform_item_step, ["*"] = perform_trash,
+  l = perform_item_step, B = perform_item_step, ["*"] = perform_trash, ["="] = perform_trainer,
 }
 
 -- Actions whose completion is expected to need a right-click (Task 6 splits
 -- manual-completion into expected and unexpected with this). A step whose note says
 -- "Manually check this step off" is also expected: see actions.expects_manual.
-actions.EXPECTED_MANUAL = { N = true, D = true, ["="] = true, r = true, ["*"] = true }
+-- = is not here: opening the trainer completes it (perform_trainer), so an = step that
+-- still doesn't advance is a did-not-advance, unless its note says to check it off by
+-- hand (actions.expects_manual), as the guides' class-training notes do.
+actions.EXPECTED_MANUAL = { N = true, D = true, r = true, ["*"] = true }
 
 function actions.expects_manual(step)
   if actions.EXPECTED_MANUAL[step.action] then return true end

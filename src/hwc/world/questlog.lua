@@ -202,6 +202,17 @@ function QuestLog:turn_in(qid)
   -- quest's SrcItemId) and is unverified.
   local src = quest.source_item
   if src and player:item_count(src) > 0 and player:remove_item(src, player:item_count(src)) then bags = true end
+  -- Reward items (Catalog:quest_rewards, QuestieDB questRewards): one of each, since
+  -- the catalog has no counts and no choice/fixed split. A later quest that needs
+  -- this quest's reward (e.g. Dry Times 116 needs 117's Keg of Thunderbrew Lager)
+  -- can then be completed.
+  local catalog = self.world.catalog
+  if catalog and catalog.quest_rewards then
+    for _, id in ipairs(catalog:quest_rewards(qid)) do
+      player:add_item(id, 1)
+      bags = true
+    end
+  end
   self.history[qid] = true
   remove(self, qid)
   self:_record("quest_turn_in", { id = qid, xp = gained, levels = levels })
