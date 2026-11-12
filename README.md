@@ -6,7 +6,7 @@ The addon is read-only input, read from a configured path
 
 - Run: `bin/hwc --help`
 - Test: `~/.luarocks/bin/busted` (the integration specs are pending when the
-  addon checkout is absent)
+  addon checkout or the local catalog is absent)
 
 ## Booting the addon
 
@@ -31,6 +31,50 @@ lockdown releases and the timers drain. It prints:
 A checkout without a git commit is refused, so an unidentified run can't be
 mistaken for a real one. With the addon's defaults (`autoresize = true`,
 `numsteps = 1`, WoWPro.lua:348-349) the engine shows one row.
+
+## World and catalog
+
+The stubs answer from a simulated world (`src/hwc/world/`): the player, bags,
+XP and a 40-slot quest log. Quest, NPC and item facts come from a catalog
+(design spec §6) merged from three local sources. The guide lines are never a
+source.
+
+**Data policy: no third-party data is committed.** QuestieDB and the Wowhead
+extract stay on your machine, under `local/` (git-ignored) or at external
+paths. The repo holds only the loaders, `tools/fetch-questie.sh` and the
+structure-only `catalog/supplement.example.json`.
+
+Setup:
+
+```sh
+tools/fetch-questie.sh d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc   # the pinned QuestieDB commit
+```
+
+This writes the Forever quest, NPC, item, object and XP files to
+`local/questie/<commit>/` with a `SHA256SUMS`. It won't overwrite a copy whose
+hashes differ.
+
+Default source paths (`src/hwc/config.lua`; override with
+`config.load{ catalog = { ... } }`). Relative paths resolve against the repo
+root, not the working directory.
+
+| Key | Default |
+|---|---|
+| `questie_dir` | `local/questie/d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc` |
+| `wh_json`, `objs_json`, `rate_overrides` | `~/Projects/wow-pro-leveling/sim/data/{wh,objs,rate_overrides}.json` |
+| `supplement` | `local/catalog/supplement.json` (format: `catalog/supplement.example.json`) |
+
+Every source is optional. A missing source is recorded in `sources` with
+`present: false`, never treated as an error. `hwc boot` loads the catalog into
+the world.
+
+```sh
+bin/hwc quest 179      # the merged quest as JSON, with each source's path, presence and sha256
+```
+
+The integration spec `spec/integration/world_engine_spec.lua` drives the real
+engine through Dwarven Outfitters (179) for a Dwarf Warrior and a Gnome Mage.
+It is pending when the addon checkout or `local/questie/<pin>` is absent.
 
 ## Skip list
 
