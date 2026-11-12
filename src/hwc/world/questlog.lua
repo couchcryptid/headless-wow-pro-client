@@ -63,6 +63,7 @@ function QuestLog:progress(qid, index, amount)
   local e = self.entries_by_id[qid]
   local obj = e and e.quest.objectives[index]
   if not obj then return false end
+  if type(amount) ~= "number" or amount < 0 then return false, "bad-amount" end
   e.have[index] = math.min(obj.count, e.have[index] + amount)
   self:_record("quest_progress", { id = qid, index = index, have = e.have[index] })
   return true

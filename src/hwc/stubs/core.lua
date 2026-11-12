@@ -256,8 +256,14 @@ function M.install(sb, cfg)
   -- so a missing global aborts every completion). Client returns willPlay; headless plays nothing.
   env.PlaySoundFile = function() return true end
   -- WoWPro_Events.lua:689, :743, :753, :787 (compared with == to the step name). GetTitleText is the open
-  -- NPC quest dialog's title; the harness opens no dialog (no QUEST_DETAIL/QUEST_COMPLETE), so "".
-  env.GetTitleText = function() return "" end
+  -- NPC quest dialog's title: the catalog name of world.dialog's quest, "" with no dialog open.
+  -- Reads sb.world per call, never a captured copy.
+  env.GetTitleText = function()
+    local w = sb.world
+    local d = w and w.dialog
+    local q = d and w.catalog and w.catalog:quest(d.qid)
+    return q and q.name or ""
+  end
 
   -- FrameXML constant. WoWPro_Widgets.lua:510 (CreateScrollbar border colour)
   env.TOOLTIP_DEFAULT_COLOR = { r = 1, g = 1, b = 1 }

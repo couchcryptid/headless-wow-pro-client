@@ -65,7 +65,7 @@ root, not the working directory.
 | `supplement` | `local/catalog/supplement.json` (format: `catalog/supplement.example.json`) |
 
 Every source is optional. A missing source is recorded in `sources` with
-`present: false`, never treated as an error. `hwc boot` loads the catalog into
+`present: false`, never treated as an error; a partial QuestieDB copy is recorded as `present: "partial"` with the missing files listed. `hwc boot` loads the catalog into
 the world.
 
 ```sh

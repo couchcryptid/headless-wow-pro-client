@@ -56,6 +56,15 @@ describe("stubs", function()
     assert.equal("", env.GetTitleText())
   end)
 
+  it("GetTitleText follows the open dialog", function()
+    sb.world.catalog = { quest = function(_, id) return id == 179 and { name = "Dwarven Outfitters" } or nil end }
+    assert.equal("", env.GetTitleText())
+    sb.world.dialog = { qid = 179, kind = "detail" }
+    assert.equal("Dwarven Outfitters", env.GetTitleText())
+    sb.world.dialog = nil
+    assert.equal("", env.GetTitleText())
+  end)
+
   it("answers GetItemInfo from the catalog by id, numeric string or name", function()
     sb.world.catalog = {
       item = function(_, id) return tonumber(id) == 750 and { id = 750, name = "Tough Wolf Meat" } or nil end,

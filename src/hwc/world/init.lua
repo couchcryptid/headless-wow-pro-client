@@ -8,7 +8,7 @@ World.__index = World
 -- catalog may be nil (the catalog arrives in a later task); clock is optional
 -- and stamps event records (t = 0 without one).
 function World.new(cfg, catalog, clock)
-  local self = setmetatable({ catalog = catalog, clock = clock, events = {}, log = nil }, World)
+  local self = setmetatable({ catalog = catalog, clock = clock, events = {}, log = nil, dialog = nil }, World)
   self.player = Player.new(cfg, function(kind, fields)
     local rec = { t = self.clock and self.clock:now() or 0, kind = kind }
     for k, v in pairs(fields) do rec[k] = v end

@@ -103,6 +103,10 @@ function Catalog.load(cfg)
     self.questie = questie.load(qdir)
     self.sources.questie.sha256 = self.questie.sha256
     self.sources.questie.commit = basename(qdir)
+    if #self.questie.missing > 0 then
+      self.sources.questie.present = "partial"
+      self.sources.questie.missing = self.questie.missing
+    end
   end
 
   local function json_source(name, path, default)
@@ -142,20 +146,20 @@ local function questie_objectives(self, ob)
   local out = {}
   local function simple(group, kind)
     for _, e in ipairs(ob[group] or {}) do
-      out[#out + 1] = { kind = kind, ids = { e[1] }, count = 1, text = e[2] or name_of(self, kind, e[1]) }
+      out[#out + 1] = { kind = kind, ids = { e[1] }, count = 1, count_assumed = true, text = e[2] or name_of(self, kind, e[1]) }
     end
   end
   simple(1, "npc")
   simple(2, "object")
   simple(3, "item")
   for _, e in ipairs(ob[4] and { ob[4] } or {}) do
-    out[#out + 1] = { kind = "other", ids = {}, count = 1, text = "Reputation " .. tostring(e[1]) .. " " .. tostring(e[2]) }
+    out[#out + 1] = { kind = "other", ids = {}, count = 1, count_assumed = true, text = "Reputation " .. tostring(e[1]) .. " " .. tostring(e[2]) }
   end
   for _, e in ipairs(ob[5] or {}) do
-    out[#out + 1] = { kind = "npc", ids = copy_array(e[1]), count = 1, text = e[3] or name_of(self, "npc", e[2]) }
+    out[#out + 1] = { kind = "npc", ids = copy_array(e[1]), count = 1, count_assumed = true, text = e[3] or name_of(self, "npc", e[2]) }
   end
   for _, e in ipairs(ob[6] or {}) do
-    out[#out + 1] = { kind = "other", ids = {}, count = 1, text = e[2] or ("Spell " .. tostring(e[1])) }
+    out[#out + 1] = { kind = "other", ids = {}, count = 1, count_assumed = true, text = e[2] or ("Spell " .. tostring(e[1])) }
   end
   return out
 end
@@ -293,7 +297,18 @@ local function build_quest(self, id)
     end
   end
 
-  quest.confidence = (xp_known and quest.level ~= nil) and "verified" or "unverified"
+  -- A count nobody supplied is assumed 1; the quest cannot be called verified.
+  local assumed = false
+  for i, o in ipairs(quest.objectives) do
+    if o.count == nil then
+      o.count = 1
+      o.count_assumed = true
+      note("objective " .. i .. " has no count (assumed 1)")
+    end
+    if o.count_assumed then assumed = true end
+  end
+
+  quest.confidence = (xp_known and quest.level ~= nil and not assumed) and "verified" or "unverified"
   quest.notes = notes
   return quest
 end

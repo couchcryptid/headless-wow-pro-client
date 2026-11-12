@@ -119,11 +119,25 @@ local function parse_sums(dir)
   return sums
 end
 
+local function readable(path)
+  local f = io.open(path, "rb")
+  if not f then return false end
+  f:close()
+  return true
+end
+
+-- A file that is absent is recorded in `missing` (a partial copy) and its
+-- table stays empty; a file that is present but broken still errors.
 function M.load(dir)
   local modules = { QuestieDB = {} }
-  local keys, rows = {}, {}
+  local keys, rows, missing = {}, {}, {}
   for _, spec in ipairs(DATA_FILES) do
     local path = dir .. "/" .. spec.file
+    if not readable(path) then
+      missing[#missing + 1] = spec.file
+      keys[spec.kind], rows[spec.kind] = {}, {}
+      goto continue
+    end
     local qdb = {}
     modules.QuestieDB = qdb
     run(path, read(path), file_env(modules))
@@ -132,12 +146,17 @@ function M.load(dir)
     keys[spec.kind] = qdb[spec.keys]
     rows[spec.kind] = run_rows(path, qdb[spec.data])
     if type(rows[spec.kind]) ~= "table" then fail(path, spec.data .. " did not return a table") end
+    ::continue::
   end
 
   local xp_modules = { QuestieDB = {} }
   for _, file in ipairs(XP_FILES) do
     local path = dir .. "/" .. file
-    run(path, read(path), file_env(xp_modules))
+    if readable(path) then
+      run(path, read(path), file_env(xp_modules))
+    else
+      missing[#missing + 1] = file
+    end
   end
   local xp = (xp_modules.QuestXP or {}).db or {}
 
@@ -149,6 +168,7 @@ function M.load(dir)
     rows = rows,
     xp = xp,
     keys = keys,
+    missing = missing,
     sha256 = parse_sums(dir),
   }
 end
