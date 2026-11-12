@@ -130,14 +130,19 @@ describe("actions.perform: walking to each step", function()
     actions.perform(ctx, step("F", {}, { zone = "1455; Ironforge", targetzone = "1453; Stormwind City" }, "Stormwind"))
     assert.are.equal("Stormwind", w.player.subzone)
     actions.perform(ctx, step("N", {}, { zone = "1426; Dun Morogh", map = "30,70" }))
-    assert.are.same({ "Dun Morogh", "" }, { w.player.zone, w.player.subzone })
+    -- AutoCompleteZone matches the step name or TZ against zone/subzone text, or TZ's map id
+    -- (WoWPro_AutoComplete.lua:499-526): none of them matches the F step any more.
+    local p = w.player
+    assert.are_not.equal("Stormwind", p.subzone)
+    assert.are_not.equal("Stormwind City", p.zone)
+    assert.are_not.equal(1453, p.map_id)
   end)
 
-  it("a step with only M moves x/y within the current zone", function()
+  it("a step with only M moves x/y within the current zone and keeps the subzone", function()
     local ctx, E, w = setup()
     w.player:set_zone("Dun Morogh", "Kharanos", 1426, 0.1, 0.1)
     actions.perform(ctx, step("N", {}, { map = "47.3,52.5" }))
-    assert.are.same({ "Dun Morogh", "", 1426, 0.473, 0.525 }, { w.player.zone, w.player.subzone, w.player.map_id, w.player.x, w.player.y })
+    assert.are.same({ "Dun Morogh", "Kharanos", 1426, 0.473, 0.525 }, { w.player.zone, w.player.subzone, w.player.map_id, w.player.x, w.player.y })
   end)
 
   it("no Z/M, M|PLAYER| or the current spot: no move and no zone events", function()

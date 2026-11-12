@@ -255,12 +255,12 @@ function M.install(sb, cfg)
   -- C_Spell.GetSpellInfo. The SPELL-tag check (WoWPro_Broker.lua:3332-3340) skips the step with an
   -- error when it returns nil, and otherwise reads only .name, for debug and why text (:3359-3366);
   -- whether the spell is known comes from IsPlayerSpell. The client answers for every real spell id,
-  -- so any numeric id gets an info table. There is no spell catalog, so the name is "Spell <id>".
+  -- so any numeric id gets an info table. There is no spell catalog, so the name is "Spell <id> (stub)".
   env.C_Spell = trap(sb, "C_Spell", {
     GetSpellInfo = function(id)
       id = tonumber(id)
       if not id then return nil end
-      return { spellID = id, name = "Spell " .. id }
+      return { spellID = id, name = "Spell " .. id .. " (stub)" }
     end,
   })
 

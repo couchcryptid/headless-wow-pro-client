@@ -195,10 +195,22 @@ end
 -- by design; only a gated accept withheld from a character WITH the skill is a finding.
 -- The engine stores the tag as "<Profession>;<skill line>[;...]" (DefineTag("P","prof"),
 -- WoWPro_Parser.lua) and skips the step when the profession is unknown.
+-- Only an accept the engine permanently skips counts: a P tag whose skill level
+-- resolves to 0 is shown to a character without the profession
+-- (WoWPro_Broker.lua:2783-2787), so it stays reportable. The level is parsed as the
+-- engine does at :2738-2747: "name;id;[exp+]lvl;flip;max", "*" means 101, default 1.
 function Driver:lacks_profession(step)
   local prof = step.prof
-  local name = type(prof) == "string" and prof:match("^%s*([^;]-)%s*;")
-  if not name or name == "" then return false end
+  if type(prof) ~= "string" then return false end
+  local fields = {}
+  for f in (prof .. ";"):gmatch("([^;]*);") do fields[#fields + 1] = f end
+  local name = fields[1] and fields[1]:match("^%s*(.-)%s*$")
+  if not name or name == "" or #fields < 2 then return false end
+  local main = (fields[3] ~= nil and fields[3] ~= "") and fields[3] or "*+1"
+  local exp, lvl = main:match("^([^+]*)%+?(.*)$")
+  if lvl == "" then lvl = nil end
+  local proflvl = (lvl == "*") and 101 or (tonumber(lvl or exp) or 1)
+  if proflvl == 0 then return false end
   return not self.W.player:knows_skill(name)
 end
 

@@ -207,14 +207,19 @@ describe("driver.run", function()
           tags = { prof = "First Aid;129" } },
         { action = "A", name = "Camping 101: Fishing", qids = { 60 }, why = "NextStep(): SkippedStep.", hidden = true,
           tags = { prof = "Fishing;356" } },
+        -- Skill level 0: the engine shows it without the profession (WoWPro_Broker.lua:2783-2787),
+        -- so hiding it for another reason is still a finding.
+        { action = "A", name = "Level Zero Cooking", qids = { 61 }, why = "NextStep:PRE&(9): A mandatory prereq was not met: 9",
+          hidden = true, tags = { prof = "Cooking;185;0;0" } },
         { action = "D", name = "Done" },
       } },
     }
-    local script = { G1 = { { complete = { 1 } }, nil, nil, nil, nil, { complete = { 6 }, done = true } } }
+    local script = { G1 = { { complete = { 1 } }, nil, nil, nil, nil, nil, { complete = { 7 }, done = true } } }
     local log = drive(guides, script, {}, world)
     local hidden = signals(log, "never-shown-accept")
-    assert.equal(1, #hidden)
+    assert.equal(2, #hidden)
     assert.equal("Camping 101: Fishing", hidden[1].name)
+    assert.equal("Level Zero Cooking", hidden[2].name)
   end)
 
   it("closes G1 when the right-click on its D step loads G2 (Review Focus 1, manual path)", function()
