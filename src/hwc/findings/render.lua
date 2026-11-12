@@ -1,9 +1,9 @@
 -- Human-first findings markdown (design spec §4.1–§4.9). Pure: no I/O.
 --
 -- Page order (§4.1):
---   # <characters>: N findings from R root causes      title, then the run line
+--   # <characters>: N findings, M follow from others   title, then the run line
 --   > - warning                                         only when one applies (§4.3)
---   ## Start here                                       top 5 root causes (§4.4)
+--   ## Start here                                       top 5 primary findings (§4.4)
 --   ## At a glance                                      severity and file tables (§4.5)
 --   ## Guide files / ## Addon code                      findings by file, line order (§4.6)
 --   ## Harness notices / ## Expected manual clicks      folded (§4.9)
@@ -77,9 +77,16 @@ local function counted(f)
   return f.severity ~= nil and not f.expected and not report.is_harness(f)
 end
 
-local function title_of(f) return one_line(text.title(f)) end
+-- A title as markdown: one line, escaped for headings and link text.
+local function title_of(f) return text.md_text(one_line(text.title(f))) end
 
 local function link(f) return "[" .. title_of(f) .. "](#" .. text.anchor(f.id) .. ")" end
+
+-- A detached checkout reports its branch as "HEAD"; say what that means.
+local function branch_label(branch)
+  if branch == "HEAD" then return "detached" end
+  return "branch " .. code(branch)
+end
 
 local function sorted_keys(t)
   local keys = {}
@@ -154,22 +161,27 @@ end
 -- Sections
 ---------------------------------------------------------------------------
 
-local function title_lines(out, header, combos, n_findings, n_roots)
+-- The title counts follow-on findings (those with caused_by) rather than
+-- claiming "root causes": a finding with no caused_by link is only primary.
+local function title_lines(out, header, combos, n_findings, n_follow)
   local label
   if #combos == 1 then
     label = text.character(combos[1])
   elseif #combos > 1 then
     local races = {}
     for i, c in ipairs(combos) do races[i] = (text.character(c):gsub(" %b()$", ""):match("^(.*) %S+$") or c) end
-    label = #combos .. " characters: " .. table.concat(distinct_sorted(races), ", ")
+    label = #combos .. " characters (" .. table.concat(distinct_sorted(races), ", ") .. ")"
   else
     label = "Findings"
   end
   if n_findings == 0 then
     out[#out + 1] = "# " .. label .. ": no findings"
   else
-    out[#out + 1] = "# " .. label .. ": " .. plural(n_findings, "finding") .. " from "
-      .. plural(n_roots, "root cause")
+    local s = "# " .. label .. ": " .. plural(n_findings, "finding")
+    if n_follow > 0 then
+      s = s .. ", " .. n_follow .. (n_follow == 1 and " follows" or " follow") .. " from others"
+    end
+    out[#out + 1] = s
   end
   out[#out + 1] = ""
 
@@ -178,7 +190,7 @@ local function title_lines(out, header, combos, n_findings, n_roots)
   local a = header.addon or {}
   if a.branch or a.commit then
     local s = "WoW-Pro"
-    if a.branch then s = s .. " " .. code(a.branch) end
+    if a.branch then s = s .. " " .. (a.branch == "HEAD" and "detached" or code(a.branch)) end
     if a.commit then s = s .. " @ " .. code(tostring(a.commit):sub(1, 7)) end
     parts[#parts + 1] = s
   end
@@ -235,7 +247,7 @@ local function start_here_lines(out, main, by_id)
     if (a.line or 0) ~= (b.line or 0) then return (a.line or 0) < (b.line or 0) end
     return a.id < b.id
   end)
-  out[#out + 1] = "These root causes explain the most findings. Fixing one should clear the findings listed under it."
+  out[#out + 1] = "These findings have the most other findings following from them. Fixing one may also clear those."
   out[#out + 1] = ""
   for i = 1, math.min(START_HERE_MAX, #roots) do
     local f, n = roots[i].f, roots[i].n
@@ -262,7 +274,7 @@ local function glance_lines(out, main, sections)
     local t = f.caused_by and follow or roots
     t[f.severity] = (t[f.severity] or 0) + 1
   end
-  out[#out + 1] = "| | Root causes | Follow-on | Total |"
+  out[#out + 1] = "| | Primary | Follow-on | Total |"
   out[#out + 1] = "|---|---|---|---|"
   for _, sev in ipairs(SEVERITY_ORDER) do
     local r, fo = roots[sev] or 0, follow[sev] or 0
@@ -321,7 +333,9 @@ local function meta_line(f)
   local parts = { text.SEVERITY[f.severity].word }
   if f.line then parts[#parts + 1] = "line " .. f.line end
   if f.qid then parts[#parts + 1] = "quest " .. f.qid end
-  if f.level then parts[#parts + 1] = "level " .. f.level end
+  -- A below-level signal fires after the grind, so its level is the grind's
+  -- target, not where the guide reached the accept: the sentence says it.
+  if f.level and f.signal ~= "below-level" then parts[#parts + 1] = "level " .. f.level end
   if f.confidence == "unverified" then parts[#parts + 1] = "unverified quest data" end
   return table.concat(parts, " · ")
 end
@@ -358,8 +372,7 @@ local function finding_lines(out, f, ctx, matrix)
       if ctx.by_id[id] then kids[#kids + 1] = ctx.by_id[id] end
     end
     table.sort(kids, file_then_line)
-    local children = {}
-    for i, child in ipairs(kids) do children[i] = link(child) end
+    local children = text.links(kids)
     if #children > 0 then bullets[#bullets + 1] = "- **Also blocks:** " .. table.concat(children, ", ") end
     if #matrix > 1 and f.combos and #f.combos > 0 then
       bullets[#bullets + 1] = "- **Affects:** " .. (text.combos(f.combos, matrix))
@@ -432,8 +445,11 @@ local function harness_lines(out, harness)
   table.sort(errors, by_name)
   out[#out + 1] = "## Harness notices"
   out[#out + 1] = ""
-  out[#out + 1] = "<details><summary>" .. plural(#globals, "missing global") .. " and "
-    .. plural(#errors, "harness error") .. ": gaps in this client's WoW API stubs, not guide bugs</summary>"
+  local counts = {}
+  if #globals > 0 then counts[#counts + 1] = plural(#globals, "missing global") end
+  if #errors > 0 then counts[#counts + 1] = plural(#errors, "harness error") end
+  out[#out + 1] = "<details><summary>" .. table.concat(counts, " and ")
+    .. ": gaps in this client's WoW API stubs, not guide bugs</summary>"
   out[#out + 1] = ""
   for _, f in ipairs(globals) do out[#out + 1] = "- " .. code(f.name or "") .. " · " .. f.id end
   for _, f in ipairs(errors) do
@@ -496,7 +512,7 @@ local function about_lines(out, header, combos)
   if a then
     local parts = {}
     if a.path then parts[#parts + 1] = code(a.path) end
-    if a.branch then parts[#parts + 1] = "branch " .. code(a.branch) end
+    if a.branch then parts[#parts + 1] = branch_label(a.branch) end
     if a.commit then parts[#parts + 1] = "commit " .. code(a.commit) end
     parts[#parts + 1] = state(a.dirty)
     if #parts > 0 then out[#out + 1] = "- WoW-Pro: " .. table.concat(parts, " · ") end
@@ -504,6 +520,7 @@ local function about_lines(out, header, combos)
   local c = header.client
   if c then
     local parts = {}
+    if c.branch then parts[#parts + 1] = branch_label(c.branch) end
     if c.commit then parts[#parts + 1] = "commit " .. code(c.commit) end
     parts[#parts + 1] = state(c.dirty)
     if #parts > 0 then out[#out + 1] = "- Client: " .. table.concat(parts, " · ") end
@@ -527,20 +544,20 @@ function render.markdown(findings, header)
   local combos = distinct_sorted((header.matrix or {}).combos)
 
   local main, harness, expected = {}, {}, {}
-  local n_roots = 0
+  local n_follow = 0
   for _, f in ipairs(findings) do
     if report.is_harness(f) then
       harness[#harness + 1] = f
     elseif counted(f) then
       main[#main + 1] = f
-      if not f.caused_by then n_roots = n_roots + 1 end
+      if f.caused_by then n_follow = n_follow + 1 end
     else
       expected[#expected + 1] = f
     end
   end
 
   local out = {}
-  title_lines(out, header, combos, #main, n_roots)
+  title_lines(out, header, combos, #main, n_follow)
   warning_lines(out, header, main)
   start_here_lines(out, main, ctx.by_id)
   if #main > 0 then

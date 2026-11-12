@@ -58,11 +58,11 @@ describe("render.markdown", function()
   local out = md({ runlog("Dwarf", "WARRIOR", sigs()) })
   local fs = group.findings({ runlog("Dwarf", "WARRIOR", sigs()) })
 
-  it("title line counts findings and roots", function()
-    assert.truthy(out:find("^# Dwarf Warrior: %d+ findings from %d+ root causes\n"))
+  it("title line counts findings and those that follow from others", function()
     -- 4 counted findings (did-not-advance, accept-refused, never-shown, addon lua-error);
-    -- never-shown follows from the refusal, so 3 roots.
-    assert.truthy(plain(out, "# Dwarf Warrior: 4 findings from 3 root causes\n"))
+    -- never-shown follows from the refusal.
+    assert.truthy(out:find("^# Dwarf Warrior: 4 findings, 1 follows from others\n"))
+    assert.falsy(plain(out, "root cause"))
     assert.truthy(plain(out, "\n2026-11-12 · WoW-Pro `main` @ `64fe6b3` · 1 character · `Dwarf-WARRIOR-baseline`\n"))
   end)
 
@@ -120,6 +120,15 @@ describe("render.markdown", function()
     assert.truthy(plain(o, "- Engine said: `bad 'x' here more`\n"))
     assert.truthy(plain(o, "- Signal: `did-not-advance`\n"))
     assert.truthy(plain(o, "\n</details>\n\nTriage: _pending_\n"))
+  end)
+
+  it("harness summary omits a zero count", function()
+    local g = finding(1, { signal = "missing-global", name = "TomTom" })
+    local e = finding(2, { signal = "lua-error", harness = true, message = "stub boom" })
+    assert.truthy(plain(render.markdown({ g }, header()),
+      "<details><summary>1 missing global: gaps in this client's WoW API stubs, not guide bugs</summary>"))
+    assert.truthy(plain(render.markdown({ e }, header()),
+      "<details><summary>1 harness error: gaps in this client's WoW API stubs, not guide bugs</summary>"))
   end)
 
   it("harness notices are folded and keep ids", function()
@@ -225,7 +234,7 @@ describe("render.markdown", function()
     local shuffled = {}
     for i = #rev, 1, -1 do shuffled[#shuffled + 1] = rev[i] end
     assert.equal(base, md({ runlog("Gnome", "MAGE", shuffled), runlog("Dwarf", "WARRIOR", sigs()) }, h))
-    assert.truthy(base:find("^# 2 characters: Dwarf, Gnome: "))
+    assert.truthy(base:find("^# 2 characters %(Dwarf, Gnome%): 4 findings, 1 follows from others\n"))
   end)
 
   it("start here ranks by descendant count and caps at 5", function()
@@ -268,7 +277,7 @@ describe("render.markdown", function()
 
   it("renders At a glance with blank zero cells and file links", function()
     local s = assert(plain(out, "## At a glance\n"))
-    assert.truthy(plain(out, "| | Root causes | Follow-on | Total |\n|---|---|---|---|\n", s))
+    assert.truthy(plain(out, "| | Primary | Follow-on | Total |\n|---|---|---|---|\n", s))
     assert.truthy(plain(out, "| 🔴 High | 2 | 1 | 3 |\n", s))
     assert.truthy(plain(out, "| 🟡 Medium | 1 |  | 1 |\n", s))
     assert.truthy(plain(out, "| File | 🔴 High | 🟠 Medium-high | 🟡 Medium | ⚪ Low |\n", s))
@@ -285,7 +294,7 @@ describe("render.markdown", function()
     h.addon.dirty = nil
     h.matrix.combos = { "Gnome MAGE baseline", "Gnome MAGE baseline" }
     local o = render.markdown(group.findings({ runlog("Dwarf", "WARRIOR", dsig) }), h)
-    assert.truthy(o:find("^# Gnome Mage: 3 findings from 1 root cause\n"))
+    assert.truthy(o:find("^# Gnome Mage: 3 findings, 2 follow from others\n"))
     assert.truthy(plain(o, "1. 🔴 [EnableDungeons auto-completes dungeon accepts](#f-"))
     assert.truthy(plain(o, "explains 2 more · `WoWPro/WoWPro_Broker.lua:2588`\n"))
     assert.truthy(plain(o, "### WoWPro_Broker.lua"))
@@ -316,11 +325,64 @@ describe("render.markdown", function()
     assert.falsy(plain(o, "All characters:"))
   end)
 
+  it("titles, Start here and the severity table claim no diagnosis", function()
+    local a = finding(1, { severity = "high" })
+    local o = render.markdown({ a }, header())
+    assert.truthy(o:find("^# Dwarf Warrior: 1 finding\n"))
+    assert.truthy(plain(o, "## Start here\n\nThese findings have the most other findings following from them. "
+      .. "Fixing one may also clear those.\n"))
+    assert.falsy(plain(o, "root cause"))
+  end)
+
+  it("labels Night Elf characters by display name", function()
+    local h = header()
+    h.matrix.combos = { "NightElf WARRIOR baseline" }
+    assert.truthy(render.markdown({}, h):find("^# Night Elf Warrior: no findings\n"))
+    h.matrix.combos = { "NightElf WARRIOR baseline", "Dwarf WARRIOR baseline" }
+    local o = render.markdown({ finding(1, { combos = { "NightElf WARRIOR baseline" } }) }, h)
+    assert.truthy(o:find("^# 2 characters %(Dwarf, Night Elf%): 1 finding\n"))
+    assert.truthy(plain(o, "- **Affects:** all except Dwarf Warrior\n"))
+    assert.truthy(plain(o, "- Characters: Dwarf Warrior, Night Elf Warrior\n"))
+  end)
+
+  it("escapes markdown in headings and Start here links", function()
+    local f = finding(1, { signal = "lua-error", severity = "high", file = "WoWPro/W.lua",
+      message = "W.lua:3: '<eof>' expected near ']'" })
+    local o = render.markdown({ f }, header())
+    local esc = "Lua error: W.lua:3: '&lt;eof&gt;' expected near '\\]'"
+    assert.truthy(plain(o, "#### 🔴 " .. esc .. " <a id=\"f-00000001\"></a>\n"))
+    assert.truthy(plain(o, "1. 🔴 [" .. esc .. "](#f-00000001)"))
+  end)
+
+  it("tells same-title children apart in Also blocks", function()
+    local root = finding(1, { severity = "high", signal = "accept-refused", reasons = { "prerequisite" } })
+    local a = finding(2, { caused_by = root.id, name = "Same", qid = 20 })
+    local b = finding(3, { caused_by = root.id, name = "Same", qid = 30 })
+    root.causes = { a.id, b.id }
+    local o = render.markdown({ root, a, b }, header())
+    assert.truthy(plain(o, "- **Also blocks:** [\"Same\" doesn't advance (quest 20, line 2)](#f-00000002), "
+      .. "[\"Same\" doesn't advance (quest 30, line 3)](#f-00000003)\n"))
+  end)
+
+  it("says detached for a checkout on HEAD", function()
+    local h = header()
+    h.addon.branch = "HEAD"
+    h.client.branch = "HEAD"
+    local o = render.markdown({}, h)
+    assert.truthy(plain(o, "\n2026-11-12 · WoW-Pro detached @ `64fe6b3` · 1 character"))
+    assert.truthy(plain(o, "- WoW-Pro: `../WoW-Pro-Guides` · detached · commit `64fe6b3aabbccddeeff00112233445566778899`"))
+    assert.truthy(plain(o, "- Client: detached · commit `c0ffee1234567890`"))
+    assert.falsy(plain(o, "HEAD"))
+  end)
+
   it("writes the meta line and ground bullet", function()
     local f = finding(1, { signal = "below-level", severity = "medium-high", qid = 77, level = 4,
       confidence = "unverified", grind = { kills = 12, to = 6 } })
     local o = render.markdown({ f }, header())
-    assert.truthy(plain(o, "\nMedium-high · line 1 · quest 77 · level 4 · unverified quest data\n"))
+    -- below-level: the signal's level is the grind's target, so the meta line drops it
+    assert.truthy(plain(o, "\nMedium-high · line 1 · quest 77 · unverified quest data\n"))
+    local d = render.markdown({ finding(2, { level = 4 }) }, header())
+    assert.truthy(plain(d, "\nMedium · line 2 · level 4\n"))
     assert.truthy(plain(o, "- **Ground:** 12 kills to reach level 6\n"))
     assert.truthy(plain(o, "#### 🟠 \"Q1\" is offered below its level <a id=\"f-00000001\"></a>\n"))
   end)
