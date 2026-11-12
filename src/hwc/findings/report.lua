@@ -7,9 +7,12 @@ report.FORMAT = 1
 
 local ARRAY = { __jsontype = "array" }
 
-local function is_harness(f)
+-- Harness notices are about the client's WoW API stubs, not guides: kept out of
+-- every count and shown only in their own folded section.
+function report.is_harness(f)
   return f.signal == "missing-global" or (f.signal == "lua-error" and f.harness == true)
 end
+local is_harness = report.is_harness
 
 local function lowest(cur, f)
   if not cur or f.id < cur.id then return f end
