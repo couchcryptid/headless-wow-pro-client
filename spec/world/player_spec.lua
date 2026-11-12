@@ -100,3 +100,28 @@ describe("config race scope", function()
     assert.has_error(function() config.load({ race = "Orc" }) end, "hwc: race not in scope: Orc")
   end)
 end)
+
+-- Learning a profession teaches its spell (each Wowhead Forever spell page has a
+-- "Learn Skill (<profession>)" effect), which the guides' SPELL|...; Flip tags test.
+describe("professions teach their spell", function()
+  local Player = require("hwc.world.player")
+  it("learn_skill on a profession also learns its spell", function()
+    local p = Player.new({ race = "Dwarf", class = "WARRIOR", faction = "Alliance", sex = 2 })
+    p:learn_skill("First Aid", 1, 75)
+    assert.is_true(p.spells[3273])
+    p:learn_skill("Cooking", 1, 75)
+    assert.is_true(p.spells[2550])
+  end)
+
+  it("a skill with no profession spell learns no spell", function()
+    local p = Player.new({ race = "Dwarf", class = "WARRIOR", faction = "Alliance", sex = 2 })
+    p:learn_skill("Lockpicking", 1, 75)
+    assert.are.same({}, p.spells)
+  end)
+
+  it("World.new professions start with their spells known", function()
+    local cfg = config.load({ race = "Dwarf", class = "WARRIOR", professions = { { name = "Fishing", rank = 1, max = 75 } } })
+    local w = World.new(cfg, nil)
+    assert.is_true(w.player.spells[7620])
+  end)
+end)

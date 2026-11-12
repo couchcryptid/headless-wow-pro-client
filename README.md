@@ -70,13 +70,17 @@ the race's first class in sorted order. The start guide is
 and matched to its guide file by `WoWPro:GuideName` (or GID); the addon is not
 executed. On Dun Morogh that gives Dwarf HUNTER, PALADIN, PRIEST, ROGUE,
 SHAMAN, WARRIOR and Gnome MAGE, PRIEST, ROGUE, WARLOCK, WARRIOR: 11 classes,
-23 runs for `--races Dwarf,Gnome`. Variants (skills start at rank 1, max 75) are
-meant to cover every `A Camping 101: <Profession>` quest in the 1-25 guides, but
-the Camping 101 rules key on the quest's name, and the Forever-added Camping 101
-quests (96044, 96047, 96629, ...) have no name in any catalog source yet. Until
-hand-checked supplement entries name them, those quests are marked `unverified`,
-the rules never fire and every profession variant plays exactly like its
-baseline; the findings header lists this under Gaps. The variants:
+23 runs for `--races Dwarf,Gnome`. Variants start with each profession at rank 1, max 75, and with the spell that
+teaches it (`src/hwc/world/profession_spells.lua`, checked on Wowhead Forever),
+which the guides' `SPELL|<Profession>; <id>; Flip` tags test. Together they
+cover every `A Camping 101: <Profession>` quest in the 1-25 guides. The Camping
+101 rules key on the quest's name, and no catalog source names the
+Forever-added Camping 101 quests (96031-96059, 96626/96629/96634,
+97915-97950), so they are recognised only once `local/catalog/supplement.json`
+names them (see Catalog). Without that file the quests are marked `unverified`
+and every profession variant plays like its baseline; the findings header lists
+this under Gaps. A Camping accept hidden by a `P|` profession the character
+doesn't know is by design (spec §3) and is not reported. The variants:
 
 | Variant | Professions |
 |---|---|
@@ -157,6 +161,13 @@ root, not the working directory.
 | `questie_dir` | `local/questie/d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc` |
 | `wh_json`, `objs_json`, `rate_overrides` | `~/Projects/wow-pro-leveling/sim/data/{wh,objs,rate_overrides}.json` |
 | `supplement` | `local/catalog/supplement.json` (format: `catalog/supplement.example.json`) |
+
+The supplement holds hand-checked facts that no other source has. Each entry
+names its source. The local copy names the 36 Forever Camping 101 quests the
+1-25 guides use (96031-96059, 96626, 96629, 96634, 97915-97950), plus Flintfire's
+Shipment (98321) and Farsen's Watch (96392). Each name and objective was read
+from its Wowhead Forever quest page on 2026-11-12. Like all third-party data,
+the file is not committed.
 
 Every source is optional. A missing source is recorded in `sources` with
 `present: false`, never treated as an error; a partial QuestieDB copy is recorded as `present: "partial"` with the missing files listed. `hwc boot` loads the catalog into

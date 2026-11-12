@@ -30,6 +30,13 @@ describe("stubs", function()
     assert.is_false(env.IsPlayerSpell("1"))
   end)
 
+  it("C_Spell.GetSpellInfo answers any spell id the SPELL tag check passes (Broker.lua:3332-3340)", function()
+    local info = env.C_Spell.GetSpellInfo(3273)
+    assert.equal(3273, info.spellID)
+    assert.is_string(info.name)
+    assert.is_nil(env.C_Spell.GetSpellInfo(nil))
+  end)
+
   it("reads the addon version from its TOC", function()
     assert.is_string(env.GetAddOnMetadata("WoWPro", "Version"))
     assert.equal(env.GetAddOnMetadata("WoWPro", "Version"), env.C_AddOns.GetAddOnMetadata("WoWPro", "Version"))

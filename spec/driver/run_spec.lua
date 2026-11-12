@@ -191,6 +191,32 @@ describe("driver.run", function()
     assert.equal("Gated", hidden[1].name)
   end)
 
+  -- An accept whose quest entered the log or the history anyway hid nothing; an accept
+  -- gated by a P| profession the character doesn't know is hidden by design (spec §3:
+  -- only a gated accept withheld from a character WITH the skill is a finding).
+  it("records no never-shown-accept for a quest that was taken anyway or a profession the character lacks", function()
+    local world = fx.fake_world({}, { 57 })
+    world.log.history[58] = true
+    world.player.skills["Fishing"] = { rank = 1, max = 75 }
+    local guides = {
+      G1 = { startlevel = 1, file = "g1.lua", steps = {
+        { action = "R", name = "a" },
+        { action = "A", name = "In Log", qids = { 57 }, why = "Quest in QuestLog", hidden = true },
+        { action = "A", name = "Turned In", qids = { 58 }, why = "AutoCompleteQuestUpdate: AutoComplete", hidden = true },
+        { action = "A", name = "Camping 101: First Aid", qids = { 59 }, why = "NextStep(): SkippedStep.", hidden = true,
+          tags = { prof = "First Aid;129" } },
+        { action = "A", name = "Camping 101: Fishing", qids = { 60 }, why = "NextStep(): SkippedStep.", hidden = true,
+          tags = { prof = "Fishing;356" } },
+        { action = "D", name = "Done" },
+      } },
+    }
+    local script = { G1 = { { complete = { 1 } }, nil, nil, nil, nil, { complete = { 6 }, done = true } } }
+    local log = drive(guides, script, {}, world)
+    local hidden = signals(log, "never-shown-accept")
+    assert.equal(1, #hidden)
+    assert.equal("Camping 101: Fishing", hidden[1].name)
+  end)
+
   it("closes G1 when the right-click on its D step loads G2 (Review Focus 1, manual path)", function()
     local world = fx.fake_world({}, { 77 })
     local guides = {
