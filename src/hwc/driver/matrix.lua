@@ -109,8 +109,10 @@ local function race_matches(rvalue, race)
   return includes(positive, want)
 end
 
--- Classes the race's start guide names in C| tags, on lines for the race (R| tag
--- includes it) or with no R| tag. Negated classes (C|-Druid) name no class.
+-- Classes the race's start guide names in C| tags, on lines whose R| tag names the
+-- race. Ruling W (user, 2026-11-12): a class-only line (no R|) adds nothing, since
+-- it would admit race/class pairs the game does not have (Gnome Shaman, Dwarf
+-- Warlock, Gnome Hunter). Negated classes (C|-Druid) name no class.
 -- Sorted upper-case tokens ("Priest" -> PRIEST).
 function matrix.classes_for(addon_path, race)
   local path = find_guide_file(addon_path, start_guide_name(addon_path, race))
@@ -124,7 +126,7 @@ function matrix.classes_for(addon_path, race)
       if fields[i] == "C" and not classes then classes = fields[i + 1] end
       if fields[i] == "R" and not rvalue then rvalue = fields[i + 1] end
     end
-    if classes and (not rvalue or race_matches(rvalue, race)) then
+    if classes and rvalue and race_matches(rvalue, race) then
       for _, c in ipairs(split_list(classes)) do
         if c:sub(1, 1) ~= "-" then seen[(c:gsub("%s", ""):upper())] = true end
       end

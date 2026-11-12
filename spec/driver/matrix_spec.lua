@@ -48,17 +48,21 @@ return [[
 end
 
 describe("matrix.classes_for", function()
-  it("takes classes from C| tags on lines for the race or with no R| tag", function()
+  -- Ruling W (user, 2026-11-12): only C| lines whose R| names the race count. A class-only
+  -- line (no R|) adds nothing: it would admit combos the game has no such race/class for.
+  it("takes classes only from C| tags on lines whose R| tag names the race", function()
     local root = fixture(table.concat({
       "A One|QID|1|C|Mage|R|Gnome|",
       "A Two|QID|2|C|Priest|R|Dwarf,Gnome|",
       "A Three|QID|3|C|Warrior,Rogue|",
       "A Four|QID|4|R|Dwarf|",
-      "C Five|QID|5|C|-Druid|",
+      "C Five|QID|5|C|-Druid|R|Dwarf|",
+      "A Six|QID|6|C|Warrior|R|Dwarf|",
     }, "\n"))
-    assert.same({ "PRIEST", "ROGUE", "WARRIOR" }, matrix.classes_for(root, "Dwarf"))
+    assert.same({ "PRIEST", "WARRIOR" }, matrix.classes_for(root, "Dwarf"))
+    assert.is_false(has(matrix.classes_for(root, "Dwarf"), "ROGUE"))
     assert.is_false(has(matrix.classes_for(root, "Dwarf"), "MAGE"))
-    assert.is_true(has(matrix.classes_for(root, "Gnome"), "MAGE"))
+    assert.same({ "MAGE", "PRIEST" }, matrix.classes_for(root, "Gnome"))
   end)
 
   it("returns sorted upper-case tokens", function()
@@ -81,6 +85,13 @@ describe("matrix.classes_for", function()
     assert.is_true(has(dwarf, "PRIEST"))
     assert.is_true(has(dwarf, "PALADIN"))
     assert.is_true(has(matrix.classes_for(ADDON, "Gnome"), "PRIEST"))
+  end)
+
+  it("Dwarf has no WARLOCK, Gnome no SHAMAN or HUNTER (Ruling W: invalid in game)", function()
+    local dwarf, gnome = matrix.classes_for(ADDON, "Dwarf"), matrix.classes_for(ADDON, "Gnome")
+    assert.is_false(has(dwarf, "WARLOCK"))
+    assert.is_false(has(gnome, "SHAMAN"))
+    assert.is_false(has(gnome, "HUNTER"))
   end)
 end)
 

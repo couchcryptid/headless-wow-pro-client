@@ -60,12 +60,15 @@ addon commit, catalog, config and seed give byte-identical markdown. The
 header's `Client` line is this repo's own HEAD commit.
 
 Matrix combos (`src/hwc/driver/matrix.lua`): for each race, every class that
-the race's start guide names in a `C|` tag (on lines with no `R|` tag, or whose
-`R|` includes the race) at the `baseline` variant, plus each other variant on
+the race's start guide names in a `C|` tag on a line whose `R|` tag names the
+race (a class-only line adds nothing: it would admit pairs the game lacks, such
+as Gnome Shaman, Dwarf Warlock or Gnome Hunter) at the `baseline` variant, plus each other variant on
 the race's first class in sorted order. The start guide is
 `WoWPro.Leveling.ForeverStartGuides[race]`, read from the Leveling source text
 and matched to its guide file by `WoWPro:GuideName` (or GID); the addon is not
-executed. Variants (skills start at rank 1, max 75) cover every
+executed. On Dun Morogh that gives Dwarf HUNTER, PALADIN, PRIEST, ROGUE,
+SHAMAN, WARRIOR and Gnome MAGE, PRIEST, ROGUE, WARLOCK, WARRIOR: 11 classes,
+23 runs for `--races Dwarf,Gnome`. Variants (skills start at rank 1, max 75) cover every
 `A Camping 101: <Profession>` quest in the 1-25 guides:
 
 | Variant | Professions |
