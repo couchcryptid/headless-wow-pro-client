@@ -251,6 +251,19 @@ function M.install(sb, cfg)
   env.IsMounted = function() return false end
   env.Dismount = function() end
 
+  -- WoWPro_CompatUtil.lua:273-275: with no GetSpellInfo global, WoWPro.C_Spell_GetSpellInfo calls
+  -- C_Spell.GetSpellInfo. The SPELL-tag check (WoWPro_Broker.lua:3332-3340) skips the step with an
+  -- error when it returns nil, and otherwise reads only .name, for debug and why text (:3359-3366);
+  -- whether the spell is known comes from IsPlayerSpell. The client answers for every real spell id,
+  -- so any numeric id gets an info table. There is no spell catalog, so the name is "Spell <id> (stub)".
+  env.C_Spell = trap(sb, "C_Spell", {
+    GetSpellInfo = function(id)
+      id = tonumber(id)
+      if not id then return nil end
+      return { spellID = id, name = "Spell " .. id .. " (stub)" }
+    end,
+  })
+
   -- WoWPro_CompatUtil.lua:231-237 (GetItemCooldown falls back to C_Container.GetItemCooldown), read by
   -- the U-step item button (RowUpdate.lua:555). The world models no cooldowns: start 0, duration 0, enabled true.
   env.C_Container = trap(sb, "C_Container", {

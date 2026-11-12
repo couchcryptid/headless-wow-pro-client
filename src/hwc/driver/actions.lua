@@ -485,6 +485,33 @@ local function perform_arrival(ctx, step, out)
   fire(ctx, out, "ZONE_CHANGED")
 end
 
+-- Spec §5.1: the player's position is the step's M coordinate when it has one. A
+-- player walks to every step, so a non-travel step with a Z or M tag moves the
+-- player there before its own rule runs. Without this the player stays where the
+-- last travel step put them, and a later travel step to the same place completes
+-- on the engine's "already there" check (WoWPro_Broker.lua:2531-2537,
+-- AutoCompleteZone at WoWPro_AutoComplete.lua:499-526) without being acted on.
+-- No Z, no usable M, or the current spot: no move and no zone events.
+local TRAVEL = { R = true, F = true, b = true, P = true, H = true }
+local function walk_to_step(ctx, step, out)
+  if TRAVEL[step.action] then return end
+  local tags = step.tags or {}
+  local zone, map_id = parse_zone(tags.zone)
+  local x, y = parse_coords(tags.map)
+  if not (zone or map_id or x) then return end
+  local p = ctx.world.player
+  -- A new zone or map: the subzone is unknown, so it is cleared. The same zone and map:
+  -- the player walks within it and keeps the subzone (the catalog has no subzone for an
+  -- arbitrary M). A numeric-only Z keeps the previous zone name (no map-name catalog).
+  local same_area = (zone or p.zone) == p.zone and (map_id or p.map_id) == p.map_id
+  local to = { zone or p.zone, same_area and p.subzone or "", map_id or p.map_id, x or p.x, y or p.y }
+  -- Already standing on that spot (subzone included): stay put.
+  if to[1] == p.zone and to[3] == p.map_id and to[4] == p.x and to[5] == p.y then return end
+  p:set_zone(to[1], to[2], to[3], to[4], to[5])
+  fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
+  fire(ctx, out, "ZONE_CHANGED")
+end
+
 local function perform_travel(ctx, step, out)
   local p = ctx.world.player
   local tags = step.tags or {}
@@ -661,6 +688,7 @@ function actions.perform(ctx, step)
   local out = new_outcome(qids[1])
   local quest_handler = QUEST_HANDLERS[step.action]
   local handler = OTHER_HANDLERS[step.action]
+  walk_to_step(ctx, step, out)
   if quest_handler then
     if #qids == 0 then
       out.reason = "no-qid"

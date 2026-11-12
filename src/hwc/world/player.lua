@@ -1,5 +1,6 @@
 -- Simulated player state (design spec §5). The stubs read this on every call.
 local xp = require("hwc.world.xp")
+local PROFESSION_SPELLS = require("hwc.world.profession_spells")
 
 local Player = {}
 Player.__index = Player
@@ -87,6 +88,9 @@ end
 function Player:learn_skill(name, rank, max)
   self.skills[name] = { rank = rank, max = max }
   self._record("learn_skill", { name = name, rank = rank, max = max })
+  -- A profession comes with the spell that teaches it (hwc.world.profession_spells).
+  local spell = PROFESSION_SPELLS[name]
+  if spell and not self.spells[spell] then self:learn_spell(spell) end
 end
 
 function Player:knows_skill(name) return self.skills[name] ~= nil end

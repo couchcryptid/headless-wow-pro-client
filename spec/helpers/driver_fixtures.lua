@@ -145,7 +145,8 @@ end
 
 -- Minimal world for the driver loop: player, a quest log of qids and a catalog table.
 local function fake_world(quests, log_qids)
-  local w = { player = { level = 1, xp = 0, race_token = "Dwarf", class_token = "WARRIOR" } }
+  local w = { player = { level = 1, xp = 0, race_token = "Dwarf", class_token = "WARRIOR", skills = {} } }
+  function w.player.knows_skill(self, name) return self.skills[name] ~= nil end
   local order = log_qids or {}
   w.log = {
     entries = function() local out = {} for i, q in ipairs(order) do out[i] = { id = q, quest = (quests or {})[q] } end return out end,

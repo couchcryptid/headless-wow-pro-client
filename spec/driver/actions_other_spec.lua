@@ -110,6 +110,52 @@ describe("actions.perform: travel", function()
   end)
 end)
 
+-- Travel-location fix (spec §5.1 "position = the step's M coordinate when it has
+-- one"): a player walks to every step's Z/M, so a non-travel step with a Z or M
+-- moves the player there before acting. Without this a later travel step to the
+-- same place completes on the engine's "already there" check without being acted on.
+describe("actions.perform: walking to each step", function()
+  it("an A step with Z/M moves the player there, subzone cleared, before accepting", function()
+    local ctx, E, w = setup()
+    w.player:set_zone("Stormwind City", "Stormwind", 1453, 0.5, 0.5)
+    local o = actions.perform(ctx, step("A", { 179 }, { zone = "1426; Dun Morogh", map = "46.74,53.87" }))
+    assert.are.equal("acted", o.kind)
+    local p = w.player
+    assert.are.same({ "Dun Morogh", "", 1426, 0.4674, 0.5387 }, { p.zone, p.subzone, p.map_id, p.x, p.y })
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "QUEST_ACCEPTED", "QUEST_LOG_UPDATE" }, names(E))
+  end)
+
+  it("a later F to the same place is not already there after walking elsewhere", function()
+    local ctx, E, w = setup()
+    actions.perform(ctx, step("F", {}, { zone = "1455; Ironforge", targetzone = "1453; Stormwind City" }, "Stormwind"))
+    assert.are.equal("Stormwind", w.player.subzone)
+    actions.perform(ctx, step("N", {}, { zone = "1426; Dun Morogh", map = "30,70" }))
+    -- AutoCompleteZone matches the step name or TZ against zone/subzone text, or TZ's map id
+    -- (WoWPro_AutoComplete.lua:499-526): none of them matches the F step any more.
+    local p = w.player
+    assert.are_not.equal("Stormwind", p.subzone)
+    assert.are_not.equal("Stormwind City", p.zone)
+    assert.are_not.equal(1453, p.map_id)
+  end)
+
+  it("a step with only M moves x/y within the current zone and keeps the subzone", function()
+    local ctx, E, w = setup()
+    w.player:set_zone("Dun Morogh", "Kharanos", 1426, 0.1, 0.1)
+    actions.perform(ctx, step("N", {}, { map = "47.3,52.5" }))
+    assert.are.same({ "Dun Morogh", "Kharanos", 1426, 0.473, 0.525 }, { w.player.zone, w.player.subzone, w.player.map_id, w.player.x, w.player.y })
+  end)
+
+  it("no Z/M, M|PLAYER| or the current spot: no move and no zone events", function()
+    local ctx, E, w = setup()
+    w.player:set_zone("Dun Morogh", "Kharanos", 1426, 0.4674, 0.5387)
+    actions.perform(ctx, step("N", {}, {}))
+    actions.perform(ctx, step("N", {}, { map = "PLAYER" }))
+    actions.perform(ctx, step("N", {}, { zone = "1426; Dun Morogh", map = "46.74,53.87" }))
+    assert.are.equal("Kharanos", w.player.subzone)
+    assert.are.same({}, E.fired)
+  end)
+end)
+
 describe("actions.perform: items", function()
   it("l adds the L item with its count and fires BAG_UPDATE(0)", function()
     local ctx, E, w = setup()

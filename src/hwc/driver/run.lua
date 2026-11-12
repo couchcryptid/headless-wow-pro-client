@@ -139,7 +139,7 @@ function Driver:open(gid)
     local s = E:step(i)
     if s then
       info.steps[i] = { action = s.action, name = s.name, qids = copy_array(s.qids), line = s.line,
-        ordinal = s.ordinal, dungeon = s.tags and s.tags.dungeon ~= nil }
+        ordinal = s.ordinal, dungeon = s.tags and s.tags.dungeon ~= nil, prof = s.tags and s.tags.prof }
       if s.action == "A" then info.accepts[#info.accepts + 1] = i end
     end
   end
@@ -159,8 +159,9 @@ function Driver:close(gid, full)
   if info.max_acted == 0 then return end -- loaded, never played (stopped on load)
   local limit = full and math.huge or info.max_acted
   for _, i in ipairs(info.accepts) do
-    if not info.seen[i] and i < limit and not run.already_done(info.why[i]) then
-      local s = info.steps[i]
+    local s = info.steps[i]
+    if not info.seen[i] and i < limit and not run.already_done(info.why[i])
+        and not self:taken(s.qids) and not self:lacks_profession(s) then
       local prev, nxt = info.steps[i - 1], info.steps[i + 1]
       local sig = {
         signal = "never-shown-accept", gid = gid, file = info.file, line = s.line, ordinal = s.ordinal, action = s.action,
@@ -180,6 +181,39 @@ end
 -- Ruling X: the engine skips a step whose quest is already completed with this why
 -- (WoWPro_Broker.lua:2042, "NextStep(): QID is complete: " .. tostring(QID)). Such an
 -- accept is hidden because the quest is done, not by a defect, so it is no signal.
+-- An accept whose quest entered the log or the turned-in history anyway (through
+-- another step, an engine auto-complete, an abstracted turn-in) hid nothing.
+function Driver:taken(qids)
+  local log = self.W.log
+  for _, q in ipairs(qids or {}) do
+    if log.history[q] or log:get(q) then return true end
+  end
+  return false
+end
+
+-- Spec §3: an accept gated by a P| profession tag the character doesn't know is hidden
+-- by design; only a gated accept withheld from a character WITH the skill is a finding.
+-- The engine stores the tag as "<Profession>;<skill line>[;...]" (DefineTag("P","prof"),
+-- WoWPro_Parser.lua) and skips the step when the profession is unknown.
+-- Only an accept the engine permanently skips counts: a P tag whose skill level
+-- resolves to 0 is shown to a character without the profession
+-- (WoWPro_Broker.lua:2783-2787), so it stays reportable. The level is parsed as the
+-- engine does at :2738-2747: "name;id;[exp+]lvl;flip;max", "*" means 101, default 1.
+function Driver:lacks_profession(step)
+  local prof = step.prof
+  if type(prof) ~= "string" then return false end
+  local fields = {}
+  for f in (prof .. ";"):gmatch("([^;]*);") do fields[#fields + 1] = f end
+  local name = fields[1] and fields[1]:match("^%s*(.-)%s*$")
+  if not name or name == "" or #fields < 2 then return false end
+  local main = (fields[3] ~= nil and fields[3] ~= "") and fields[3] or "*+1"
+  local exp, lvl = main:match("^([^+]*)%+?(.*)$")
+  if lvl == "" then lvl = nil end
+  local proflvl = (lvl == "*") and 101 or (tonumber(lvl or exp) or 1)
+  if proflvl == 0 then return false end
+  return not self.W.player:knows_skill(name)
+end
+
 function run.already_done(why)
   return type(why) == "string" and why:find("NextStep(): QID is complete:", 1, true) == 1
 end

@@ -69,8 +69,8 @@ describe("render.markdown", function()
 
   -- Rulings AB and AC: the known false-finding sources are named in the header.
   it("names the nameless Camping 101 and talk-to NPC gaps", function()
-    assert.truthy(out:find("  - Camping 101 quests without catalog names are not recognised; profession variants " ..
-      "equal baselines until the supplement names them\n", 1, true))
+    assert.truthy(out:find("  - Camping 101 quests are recognised only by name from the local supplement " ..
+      "(no catalog source names them); without it, profession variants equal baselines\n", 1, true))
     assert.truthy(out:find("  - talk-to NPC objectives may be credited as kills\n", 1, true))
   end)
 
