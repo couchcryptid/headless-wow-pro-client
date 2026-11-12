@@ -209,6 +209,40 @@ describe("anchor #3554 (U step gated on its L result) #slow", function()
   end)
 end)
 
+-- Ruling Y (final review C1): F/b steps land at the destination, so the engine's own
+-- AutoCompleteZone (WoWPro_AutoComplete.lua:513-526) completes them with no click.
+describe("travel arrival on main (F/b with TZ) #slow", function()
+  local why = absent("main")
+  if why then
+    pending(why)
+    return
+  end
+
+  it("every acted F/b step with a TZ tag completes without a manual click", function()
+    local r = run_of("main")
+    local guide_source = require("hwc.driver.guide_source")
+    local manual = {}
+    for _, s in ipairs(r.log.signals) do
+      if s.signal == "manual-completion" then manual[tostring(s.gid) .. ":" .. tostring(s.line)] = true end
+    end
+    local checked, clicked = {}, {}
+    for _, snap in ipairs(r.log.steps) do
+      if (snap.action == "F" or snap.action == "b") and snap.line then
+        local file = r.engine:guide(snap.gid).file
+        local text = file and guide_source.line_text(ROOT .. "main", file, snap.line) or ""
+        if text:find("|TZ|", 1, true) then
+          local where = file .. ":" .. snap.line .. " " .. snap.action .. " " .. snap.name
+          checked[#checked + 1] = where
+          if manual[snap.gid .. ":" .. snap.line] then clicked[#clicked + 1] = where end
+        end
+      end
+    end
+    print("F/b steps with TZ acted on: " .. table.concat(checked, "; "))
+    assert.is_true(#checked > 0, "the run acted on no F/b step with a TZ tag")
+    assert.same({}, clicked)
+  end)
+end)
+
 describe("anchor: dungeon accepts and harness completeness on main #slow", function()
   local why = absent("main")
   if why then

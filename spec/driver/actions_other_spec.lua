@@ -49,6 +49,41 @@ describe("actions.perform: travel", function()
     assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
   end)
 
+  -- Ruling Y: F/b/P land at the destination. Z and M on these steps say where the
+  -- player departs from; AutoCompleteZone matches the step name or TZ against
+  -- GetZoneText / GetSubZoneText (WoWPro_AutoComplete.lua:513-526).
+  it("F lands at the destination: subzone = step name, zone = TZ, map and x/y kept", function()
+    local ctx, E, w = setup()
+    local p = w.player
+    local map_id, x, y = p.map_id, p.x, p.y
+    local o = actions.perform(ctx, step("F", {}, { zone = "1436; Westfall", map = "56.55,52.65",
+      targetzone = "Stormwind City" }, "Stormwind"))
+    assert.are.equal("acted", o.kind)
+    assert.are.same({ "Stormwind City", "Stormwind", map_id, x, y }, { p.zone, p.subzone, p.map_id, p.x, p.y })
+  end)
+
+  it("F without TZ keeps the current zone and lands in the step-name subzone", function()
+    local ctx, E, w = setup()
+    local p = w.player
+    actions.perform(ctx, step("F", {}, { zone = "1426; Dun Morogh", map = "55.5,47.7" }, "Ironforge"))
+    assert.are.same({ "Dun Morogh", "Ironforge", 1426 }, { p.zone, p.subzone, p.map_id })
+  end)
+
+  it("b and P land at the destination like F", function()
+    local ctx, E, w = setup()
+    local p = w.player
+    actions.perform(ctx, step("b", {}, { zone = "1437; Wetlands", targetzone = "Darkshore" }, "Auberdine"))
+    assert.are.same({ "Darkshore", "Auberdine", 1426 }, { p.zone, p.subzone, p.map_id })
+    actions.perform(ctx, step("P", {}, { zone = "1453; Stormwind City" }, "Darnassus"))
+    assert.are.same({ "Darkshore", "Darnassus", 1426 }, { p.zone, p.subzone, p.map_id })
+  end)
+
+  it("a numeric TZ is a map id: the player lands on that map", function()
+    local ctx, E, w = setup()
+    actions.perform(ctx, step("F", {}, { zone = "1436; Westfall", targetzone = "1453" }, "Stormwind"))
+    assert.are.same({ "Dun Morogh", "Stormwind", 1453 }, { w.player.zone, w.player.subzone, w.player.map_id })
+  end)
+
   it("H uses the bind location for the zone", function()
     local ctx, E, w = setup()
     w.player:set_bind("Kharanos", 1426)

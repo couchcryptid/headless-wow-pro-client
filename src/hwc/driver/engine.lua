@@ -16,6 +16,7 @@ Engine.TAG_KEYS = {
   "use",       -- U    :529
   "lootitem",  -- L    :491
   "zone",      -- Z    :483
+  "targetzone", -- TZ  :484 (Ruling Y: where F/b/P land)
   "map",       -- M    :481
   "level",     -- LVL  :547
   "elite",     -- ELITE:516

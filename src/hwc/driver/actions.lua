@@ -20,7 +20,7 @@
 --       (Broker.lua:4103-4115) for the turn-in branch (AutoComplete.lua:339-347).
 --   SKILL_LINES_CHANGED         WoWPro_Events.lua:796-798 (UpdateTradeSkills).
 --   ZONE_CHANGED / ZONE_CHANGED_NEW_AREA  WoWPro_Events.lua:301-316 (also _INDOORS): the
---       handler runs AutoCompleteZone (AutoComplete.lua:473-515), which matches the
+--       handler runs AutoCompleteZone (AutoComplete.lua:488-530), which matches the
 --       step name or TZ against GetZoneText / GetSubZoneText and the map id.
 --   TAXIMAP_OPENED              WoWPro_Events.lua:806-815 (F/b: RecordTaxiLocations).
 --   HEARTHSTONE_BOUND           WoWPro_Events.lua:861-872 reads GetBindLocation() and runs
@@ -426,6 +426,26 @@ end
 
 -- Rules ---------------------------------------------------------------------
 
+-- Ruling Y: F, b and P land the player at the destination. Their Z and M tags say
+-- where the player departs from (the flight master, the boat dock), so they are not
+-- used. AutoCompleteZone completes F/H/b/P/R when the step name or the TZ tag's
+-- first ";" part equals GetZoneText() or GetSubZoneText(), or a numeric TZ equals
+-- the map id (WoWPro_AutoComplete.lua:499-526; TZ is DefineTag("TZ","targetzone")
+-- at WoWPro_Parser.lua:484). An F step completes there only while
+-- UnitOnTaxi("player") is false (:507-512; the stub returns false). TZ joins the
+-- Global Constraints' Z/M exception: it says where the player goes.
+-- subzone = step name; zone = TZ when it names one, else the current zone; map id
+-- = TZ when it is numeric, else the current one; x/y are kept.
+local function perform_arrival(ctx, step, out)
+  local p = ctx.world.player
+  local tz_name, tz_map = parse_zone(step.tags and step.tags.targetzone)
+  p:set_zone(tz_name or p.zone, step.name or "", tz_map or p.map_id, p.x, p.y)
+  out.kind = "acted"
+  if step.action == "F" then fire(ctx, out, "TAXIMAP_OPENED") end
+  fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
+  fire(ctx, out, "ZONE_CHANGED")
+end
+
 local function perform_travel(ctx, step, out)
   local p = ctx.world.player
   local tags = step.tags or {}
@@ -444,7 +464,6 @@ local function perform_travel(ctx, step, out)
   local subzone = (step.action == "R") and (step.name or "") or ""
   p:set_zone(zone or p.zone, subzone, map_id or p.map_id, x or p.x, y or p.y)
   out.kind = "acted"
-  if step.action == "F" then fire(ctx, out, "TAXIMAP_OPENED") end
   fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
   fire(ctx, out, "ZONE_CHANGED")
 end
@@ -534,7 +553,7 @@ end
 
 local QUEST_HANDLERS = { A = perform_accept, C = perform_objectives, K = perform_objectives, T = perform_turn_in }
 local OTHER_HANDLERS = {
-  R = perform_travel, F = perform_travel, b = perform_travel, P = perform_travel, H = perform_travel,
+  R = perform_travel, F = perform_arrival, b = perform_arrival, P = perform_arrival, H = perform_travel,
   f = perform_flight_point, h = perform_bind, U = perform_use, L = perform_level,
 }
 
