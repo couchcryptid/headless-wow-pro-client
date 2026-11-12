@@ -37,7 +37,7 @@ describe("hwc.paths", function()
     it("rewrites nested tables without mutating the input", function()
       local input = { a = { "/p/x/f.lua", "WoWPro_Leveling/F/a.lua" }, n = 5, ok = true }
       local out = paths.rewrite(input, { "/p/x" }, "/p/x", "/p/x")
-      assert.equal("./f.lua", out.a[1])
+      assert.equal("f.lua", out.a[1])
       assert.equal("WoWPro_Leveling/F/a.lua", out.a[2])
       assert.equal(5, out.n)
       assert.equal(true, out.ok)
@@ -49,11 +49,15 @@ describe("hwc.paths", function()
         paths.rewrite("'/p/x' (/p/w) ok", { "/p/x", "/p/w", "", false }, "/p/x", "/p/x"))
     end)
 
+    it("turns a bare base root into a dot", function()
+      assert.equal("cwd is .", paths.rewrite("cwd is /p/x", { "/p/x" }, "/p/x", "/p/x"))
+    end)
+
     it("does not rewrite keys and survives cycles", function()
       local t = { ["/p/x"] = "/p/x/a" }
       t.self = t
       local out = paths.rewrite(t, { "/p/x" }, "/p/x", "/p/x")
-      assert.equal("./a", out["/p/x"])
+      assert.equal("a", out["/p/x"])
       assert.equal(out, out.self)
     end)
   end)

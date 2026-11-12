@@ -52,9 +52,14 @@ local function replace_root(s, root, repl)
   while true do
     local i, j = s:find(root, pos, true)
     if not i then break end
-    if boundary(s:sub(j + 1, j + 1)) then
+    local nxt = s:sub(j + 1, j + 1)
+    if boundary(nxt) then
       out[#out + 1] = s:sub(pos, i - 1)
-      out[#out + 1] = repl
+      if repl == "." and nxt == "/" then
+        j = j + 1 -- drop "root/" so "/base/a" becomes "a", not "./a"
+      else
+        out[#out + 1] = repl
+      end
     else
       out[#out + 1] = s:sub(pos, j)
     end
