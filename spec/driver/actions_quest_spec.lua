@@ -1,56 +1,9 @@
 -- Quest step actions (design spec §5.2): A, C/K, T, refusals, grind-to-level and
 -- the Camping 101 abstraction, against a fake engine and a real World on the
 -- fixture catalog.
-local catalog = require("hwc.catalog")
-local World = require("hwc.world")
 local actions = require("hwc.driver.actions")
-
-local FIX = "spec/fixtures/catalog"
-
-local function new_catalog()
-  return catalog.load({ catalog = {
-    questie_dir = FIX .. "/questie",
-    wh_json = FIX .. "/wh.json",
-    objs_json = FIX .. "/objs.json",
-    rate_overrides = FIX .. "/rate_overrides.json",
-    supplement = FIX .. "/actions_supplement.json",
-  } })
-end
-
--- Fake engine: fire records { event, args... }, settle reports no limit hit,
--- step/num_steps serve a scripted guide, update_guide counts calls.
-local function fake_engine(steps)
-  local E = { fired = {}, settles = 0, updates = 0, steps = steps or {} }
-  function E:fire(event, ...) self.fired[#self.fired + 1] = { event, ... } end
-  function E:settle() self.settles = self.settles + 1; return { ran = 0, now = 0, hit_limit = false } end
-  function E:step(i) return self.steps[i] end
-  function E:num_steps() return #self.steps end
-  function E:update_guide() self.updates = self.updates + 1; return true end
-  return E
-end
-
-local function step(action, qids, tags, name)
-  return { index = 1, action = action, name = name or "x", qids = qids, tags = tags or {} }
-end
-
-local function setup(race, steps)
-  local w = World.new({ race = race or "Dwarf", class = "WARRIOR", faction = "Alliance", sex = 2 }, new_catalog())
-  local E = fake_engine(steps)
-  return { engine = E, world = w, cfg = {} }, E, w
-end
-
-local function names(E)
-  local out = {}
-  for i, f in ipairs(E.fired) do out[i] = f[1] end
-  return out
-end
-
-local function has_event(w, kind)
-  for _, e in ipairs(w.events) do
-    if e.kind == kind then return e end
-  end
-  return nil
-end
+local F = dofile("spec/helpers/driver_fixtures.lua")
+local step, setup, names, has_event = F.step, F.setup, F.names, F.has_event
 
 describe("actions.perform: A", function()
   it("accepts and fires QUEST_ACCEPTED(1, 179), QUEST_LOG_UPDATE, then settles", function()
@@ -100,14 +53,15 @@ describe("actions.perform: A", function()
     assert.are.equal(before, #w.events)
   end)
 
-  it("passes class, prerequisite, already-completed and unknown-quest refusals through", function()
+  it("passes class, prerequisite, already-completed and unknown-quest refusals through (already-completed is a noop)", function()
     local ctx = setup()
     assert.are.equal("class", actions.perform(ctx, step("A", { 92006 })).reason)
     assert.are.equal("prerequisite", actions.perform(ctx, step("A", { 92007 })).reason)
     actions.perform(ctx, step("A", { 92004 }))
     actions.perform(ctx, step("T", { 92004 }))
     local o = actions.perform(ctx, step("A", { 92004 }))
-    assert.are.equal("refused", o.kind)
+    -- Ruling J: the engine treats an already-completed A step as satisfied.
+    assert.are.equal("noop", o.kind)
     assert.are.equal("already-completed", o.reason)
   end)
 
@@ -403,7 +357,7 @@ describe("actions.perform: Camping 101", function()
     assert.are.equal("acted", o.kind)
     assert.is_true(w.player:knows_skill("Cooking"))
     assert.is_true(w.log:is_complete(1009))
-    assert.are.same({ "SKILL_LINES_CHANGED", "QUEST_LOG_UPDATE" }, names(E))
+    assert.are.same({ "SKILL_LINES_CHANGED", "SPELLS_CHANGED", "QUEST_LOG_UPDATE" }, names(E))
     assert.are.equal("acted", actions.perform(ctx, guide[3]).kind)
   end)
 end)

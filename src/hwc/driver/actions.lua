@@ -19,6 +19,21 @@
 --       :356-366); the following QUEST_LOG_UPDATE's diff sets missingQuest
 --       (Broker.lua:4103-4115) for the turn-in branch (AutoComplete.lua:339-347).
 --   SKILL_LINES_CHANGED         WoWPro_Events.lua:796-798 (UpdateTradeSkills).
+--   ZONE_CHANGED / ZONE_CHANGED_NEW_AREA  WoWPro_Events.lua:301-316 (also _INDOORS): the
+--       handler runs AutoCompleteZone (AutoComplete.lua:473-515), which matches the
+--       step name or TZ against GetZoneText / GetSubZoneText and the map id.
+--   TAXIMAP_OPENED              WoWPro_Events.lua:806-815 (F/b: RecordTaxiLocations).
+--   HEARTHSTONE_BOUND           WoWPro_Events.lua:861-872 reads GetBindLocation() and runs
+--       AutoCompleteSetHearth.
+--   UI_INFO_MESSAGE(idx, msg)   WoWPro_Events.lua:908-911; AutoCompleteGetFP reads
+--       `_event, _idx, msg` and tests msg == ERR_NEWTAXIPATH (AutoComplete.lua:94-98).
+--
+-- Tag value forms (WoWPro_Parser.lua DefineTag, 416-620; the engine stores the parsed
+-- value under the key name): Z "1426; Dun Morogh" | "1426" | name (:483, raw string);
+-- M "x,y" / "x,y;x,y" / "PLAYER" (:481, raw); L {[itemID]=qty} (:491-504; the setter
+-- splits on ";" and reads "(%d+)%s?(%-?%d*)", count default 1); U list of ints (:529);
+-- LVL "n" (:547); P "Name;id;lvl..." (:548, WoWPro_Broker.lua:2738); SPELL
+-- "Name; spellID; flip" (:553, WoWPro_Broker.lua:3332, tested with IsPlayerSpell).
 --
 -- Multi-QID steps (QID|179^180): the engine treats a step as satisfied when
 -- any listed id is involved: the A test is QIDsInTable(QID, QuestLog), any of
@@ -28,6 +43,7 @@
 -- 5926^5927^5928 are race/class variants); C/K/T act on the first listed id in
 -- the log (qids[1] when none is).
 local kills = require("hwc.world.kills")
+local stubs_core = require("hwc.stubs.core")
 
 local actions = {}
 
@@ -104,11 +120,24 @@ local function guide_turns_in(engine, qid)
   return false
 end
 
-local function train(ctx, out, skill)
+-- What training teaches (spec §5.2 train row): fires SKILL_LINES_CHANGED and
+-- SPELLS_CHANGED once when anything was learned. learn = { skill = name, spell = id }.
+local function train(ctx, out, learn)
   local player = ctx.world.player
-  if player:knows_skill(skill) then return end
-  player:learn_skill(skill, TRAINED_RANK, TRAINED_MAX)
-  fire(ctx, out, "SKILL_LINES_CHANGED")
+  local changed = false
+  if learn.skill and not player:knows_skill(learn.skill) then
+    player:learn_skill(learn.skill, TRAINED_RANK, TRAINED_MAX)
+    changed = true
+  end
+  if learn.spell and not player.spells[learn.spell] then
+    player:learn_spell(learn.spell)
+    changed = true
+  end
+  if changed then
+    fire(ctx, out, "SKILL_LINES_CHANGED")
+    fire(ctx, out, "SPELLS_CHANGED")
+  end
+  return changed
 end
 
 -- Turn-in under the NPC's reward dialog. Returns ok, reason.
@@ -162,11 +191,20 @@ end
 local function perform_accept(ctx, step, out)
   local w = ctx.world
   local qo = parse_qo(step.tags and step.tags.questtext)
+  -- Ruling J: the engine treats the step as satisfied when ANY listed id is in the log
+  -- or completed (WoWPro_Events.lua:709), so never accept a later alternative.
+  for _, q in ipairs(step.qids) do
+    local why = w.log:refusal(q, accept_opts(w, q, qo))
+    if why == "already-in-log" or why == "already-completed" then
+      out.qid, out.kind, out.reason = q, "noop", why
+      return
+    end
+  end
   local qid, opts, needs_grind = choose_accept(w, step.qids, qo)
   if not qid then
     local reason = opts
     out.qid = step.qids[1]
-    out.kind, out.reason = (reason == "already-in-log") and "noop" or "refused", reason
+    out.kind, out.reason = "refused", reason
     return
   end
   out.qid = qid
@@ -246,7 +284,7 @@ local function perform_objectives(ctx, step, out)
   end
   out.kind = "acted"
   local quest = entry.quest
-  if is_camping(quest) and quest.completed_by_training then train(ctx, out, quest.completed_by_training) end
+  if is_camping(quest) and quest.completed_by_training then train(ctx, out, { skill = quest.completed_by_training }) end
 
   -- QO indices are 1-based and matched to the catalog objectives by order;
   -- without QO every objective is done.
@@ -286,7 +324,163 @@ local function perform_turn_in(ctx, step, out)
   if ok then out.kind = "acted" else out.kind, out.reason = "refused", reason end
 end
 
-local HANDLERS = { A = perform_accept, C = perform_objectives, K = perform_objectives, T = perform_turn_in }
+-- Tag parsing -------------------------------------------------------------
+
+local function first_part(value)
+  if type(value) ~= "string" then return nil end
+  local p = value:match("^%s*([^;]*)")
+  p = p and p:gsub("^%s+", ""):gsub("%s+$", "")
+  if p == "" then return nil end
+  return p
+end
+
+-- Z: "1426; Dun Morogh" | "1426" | zone name -> zone name or nil, map id or nil.
+local function parse_zone(value)
+  if type(value) ~= "string" then return nil, nil end
+  local head, rest = value:match("^%s*([^;]*);?(.*)$")
+  head = head:gsub("%s+$", "")
+  rest = rest:gsub("^%s+", ""):gsub("%s+$", "")
+  local id = tonumber(head)
+  if id then return (rest ~= "" and rest or nil), id end
+  return (head ~= "" and head or nil), nil
+end
+
+-- M: first "x,y" pair, percent -> fraction; nil for "PLAYER" / absent.
+local function parse_coords(value)
+  if type(value) ~= "string" then return nil, nil end
+  local x, y = value:match("^%s*(%d*%.?%d+)%s*,%s*(%d*%.?%d+)")
+  if not x then return nil, nil end
+  -- Round through text so 46.74 gives the double 0.4674 (not 0.46739999...).
+  local function frac(v) return tonumber(string.format("%.6f", tonumber(v) / 100)) end
+  return frac(x), frac(y)
+end
+
+-- L: { [itemID] = qty } as the engine stores it, or the raw "id qty;id qty" text.
+-- Returns a list of { id, n } sorted by id (deterministic).
+local function parse_loot(value)
+  local items = {}
+  if type(value) == "table" then
+    for id, n in pairs(value) do items[#items + 1] = { id = tonumber(id), n = tonumber(n) or 1 } end
+    table.sort(items, function(a, b) return a.id < b.id end)
+  elseif type(value) == "string" then
+    for pair in value:gmatch("[^;]+") do
+      local id, n = pair:match("(%d+)%s?(%-?%d*)")
+      if id then items[#items + 1] = { id = tonumber(id), n = tonumber(n) or 1 } end
+    end
+  end
+  return items
+end
+
+-- Rules ---------------------------------------------------------------------
+
+local function perform_travel(ctx, step, out)
+  local p = ctx.world.player
+  local tags = step.tags or {}
+  local zone, map_id = parse_zone(tags.zone)
+  local x, y = parse_coords(tags.map)
+  if step.action == "H" then
+    -- The hearth takes the player to the bind location (zone = bind name).
+    local bind = p.bind
+    if bind then
+      zone, map_id = bind.name, bind.map_id
+    elseif not zone and not map_id then
+      out.kind, out.reason = "refused", "no-bind"
+      return
+    end
+  end
+  local subzone = (step.action == "R") and (step.name or "") or ""
+  p:set_zone(zone or p.zone, subzone, map_id or p.map_id, x or p.x, y or p.y)
+  out.kind = "acted"
+  if step.action == "F" then fire(ctx, out, "TAXIMAP_OPENED") end
+  fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
+  fire(ctx, out, "ZONE_CHANGED")
+end
+
+local function perform_flight_point(ctx, step, out)
+  ctx.world.player:learn_flight_point(step.name)
+  out.kind = "acted"
+  fire(ctx, out, "UI_INFO_MESSAGE", 0, stubs_core.ERR_NEWTAXIPATH)
+end
+
+local function perform_bind(ctx, step, out)
+  local _, map_id = parse_zone(step.tags and step.tags.zone)
+  ctx.world.player:set_bind(step.name, map_id or ctx.world.player.map_id)
+  out.kind = "acted"
+  fire(ctx, out, "HEARTHSTONE_BOUND")
+end
+
+-- U: the use item is in the bags (added when missing); a quest in the log gets the C
+-- objective rule, then one use item is consumed unless it is also the L item.
+local function perform_use(ctx, step, out)
+  local w = ctx.world
+  local use = tonumber(first_part(step.tags and step.tags.use and tostring(step.tags.use):gsub("[%^&].*", "")))
+  out.kind = "acted"
+  local is_loot = false
+  for _, it in ipairs(parse_loot(step.tags.lootitem)) do
+    if it.id == use then is_loot = true end
+  end
+  -- The L tag supplies a use item that is also looted (see apply_item_tag).
+  if use and not is_loot and w.player:item_count(use) == 0 then w.player:add_item(use, 1) end
+  fire(ctx, out, "BAG_UPDATE", 0)
+  local qid
+  for _, q in ipairs(step.qids or {}) do
+    if w.log:get(q) then qid = q; break end
+  end
+  if not qid then return end
+  perform_objectives(ctx, step, out)
+  if not use then return end
+  if is_loot then return end
+  if w.player:remove_item(use, 1) then fire(ctx, out, "BAG_UPDATE", 0) end
+end
+
+local function perform_level(ctx, step, out)
+  local w = ctx.world
+  local want = tonumber(tostring(step.tags and step.tags.level or ""):match("%d+"))
+  if not want or w.player.level >= want then return end
+  local n, _, levels = kills.grind_to(w.player, want)
+  out.kind = "acted"
+  out.grind = { kills = n, to = want }
+  out.levels = out.levels + levels
+  after_levels(ctx, levels)
+end
+
+-- The tags every step can carry, applied after the step's own rule.
+local function apply_item_tag(ctx, step, out)
+  local items = parse_loot(step.tags and step.tags.lootitem)
+  if #items == 0 then return end
+  for _, it in ipairs(items) do ctx.world.player:add_item(it.id, it.n) end
+  out.kind = "acted"
+  fire(ctx, out, "BAG_UPDATE", 0)
+end
+
+-- P / SPELL name what a training step teaches; unknown ones are learned.
+local function apply_training_tags(ctx, step, out)
+  local tags = step.tags or {}
+  local learn = {}
+  learn.skill = first_part(tags.prof)
+  if type(tags.spell) == "string" then
+    local _, id = tags.spell:match("^%s*([^;]*);%s*(%d+)")
+    learn.spell = tonumber(id)
+  end
+  if (learn.skill or learn.spell) and train(ctx, out, learn) then out.kind = "acted" end
+end
+
+local QUEST_HANDLERS = { A = perform_accept, C = perform_objectives, K = perform_objectives, T = perform_turn_in }
+local OTHER_HANDLERS = {
+  R = perform_travel, F = perform_travel, b = perform_travel, P = perform_travel, H = perform_travel,
+  f = perform_flight_point, h = perform_bind, U = perform_use, L = perform_level,
+}
+
+-- Actions whose completion is expected to need a right-click (Task 6 splits
+-- manual-completion into expected and unexpected with this). A step whose note says
+-- "Manually check this step off" is also expected: see actions.expects_manual.
+actions.EXPECTED_MANUAL = { N = true, D = true, ["="] = true, r = true }
+
+function actions.expects_manual(step)
+  if actions.EXPECTED_MANUAL[step.action] then return true end
+  local note = step.tags and step.tags.note
+  return type(note) == "string" and note:find("Manually check this step off", 1, true) ~= nil
+end
 
 -- ctx = { engine = E, world = W, cfg = cfg }; step is an Engine:step() record.
 -- Returns { kind = "acted"|"refused"|"noop", reason, qid, events = {names...},
@@ -295,13 +489,25 @@ local HANDLERS = { A = perform_accept, C = perform_objectives, K = perform_objec
 function actions.perform(ctx, step)
   local qids = step.qids or {}
   local out = new_outcome(qids[1])
-  local handler = HANDLERS[step.action]
-  if not handler then
-    out.reason = "not-a-quest-action"
-  elseif #qids == 0 then
-    out.reason = "no-qid"
-  else
+  local quest_handler = QUEST_HANDLERS[step.action]
+  local handler = OTHER_HANDLERS[step.action]
+  if quest_handler then
+    if #qids == 0 then
+      out.reason = "no-qid"
+    else
+      quest_handler(ctx, step, out)
+    end
+  elseif handler then
     handler(ctx, step, out)
+  else
+    out.reason = "not-a-quest-action"
+  end
+  if out.kind ~= "refused" then
+    -- Tags any step can carry: LVL grinds (Ruling G), L adds items, P/SPELL train.
+    -- U already adds its own use item; the L tag still applies to it.
+    if step.action ~= "L" then perform_level(ctx, step, out) end
+    apply_item_tag(ctx, step, out)
+    apply_training_tags(ctx, step, out)
   end
   out.elite = out.elite or (step.tags ~= nil and step.tags.elite ~= nil and step.tags.elite ~= false)
   out.settle = ctx.engine:settle()

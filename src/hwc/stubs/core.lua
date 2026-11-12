@@ -2,6 +2,10 @@
 -- the client, never what the addon "should" see.
 local M = {}
 
+-- Client global ERR_NEWTAXIPATH (quoted at WoWPro_AutoComplete.lua:96); AutoCompleteGetFP
+-- compares UI_INFO_MESSAGE's msg to it (:98). The driver fires the same string.
+M.ERR_NEWTAXIPATH = "New flight path discovered!"
+
 local function read_toc_field(cfg, name, field)
   local f = io.open(cfg.addon_path .. "/" .. name .. "/" .. name .. ".toc", "rb")
   if not f then return nil end
@@ -128,6 +132,7 @@ function M.install(sb, cfg)
   end
   -- WoWPro_Broker.lua:3341 (IsPlayerSpell)
   env.IsPlayerSpell = function(id) return player().spells[id] == true end
+  env.ERR_NEWTAXIPATH = M.ERR_NEWTAXIPATH
   -- WoW client GetBindLocation: the hearth location text, nil when unbound
   env.GetBindLocation = function() local b = player().bind; return b and b.name or nil end
 

@@ -19,6 +19,10 @@ describe("stubs", function()
     assert.same({ "Warrior", "WARRIOR" }, { env.UnitClass("player") })
   end)
 
+  it("defines ERR_NEWTAXIPATH as the client string AutoCompleteGetFP compares against", function()
+    assert.equal("New flight path discovered!", env.ERR_NEWTAXIPATH)
+  end)
+
   it("reads the addon version from its TOC", function()
     assert.is_string(env.GetAddOnMetadata("WoWPro", "Version"))
     assert.equal(env.GetAddOnMetadata("WoWPro", "Version"), env.C_AddOns.GetAddOnMetadata("WoWPro", "Version"))
