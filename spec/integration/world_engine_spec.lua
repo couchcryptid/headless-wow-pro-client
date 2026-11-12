@@ -71,10 +71,12 @@ local function events_in_process(race, class)
   local cmd = "LUA_PATH='" .. repo .. "/src/?.lua;" .. repo .. "/src/?/init.lua;" .. rocks
     .. "/share/lua/5.1/?.lua;" .. rocks .. "/share/lua/5.1/?/init.lua;;' LUA_CPATH='" .. rocks
     .. "/lib/lua/5.1/?.so;;' /opt/homebrew/bin/luajit '" .. repo .. "/spec/helpers/world_engine_events.lua' '"
-    .. repo .. "' " .. race .. " " .. class .. " 2>/dev/null"
+    .. repo .. "' " .. race .. " " .. class .. " 2>&1"
   local p = assert(io.popen(cmd))
   local out = p:read("*a")
   p:close()
+  -- stderr is merged so a crash shows its trace in the assertion message
+  assert(out:match('^{"errors"'), "determinism driver failed:\n" .. out)
   return out
 end
 
@@ -93,10 +95,13 @@ describe("world + real engine", function()
     completes_dwarven_outfitters("Gnome", "MAGE")
   end)
 
-  it("gives identical world.events in two separate processes", function()
-    local a = events_in_process("Dwarf", "WARRIOR")
-    local b = events_in_process("Dwarf", "WARRIOR")
-    assert.matches("quest_turn_in", a)
-    assert.equal(a, b)
-  end)
+  for _, who in ipairs({ { "Dwarf", "WARRIOR" }, { "Gnome", "MAGE" } }) do
+    it("gives identical events, engine snapshots and errors in two processes: " .. who[1] .. " " .. who[2], function()
+      local a = events_in_process(who[1], who[2])
+      local b = events_in_process(who[1], who[2])
+      assert.matches("quest_turn_in", a)
+      assert.matches('"snapshots"', a)
+      assert.equal(a, b)
+    end)
+  end
 end)
