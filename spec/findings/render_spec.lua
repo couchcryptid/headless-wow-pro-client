@@ -299,14 +299,21 @@ describe("render.markdown", function()
 
   it("puts the full combo list in the fold when the summary drops detail", function()
     local matrix = {}
-    for _, v in ipairs({ "baseline", "a", "b", "c", "d", "e" }) do matrix[#matrix + 1] = "Dwarf HUNTER " .. v end
-    matrix[#matrix + 1] = "Gnome MAGE baseline"
+    for _, v in ipairs({ "baseline", "a" }) do matrix[#matrix + 1] = "Dwarf HUNTER " .. v end
+    for _, c in ipairs({ "Gnome MAGE baseline", "Gnome PRIEST baseline", "Dwarf PRIEST baseline",
+      "Gnome ROGUE baseline" }) do matrix[#matrix + 1] = c end
     local h = header()
     h.matrix.combos = matrix
+    -- "(all 2 variants)" hides the variant names: the fold lists them.
     local f = finding(1, { combos = { "Dwarf HUNTER baseline", "Dwarf HUNTER a" } })
     local o = render.markdown({ f }, h)
-    assert.truthy(plain(o, "- **Affects:** Dwarf Hunter (baseline, a)\n"))
+    assert.truthy(plain(o, "- **Affects:** Dwarf Hunter (all 2 variants)\n"))
     assert.truthy(plain(o, "- All characters: Dwarf Hunter, Dwarf Hunter (a)\n"))
+    -- "all N characters" is complete: no list in the fold.
+    f.combos = matrix
+    o = render.markdown({ f }, h)
+    assert.truthy(plain(o, "- **Affects:** all 6 characters\n"))
+    assert.falsy(plain(o, "All characters:"))
   end)
 
   it("writes the meta line and ground bullet", function()

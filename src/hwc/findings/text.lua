@@ -79,14 +79,9 @@ function text.combos(affected, matrix)
   for _, c in ipairs(matrix) do if not aff[c] then unaffected[#unaffected + 1] = c end end
   table.sort(unaffected)
 
-  local function plain()
-    local list = {}
-    for c in pairs(aff) do list[#list + 1] = text.character(c) end
-    table.sort(list)
-    return table.concat(list, ", ")
-  end
-
-  local summary
+  -- Detail is dropped only when a group reads "(all N variants)": "all N
+  -- characters", "all except ..." and named-variant groups lose nothing.
+  local summary, dropped = nil, false
   if #unaffected == 0 then
     summary = "all " .. #matrix .. " characters"
   elseif #unaffected <= 3 then
@@ -124,6 +119,7 @@ function text.combos(affected, matrix)
           local name = g.race .. " " .. titlecase(g.class)
           if #g.hit >= g.total then
             label = name .. " (all " .. g.total .. " variants)"
+            dropped = true
           else
             -- baseline first, then the rest alphabetically.
             table.sort(g.hit, function(a, b)
@@ -139,7 +135,7 @@ function text.combos(affected, matrix)
     table.sort(parts)
     summary = table.concat(parts, ", ")
   end
-  return summary, summary ~= plain()
+  return summary, dropped
 end
 
 ---------------------------------------------------------------------------
@@ -252,7 +248,8 @@ local function clauses(f, ctx)
     if pre then
       local ref = "quest " .. pre
       local hit = ctx.by_qid and ctx.by_qid[tonumber(pre)]
-      if hit then ref = "quest " .. link(text.title(hit), hit.id) end
+      -- A follow-on already links its parent in "Follows from"; don't link it twice.
+      if hit and hit.id ~= f.caused_by then ref = "quest " .. link(text.title(hit), hit.id) end
       return "The guide tells you to accept this quest, but WoWPro hides the step because its prerequisite, "
         .. ref .. ", is never completed."
     elseif f.why and f.why ~= "" then
@@ -279,7 +276,7 @@ local function clauses(f, ctx)
     end
     local label = label_for(f, ctx, kind or "race")
     return "WoWPro shows this step to " .. article(label) .. label .. ", but quest " .. q .. " is for other "
-      .. (kind and (kind .. "s") or "characters") .. "."
+      .. (kind == "class" and "classes" or kind == "race" and "races" or "characters") .. "."
   elseif s == "below-level" then
     return "The guide reaches this accept at level " .. tostring(f.level) .. ", below the level the quest requires."
   elseif s == "did-not-advance" then
