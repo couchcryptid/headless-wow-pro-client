@@ -171,4 +171,37 @@ describe("driver.engine", function()
     r.sb.env.WoWProCharDB.Guide.G = {}
     assert.is_false(Engine.new(r):completed(1))
   end)
+
+  -- Ruling AA: the step's line is the n-th line this character loads (fixture lines 11-12:
+  -- `F Ironforge|...|C|Paladin|` then `F Ironforge|ACTIVE|301|`); minor 4: one read per file.
+  describe("source lines", function()
+    local gs = require("hwc.driver.guide_source")
+    local function on_fixture(class)
+      local r = fake()
+      local W = r.sb.env.WoWPro
+      W.action, W.step, W.QID = { "F", "F" }, { "Ironforge", "Ironforge" }, {}
+      r.addon = { path = "spec/fixtures/addon" }
+      r.world = { player = { race_token = "Dwarf", class_token = class, faction = "Alliance" } }
+      local E = Engine.new(r)
+      E._index = { G = "Fix/forever/G1.lua" }
+      return E
+    end
+
+    it("maps the step to the line the character loads, with its source ordinal", function()
+      local paladin = on_fixture("PALADIN")
+      assert.same({ 11, 1 }, { paladin:step(1).line, paladin:step(1).ordinal })
+      assert.same({ 12, 2 }, { paladin:step(2).line, paladin:step(2).ordinal })
+      local warrior = on_fixture("WARRIOR")
+      assert.same({ 12, 2 }, { warrior:step(1).line, warrior:step(1).ordinal })
+    end)
+
+    it("reads each guide file once per Engine", function()
+      local E = on_fixture("WARRIOR")
+      local real, reads = gs.read_lines, 0
+      gs.read_lines = function(...) reads = reads + 1; return real(...) end
+      E:step(1); E:step(2); E:source_line(E:step(1))
+      gs.read_lines = real
+      assert.equal(1, reads)
+    end)
+  end)
 end)

@@ -2,11 +2,15 @@
 -- finding per suspected defect across all characters, with a stable id, a
 -- severity, the affected race/class combos and root-cause links.
 --
--- Grouping key: gid \0 action \0 name \0 (qid or "") \0 signal. lua-error and
--- missing-global group on the message / global name instead (a harness lua-error
--- apart from an addon one). The id is FNV-1a 32 over that key, so it survives a
--- guide edit that only moves the line. Everything is sorted before it is
--- returned, so the result does not depend on RunLog order (determinism).
+-- Grouping key: gid \0 action \0 name \0 (qid or "") \0 (ordinal or "") \0 signal.
+-- The ordinal (Ruling AA) is the step's source ordinal: the n-th line of the guide
+-- file with that action, name and quest id, counted over every line whoever loads
+-- it (guide_source.line_in), so two distinct lines such as two `F Stormwind` steps
+-- are two findings, the same line read by different classes is one, and a guide
+-- edit that only moves lines keeps the id. lua-error and missing-global group on
+-- the message / global name instead (a harness lua-error apart from an addon one).
+-- The id is FNV-1a 32 over that key. Everything is sorted before it is returned,
+-- so the result does not depend on RunLog order (determinism).
 local bit = require("bit")
 
 local group = {}
@@ -58,7 +62,7 @@ local function key_of(s)
   local sig = s.signal
   if sig == "manual-completion" and s.expected then sig = sig .. ":expected" end
   return table.concat({ tostring(s.gid or ""), tostring(s.action or ""), tostring(s.name or ""),
-    tostring(s.qid or ""), sig }, "\0")
+    tostring(s.qid or ""), tostring(s.ordinal or ""), sig }, "\0")
 end
 
 local function new_finding(s, key)

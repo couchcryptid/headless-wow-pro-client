@@ -76,6 +76,23 @@ function Engine:gid()
   return db and db.char and db.char.currentguide or nil
 end
 
+-- The guide file's lines, read once per Engine (the addon is read-only input).
+function Engine:file_lines(file)
+  self._lines = self._lines or {}
+  if self._lines[file] == nil then
+    self._lines[file] = guide_source.read_lines(self.result.addon.path .. "/" .. file) or false
+  end
+  return self._lines[file] or nil
+end
+
+-- The character the engine parsed the guide for ({ race, class, faction } tokens),
+-- from the simulated player the stubs answer UnitRace/UnitClass from; nil without a world.
+function Engine:character()
+  local p = self.result.world and self.result.world.player
+  if not p then return nil end
+  return { race = p.race_token, class = p.class_token, faction = p.faction }
+end
+
 function Engine:source_index()
   local path = self.result.addon and self.result.addon.path
   if not path then return nil end
@@ -119,7 +136,7 @@ end
 -- from ACTIVE only when the step has a QO (WoWPro_Parser.lua:834-837), so an
 -- ACTIVE-only K/C/l/B/U step (e.g. `K Vagash|ACTIVE|314|L|3627|`) has no QID; the
 -- quest it works on is still the ACTIVE one.
-Engine.ACTIVE_FALLBACK = { C = true, K = true, l = true, B = true, U = true }
+Engine.ACTIVE_FALLBACK = guide_source.ACTIVE_FALLBACK
 
 -- The step's quest ids: QID, else ACTIVE for the fallback actions.
 function Engine.qids_of(action, qid, active)
@@ -143,15 +160,24 @@ function Engine:step(i)
   }
   local index = self:source_index()
   local file = index and index[gid]
-  if file then
-    local occurrence = 1
-    for j = 1, i - 1 do
-      if W.action[j] == step.action and W.step[j] == step.name
-        and Engine.qids_of(W.action[j], W.QID and W.QID[j], W.active and W.active[j])[1] == qids[1] then
-        occurrence = occurrence + 1
-      end
+  -- occurrence: the n-th engine step of this guide with the same action, name and
+  -- first qid. The engine's arrays hold only the lines it loaded for this character
+  -- (WoWPro_Parser.lua:1209-1212), so line_in skips the lines the character's
+  -- C|/R|/FACTION| exclude (Ruling AA). step.ordinal is the matched line's
+  -- character-independent source ordinal (the findings grouping key); without a
+  -- source line it falls back to the engine occurrence.
+  local occurrence = 1
+  for j = 1, i - 1 do
+    if W.action[j] == step.action and W.step[j] == step.name
+      and Engine.qids_of(W.action[j], W.QID and W.QID[j], W.active and W.active[j])[1] == qids[1] then
+      occurrence = occurrence + 1
     end
-    step.line = guide_source.line_of(self.result.addon.path, file, step, occurrence)
+  end
+  step.ordinal = occurrence
+  if file then
+    local line, ordinal = guide_source.line_in(self:file_lines(file), step, occurrence, self:character())
+    step.line = line
+    if ordinal then step.ordinal = ordinal end
   end
   return step
 end
@@ -162,7 +188,8 @@ function Engine:source_line(step)
   local index = self:source_index()
   local file = index and index[step.gid or self:gid()]
   if not file or not step.line then return nil end
-  return guide_source.line_text(self.result.addon.path, file, step.line)
+  local lines = self:file_lines(file)
+  return lines and lines[step.line] or nil
 end
 
 -- The newest error the sandbox recorded (the failed call put it there).

@@ -49,6 +49,27 @@ describe("group.findings", function()
     assert.equal(99, b.line)
   end)
 
+  -- Ruling AA: the step's source ordinal separates distinct same-key lines.
+  it("gives two same-name F Stormwind lines two findings", function()
+    local f1 = dna({ action = "F", name = "Stormwind", qid = nil, line = 118, ordinal = 1 })
+    local f2 = dna({ action = "F", name = "Stormwind", qid = nil, line = 225, ordinal = 2 })
+    local fs = group.findings({ runlog("Dwarf", "WARRIOR", { f1, f2 }) })
+    assert.equal(2, #fs)
+    assert.same({ 118, 225 }, { fs[1].line, fs[2].line })
+    assert.are_not.equal(fs[1].id, fs[2].id)
+  end)
+
+  it("keeps the id when lines shift but the ordinal holds, across characters", function()
+    local a = group.findings({ runlog("Dwarf", "WARRIOR", { dna({ line = 40, ordinal = 2 }) }) })[1]
+    local b = group.findings({
+      runlog("Dwarf", "WARRIOR", { dna({ line = 45, ordinal = 2 }) }),
+      runlog("Dwarf", "PALADIN", { dna({ line = 45, ordinal = 2 }) }),
+    })
+    assert.equal(1, #b)
+    assert.equal(a.id, b[1].id)
+    assert.same({ "Dwarf PALADIN baseline", "Dwarf WARRIOR baseline" }, b[1].combos)
+  end)
+
   it("uses the variant in combos, defaulting to baseline", function()
     local fs = group.findings({ runlog("Dwarf", "WARRIOR", { dna() }, "mining") })
     assert.same({ "Dwarf WARRIOR mining" }, fs[1].combos)

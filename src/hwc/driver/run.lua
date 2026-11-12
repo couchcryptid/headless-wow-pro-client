@@ -89,6 +89,7 @@ function Driver:signal(kind, step, fields)
   if step then
     local info = self.info[step.gid or self.gid]
     s.gid, s.line, s.action, s.name = step.gid or self.gid, step.line, step.action, step.name
+    s.ordinal = step.ordinal
     s.file = info and info.file
     s.qid = step.qids and step.qids[1]
     -- After a guide switch inside the action's settle, E:why reads the new guide:
@@ -138,7 +139,7 @@ function Driver:open(gid)
     local s = E:step(i)
     if s then
       info.steps[i] = { action = s.action, name = s.name, qids = copy_array(s.qids), line = s.line,
-        dungeon = s.tags and s.tags.dungeon ~= nil }
+        ordinal = s.ordinal, dungeon = s.tags and s.tags.dungeon ~= nil }
       if s.action == "A" then info.accepts[#info.accepts + 1] = i end
     end
   end
@@ -162,7 +163,7 @@ function Driver:close(gid, full)
       local s = info.steps[i]
       local prev, nxt = info.steps[i - 1], info.steps[i + 1]
       local sig = {
-        signal = "never-shown-accept", gid = gid, file = info.file, line = s.line, action = s.action,
+        signal = "never-shown-accept", gid = gid, file = info.file, line = s.line, ordinal = s.ordinal, action = s.action,
         name = s.name, qid = s.qids[1], why = info.why[i], level = self.W.player.level, log = self:log_qids(),
         before = prev and { name = prev.name } or nil, after = nxt and { name = nxt.name } or nil,
       }
