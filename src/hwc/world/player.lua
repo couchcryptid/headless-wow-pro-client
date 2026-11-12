@@ -37,7 +37,7 @@ end
 -- Adds n XP, carrying the remainder across levels. XP is discarded once the cap level is reached.
 -- Returns the number of levels gained.
 function Player:add_xp(n)
-  local gained = 0
+  local gained, total = 0, n
   while n > 0 and self.level < xp.CAP_LEVEL do
     local need = xp.to_next(self.level) - self.xp
     if n < need then
@@ -51,6 +51,7 @@ function Player:add_xp(n)
     end
   end
   if self.level >= xp.CAP_LEVEL then self.xp = 0 end
+  self._record("xp", { n = total, level = self.level, xp = self.xp, levels = gained })
   return gained
 end
 

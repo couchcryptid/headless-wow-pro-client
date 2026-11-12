@@ -63,6 +63,15 @@ describe("Player behind the stubs", function()
     assert.same({ 5, 12, 2800 }, { env.UnitLevel(), env.UnitXP(), env.UnitXPMax() })
   end)
 
+  it("records an xp world event with the resulting level and xp", function()
+    local _, _, p = setup()
+    local events = {}
+    p._record = function(kind, f) events[#events + 1] = { kind = kind, f = f } end
+    assert.equal(1, p:add_xp(400 + 1))
+    assert.equal("xp", events[1].kind)
+    assert.same({ n = 401, level = p.level, xp = p.xp, levels = 1 }, events[1].f)
+  end)
+
   it("reports Night Elf identity from the Alliance table", function()
     local _, env = setup({ race = "NightElf", class = "DRUID" })
     assert.same({ "Night Elf", "NightElf" }, { env.UnitRace() })
