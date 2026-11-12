@@ -19,7 +19,12 @@ come from a catalog built from QuestieDB and a Wowhead extract, never from the
 guide lines.
 
 **Status:**
-- **Scope:** Forever Alliance, Dwarf and Gnome, levels 1 to 25.
+- **Scope:** Forever Alliance, levels 1 to 25 (guides that start at 25 or
+  later are outside the chain). Races: Human, Dwarf, Gnome and Night Elf
+  (`NightElf`), each starting from its guide in the addon's
+  `ForeverStartGuides` table: Elwynn Forest, Dun Morogh, Dun Morogh and
+  Teldrassil. Dwarf and Gnome are the most tested, so `matrix` defaults to
+  `--races Dwarf,Gnome`; Human and Night Elf Warrior runs complete to level 6.
 - **Next:** the `/triage` skill.
 - **Data gaps:** listed in every findings file's header.
 - **Design:** the design spec, the plans and the per-plan rulings are in
@@ -45,7 +50,7 @@ guide lines.
 tools/fetch-questie.sh d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc   # local catalog data
 bin/hwc boot --race Dwarf --class WARRIOR                         # load the addon, show the first step
 bin/hwc run --race Dwarf --class WARRIOR                          # play one character 1-25
-bin/hwc matrix --races Dwarf,Gnome                                # every combination; writes findings/
+bin/hwc matrix --races Dwarf,Gnome                                # every combination (also Human, NightElf); writes findings/
 ~/.luarocks/bin/busted                                            # specs (slow ones: --tags=slow)
 ```
 
@@ -125,9 +130,12 @@ Output, under `--out DIR` (default `findings/` in the current directory):
   (git-ignored).
 
 `--relative-to DIR` (default: the current directory) sets the base for every
-path in the output: the markdown, the findings JSON and the run logs name the
-addon checkout, the catalog sources and anything under DIR relative to it, so no
-absolute path of the machine survives and the files are portable.
+path in the output: the markdown, the findings JSON and the run logs write paths
+under the addon checkout, the catalog sources and DIR relative to DIR. Any other
+absolute path (rare: a stub reading an unexpected file) is left as it is. Lua
+error messages are rewritten before findings are grouped, so a Lua-error
+finding's id depends on the base: run from the same directory (or pass the same
+`--relative-to`) to compare ids between runs.
 
 `--date` (default: the host date) is an input, so with a fixed `--date` the same
 addon commit, catalog, config and seed give byte-identical markdown. The
@@ -140,7 +148,7 @@ as Gnome Shaman, Dwarf Warlock or Gnome Hunter) at the `baseline` variant, plus 
 the race's first class in sorted order. The start guide is
 `WoWPro.Leveling.ForeverStartGuides[race]`, read from the Leveling source text
 and matched to its guide file by `WoWPro:GuideName` (or GID); the addon is not
-executed. On Dun Morogh that gives Dwarf HUNTER, PALADIN, PRIEST, ROGUE,
+executed. For Dwarf and Gnome (both start in Dun Morogh) that gives Dwarf HUNTER, PALADIN, PRIEST, ROGUE,
 SHAMAN, WARRIOR and Gnome MAGE, PRIEST, ROGUE, WARLOCK, WARRIOR: 11 classes,
 23 runs for `--races Dwarf,Gnome`. Variants start with each profession at rank 1, max 75, and with the spell that
 teaches it (`src/hwc/world/profession_spells.lua`, checked on Wowhead Forever),

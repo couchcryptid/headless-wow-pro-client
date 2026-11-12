@@ -21,8 +21,10 @@ know this client's internal vocabulary (signal names, rulings, `why` formats).
 first.
 
 **Success:** within about 30 seconds of opening the file, the reader knows how
-many real problems there are, which few explain most of the findings, and where
-they are. Each finding then reads as a sentence they could paste into a bug
+many findings there are, how many follow from others, which few have the most
+findings following from them, and where they are. The report doesn't claim a
+diagnosis: a "root" (below) is only a finding with no `caused_by` link, not a
+proven cause. Each finding then reads as a sentence they could paste into a bug
 report.
 
 ## 2. Goals, non-goals, anti-goals
@@ -30,11 +32,12 @@ report.
 **Goals**
 - Split the output into two formats: a canonical JSON file for machines and a
   human-first markdown file.
-- Lead the report with a conclusion: which root causes to start with, and how
-  many findings each one explains.
+- Lead the report with where to start: the findings with the most other
+  findings following from them, and how many follow from each.
 - Give every finding a plain-English title and one explanatory sentence, both
   generated from its signal.
-- Show each root cause once, with its effects linked to it by name.
+- Show each root (a finding with no `caused_by`) once, with the findings that
+  follow from it linked to it by name.
 - Group findings by guide file in line order, so one file can be worked through
   top to bottom.
 - Keep the engine detail available without putting it in the reading path.
@@ -75,7 +78,7 @@ The CLI's "wrote" line names both the `.md` and the `.json` file.
 
 1. **Title and run line**
 2. **Warnings** (only when there is something to warn about)
-3. **Start here**: the top root causes
+3. **Start here**: the roots with the most findings following from them
 4. **At a glance**: counts
 5. **Findings by file**: guide files, then addon code
 6. **Harness notices** (folded)
@@ -85,18 +88,26 @@ The CLI's "wrote" line names both the `.md` and the `.json` file.
 ### 4.2 Title and run line
 
 ```markdown
-# Dwarf Warrior: 113 findings from 9 root causes
+# Dwarf Warrior: 113 findings, 104 follow from others
 
 2026-11-12 · WoW-Pro `fix/forever-prereq-gates` @ `64fe6b3` · 1 character · `Dwarf-WARRIOR-baseline`
 ```
 
 - **Character label.** One combo gives "Dwarf Warrior". The baseline variant is
   implied; any other variant is added in parentheses, e.g. "Dwarf Hunter
-  (alch-herb)". Several combos give "<N> characters: Dwarf, Gnome", with races
-  in sorted, distinct order. Class tokens are title-cased for display
-  (`WARRIOR` → "Warrior").
+  (alch-herb)". Several combos give "<N> characters (Dwarf, Gnome)", with races
+  in sorted, distinct order, e.g.
+  `# 23 characters (Dwarf, Gnome): 231 findings, 40 follow from others`. Class
+  tokens are title-cased for display (`WARRIOR` → "Warrior"), and race tokens
+  use the race's display name from `Player.RACES` (`NightElf` → "Night Elf"),
+  falling back to the token. The same label is used everywhere a character is
+  named (title, Affects, all-except lists, groups, the engine fold, About).
 - **Counts.** The title counts findings with a severity, not expected manual
-  clicks or harness notices. A root cause is a finding with no `caused_by`.
+  clicks or harness notices, and says how many of them follow from others
+  (have a `caused_by`): "<N> findings, <M> follow from others", or just
+  "<N> findings" when M is 0. A root is a finding with no `caused_by`; that is
+  a fact about the grouping links, not a diagnosis, so the headline doesn't
+  call roots "root causes".
 - **Scope slug.** The scope slug stays visible in code formatting so the file
   can be matched to its name.
 - **Commit hashes.** Shortened to 7 characters here; the full hash is in §4.9
@@ -123,14 +134,15 @@ bullet per condition:
 ```markdown
 ## Start here
 
-These root causes explain the most findings. Fixing one should clear the findings listed under it.
+These findings have the most other findings following from them. Fixing one may also clear those.
 
 1. 🔴 [EnableDungeons auto-completes dungeon accepts](#f-1aa80a4c): explains 12 more · `WoWPro/WoWPro_Broker.lua:2588`
 2. 🔴 ["Stolen Blasting Powder" is never offered](#f-7f8b32ee): explains 1 more · `01_12_Dun_Morogh.lua:275`
 …
 ```
 
-- **Candidates.** Root causes with a severity, excluding harness items.
+- **Candidates.** Roots (findings with no `caused_by`) with a severity,
+  excluding harness items.
 - **Ranking.** By severity, then by the number of findings that trace back to
   the root (descendants, counted through the whole chain) with most first, then
   file, line and id.
@@ -142,9 +154,9 @@ These root causes explain the most findings. Fixing one should clear the finding
 
 There are two small tables.
 
-**By severity**, in severity order:
+**By severity**, in severity order. "Primary" counts roots (no `caused_by`):
 
-| | Root causes | Follow-on | Total |
+| | Primary | Follow-on | Total |
 |---|---|---|---|
 | 🔴 High | 9 | 17 | 26 |
 
@@ -165,7 +177,7 @@ that exist.
 `WoWPro_Leveling/Forever/Alliance/01_12_Dun_Morogh.lua`
 
 #### 🔴 "Stolen Blasting Powder" is never offered <a id="f-7f8b32ee"></a>
-High · line 275 · quest 95214 · level 12 · unverified quest data
+High · line 275 · quest 95214 · unverified quest data
 
 The guide tells you to accept this quest, but WoWPro hides the step because its prerequisite, quest 95213, is never completed.
 
@@ -205,6 +217,8 @@ own line.
   `quest Q`, `level L`, and `unverified quest data`.
 - Each field is omitted when it doesn't apply. The unverified marker appears
   only when `confidence == "unverified"`.
+- `level L` is left out for `below-level` findings: that signal fires after the
+  grind, so its level is the level ground up to, which the sentence states.
 
 **Sentence.** One paragraph, generated from the templates in §4.7.
 
@@ -214,6 +228,13 @@ own line.
 - `Caused by:` a link to the parent, using the parent's title as the link text.
 - `Also blocks:` links to the direct children, by title. The root of the
   dungeon chain lists all of them.
+
+**Link text and headings.** A title placed in a heading or link text is
+escaped for markdown: `\`, `[`, `]`, `*` and `_` get a backslash, `<` and `>`
+become `&lt;` and `&gt;`. The JSON `title` stays plain. When two findings
+linked in the same list or sentence ("Also blocks", or "Follows from" plus a
+prerequisite link) share a title, each colliding link's text gets
+` (quest N, line L)`, leaving out a part the finding doesn't have.
 - `Affects:` the combo summary (§4.8). Omitted when the matrix has one combo.
 - `Ground:` for below-level findings: "<kills> kills to reach level <to>".
 
@@ -257,7 +278,8 @@ limits.
 | `log-full` | "<name>" can't be taken: quest log full | The guide shows this accept while the quest log is already full. |
 | `orphan-turnin` | <step> for a quest the character never had | The guide asks you to <verb lower> quest Q, but this character never had it. |
 | `wrong-race-class` | "<name>" is shown to the wrong <race/class> | WoWPro shows this step to a <Race/Class>, but quest Q is for other <races/classes>. (In multi-combo runs: "…to characters that quest Q excludes.") |
-| `below-level` | "<name>" is offered below its level | The guide reaches this accept at level L, below the level the quest requires. |
+| `below-level`, with grind | "<name>" is offered below its level | The guide reaches this accept below level <to>, the level the quest requires; the client ground <kills> kills to get there. (The signal fires after the grind, so `level` equals `grind.to`.) |
+| `below-level`, no grind | "<name>" is offered below its level | The guide reaches this accept below the level the quest requires. |
 | `did-not-advance` | "<name>" doesn't advance | The simulated action didn't move WoWPro to the next step, so the client clicked it off. |
 | `manual-completion` (not expected) | "<name>" needed a manual click | No game event completed this step, so the client clicked it off. |
 | `stuck`, settle-limit | Stuck after "<name>" | WoWPro kept scheduling work after this step and never settled. |
@@ -265,7 +287,7 @@ limits.
 | `stuck`, max-iterations | Run hit its step limit | The run stopped at its step limit before this guide ended. |
 | `stuck`, no-current-step | No step to show | WoWPro had no current step to show, so the run couldn't continue. |
 | `stuck`, no-guide-loaded | No guide loaded | WoWPro loaded no guide, so nothing ran. |
-| `leftover-quests` | Quest "<qname>" (Q) is left in the log | Quest Q was still in the log when this guide ended; nothing in it turns the quest in. (`<qname>` falls back to "Q" alone.) |
+| `leftover-quests` | Quest "<qname>" (Q) is left in the log | Quest "<qname>" (Q) was still in the log when this guide ended; the run never turned it in. (`"<qname>" (Q)` falls back to "Q" alone in both.) |
 | `lua-error` (addon) | Lua error: <message, first 80 chars> | WoWPro raised an error during the run. The message and stack are in the detail below. |
 | `engine-dungeon-skip` (root) | EnableDungeons auto-completes dungeon accepts | WoWPro's EnableDungeons setting marks dungeon-quest accepts done without showing them; every finding it explains is a dungeon quest the guide never offers. |
 | unknown signal | <raw signal>: <step or name> | (none) |
@@ -275,10 +297,13 @@ only as a defensive fallback in `render`. It must not be reachable.
 
 ### 4.8 Display helpers
 
-**Step verbs.** These map WoW-Pro action codes to words: A "Accept", T "Turn in",
-C "Complete", K "Kill", R "Run to", H "Hearth to", h "Set hearth at", F "Fly
-to", f "Get flight path at", N "Note:", U "Use", B "Buy", b "Take boat to",
-l "Loot", r "Sell and repair at", L "Reach level", D "Guide done:".
+**Step verbs.** These map WoW-Pro action codes to words: A "Accept", a "Accept
+repeatable", T "Turn in", t "Turn in when complete", C "Complete", K "Kill", R
+"Run to", H "Hearth to", h "Set hearth at", F "Fly to", f "Get flight path at",
+M "Make", N "Note:", U "Use", B "Buy", b "Take boat to", P "Take portal to", l
+"Loot", r "Repair or restock at", L "Reach level", D "Guide done:", * "Trash".
+(`r` is labelled "Repair/Restock" in the parser, which never says "sell"; `P`
+step names are destinations, e.g. `P Stormwind`.)
 
 The builder confirms each against WoW-Pro's parser (`WoWPro_Parser.lua`). An
 unconfirmed or unknown code renders as the raw letter plus the name, which is
@@ -305,7 +330,7 @@ findings with `harness`. They are about the client, not guides.
 ```markdown
 ## Harness notices
 
-<details><summary>38 missing globals and 0 harness errors: gaps in this client's WoW API stubs, not guide bugs</summary>
+<details><summary>38 missing globals: gaps in this client's WoW API stubs, not guide bugs</summary>
 
 - `FACTION_HORDE` · F-0f143634
 - `TomTom` · F-0c198787
@@ -313,16 +338,17 @@ findings with `harness`. They are about the client, not guides.
 ```
 
 They have no triage line. Harness Lua errors get a one-line message plus
-`F-` id each.
+`F-` id each. The summary leaves out a zero count ("38 missing globals: …",
+"2 harness errors: …"), joining the two with "and" when both exist.
 
 **Expected manual clicks**
 
 ```markdown
 ## Expected manual clicks
 
-<details><summary>11 steps the client clicked off by design (notes, sell-and-repair, guide ends)</summary>
+<details><summary>11 steps the client clicked off by design (notes, repair-or-restock stops, guide ends)</summary>
 
-- `01_12_Dun_Morogh.lua:23` Sell and repair at "Sell Junk" · F-9a686790
+- `01_12_Dun_Morogh.lua:23` Repair or restock at "Sell Junk" · F-9a686790
 </details>
 ```
 
@@ -330,7 +356,9 @@ When the line is unknown, the location is just the file name.
 
 **About this run**
 - "WoW-Pro": the relative path (e.g. `../WoW-Pro-Guides`), branch, full commit,
-  clean or uncommitted changes.
+  clean or uncommitted changes. A detached checkout (branch `HEAD`) reads
+  "detached" here and in the run line, for the addon and for the client when
+  the header carries a client branch.
 - "Client": full commit, clean or uncommitted changes.
 - "Characters": the sorted, de-duplicated combo list.
 - "Guide rank": `2` (WoWPro's setting for which optional steps are shown).
@@ -369,6 +397,12 @@ base directory. The base defaults to the current working directory.
 - **Normalisation.** Plain string arithmetic on normalised paths: collapse `//`
   and `/./`, resolve `..` segments, drop a trailing `/`. There is no `realpath`,
   so a symlinked path is shown as given.
+- **Boundaries.** A root matches only when the next character ends the path:
+  end of string, `/`, `:`, `'`, `"`, `)`, `]`, `,`, `;` or whitespace. `.` is
+  not a boundary, so root `/p/x` doesn't rewrite inside `/p/x.bak`.
+- **Finding ids.** Lua error messages are rewritten before grouping, so a
+  Lua-error finding's id depends on the base. Compare ids only between runs
+  with the same base.
 - **Already-relative strings** stay as they are (`WoWPro_Leveling/…` guide file
   paths, for example).
 - **Determinism.** Output is byte-identical for identical inputs *and the same
@@ -398,7 +432,8 @@ base directory. The base defaults to the current working directory.
     `reasons`, `combos`, `before`, `after`, `level`, `log`, `confidence`,
     `caused_by`, `causes`, `expected`, `harness`, `message`, `stack`, `grind`).
   - It also carries the rendered `title` and `sentence`, so `/triage` and the
-    markdown agree on wording.
+    markdown agree on wording. `title` is plain text; `sentence` carries the
+    same markdown links (escaped link text, `#f-…` anchors) as the report.
   - Absent values are absent, not `"none"`.
   - Paths are relative, as in §4.10. `header.paths_relative_to` holds the base's
     last segment only.
