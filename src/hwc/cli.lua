@@ -5,8 +5,8 @@ Usage: hwc [-h|--help]
        hwc boot [--race RACE] [--class CLASS] [--addon PATH] [--json]
        hwc quest <id> [--addon PATH]
        hwc run --class CLASS [--race RACE] [--variant V] [--addon PATH] [--stop-level N]
-               [--date D] [--out DIR]
-       hwc matrix [--races Dwarf,Gnome] [--addon PATH] [--date D] [--out DIR]
+               [--date D] [--out DIR] [--relative-to DIR]
+       hwc matrix [--races Dwarf,Gnome] [--addon PATH] [--date D] [--out DIR] [--relative-to DIR]
 
 Headless WoW-Pro client: loads the real WoW-Pro addon under LuaJIT.
 
@@ -28,6 +28,7 @@ Options:
   --stop-level N  Level at which a run stops (default 25)
   --date D      Findings date, YYYY-MM-DD (default today, host clock)
   --out DIR     Findings directory (default findings/)
+  --relative-to DIR  Every path in the output is written relative to DIR (default: current directory)
 ]]
 
 local M = {}
@@ -148,14 +149,20 @@ local function mkdirs(path)
   end
 end
 
+-- The CLI's closing line: both files and the character count.
+function M.wrote_line(stem, n)
+  return "hwc: wrote " .. stem .. ".md and " .. stem .. ".json (" .. n .. (n == 1 and " character" or " characters") .. ")\n"
+end
+
 local function write_file(path, text)
   local f = assert(io.open(path, "wb"))
   f:write(text)
   f:close()
 end
 
--- Plays every combo, then writes DIR/<date>-<scope>.md and one run log per
--- character under DIR/<date>-<scope>/.
+-- Plays every combo, then writes DIR/<date>-<scope>.md and .json and one run
+-- log per character under DIR/<date>-<scope>/. Every path in the output is
+-- rewritten relative to --relative-to (default: the current directory).
 local function play(combos, scope, opts, out)
   local config = require("hwc.config")
   local runner = require("hwc.driver.run")
@@ -168,7 +175,14 @@ local function play(combos, scope, opts, out)
   local outdir = opts.out or "findings"
   local logdir = outdir .. "/" .. date .. "-" .. scope
   mkdirs(logdir)
-  local logs, labels = {}, {}
+  local paths = require("hwc.paths")
+  local report = require("hwc.findings.report")
+  local cwd = paths.cwd()
+  local base = paths.resolve(opts["relative-to"] or cwd, cwd)
+  -- Absolute, so addon paths and chunk names enter the logs in a form
+  -- paths.rewrite can match.
+  if opts.addon then opts.addon = paths.resolve(opts.addon, cwd) end
+  local raw, labels = {}, {}
   for _, c in ipairs(combos) do
     local cfg = config.load({
       addon_path = opts.addon, race = c.race, class = c.class,
@@ -177,23 +191,41 @@ local function play(combos, scope, opts, out)
     cfg.variant = c.variant
     local log = runner.character(cfg, { stop_level = opts.stop_level })
     log.variant = c.variant
-    logs[#logs + 1] = log
+    raw[#raw + 1] = log
     labels[#labels + 1] = string.format("%s %s %s", c.race, c.class, c.variant)
-    write_file(string.format("%s/%s-%s-%s.json", logdir, c.race, c.class, c.variant),
-      json.encode(log, { indent = true }) .. "\n")
   end
-  local first = logs[1] or {}
+  local first = raw[1] or {}
+  -- Roots come from the first log: every combo shares one config.
+  local roots = { base }
+  if first.addon and first.addon.path then roots[#roots + 1] = first.addon.path end
+  local sources = (first.catalog or {}).sources or {}
+  local names = {}
+  for name in pairs(sources) do names[#names + 1] = name end
+  table.sort(names)
+  for _, name in ipairs(names) do
+    if sources[name].path then roots[#roots + 1] = sources[name].path end
+  end
+  local logs = {}
+  for i, c in ipairs(combos) do
+    logs[i] = paths.rewrite(raw[i], roots, base, cwd)
+    write_file(string.format("%s/%s-%s-%s.json", logdir, c.race, c.class, c.variant),
+      json.encode(logs[i], { indent = true }) .. "\n")
+  end
+  local rfirst = logs[1] or {}
+  local client = addon_info.read(config.repo_root(), { tracked_only = true })
   local header = {
-    scope = scope, date = date, addon = first.addon, catalog = (first.catalog or {}).sources,
-    client = (function()
-      local c = addon_info.read(config.repo_root(), { tracked_only = true })
-      return { commit = c.commit, dirty = c.dirty }
-    end)(),
-    matrix = { combos = labels }, rank = first.rank,
+    scope = scope, date = date, addon = rfirst.addon, catalog = (rfirst.catalog or {}).sources,
+    client = { commit = client.commit, dirty = client.dirty },
+    matrix = { combos = labels }, rank = rfirst.rank,
   }
-  local path = outdir .. "/" .. date .. "-" .. scope .. ".md"
-  write_file(path, render.markdown(group.findings(logs), header))
-  out:write("hwc: wrote ", path, " (", #logs, " characters)\n")
+  header = paths.rewrite(header, roots, base, cwd)
+  header.paths_relative_to = base:match("([^/]+)$") or "/"
+  local findings = group.findings(logs)
+  local stem = outdir .. "/" .. date .. "-" .. scope
+  local md = render.markdown(findings, header)
+  write_file(stem .. ".md", md)
+  write_file(stem .. ".json", json.encode(report.build(findings, header), { indent = true }) .. "\n")
+  out:write(M.wrote_line(stem, #logs))
   return 0
 end
 
@@ -299,7 +331,7 @@ function M.main(args, out, err)
   end
   if args[1] == "run" then
     return command(args, out, err,
-      { race = true, class = true, variant = true, addon = true, ["stop-level"] = true, date = true, out = true },
+      { race = true, class = true, variant = true, addon = true, ["stop-level"] = true, date = true, out = true, ["relative-to"] = true },
       function(o)
         if not o.class then return nil, nil, "run needs --class" end
         if not require("hwc.driver.matrix").professions(o.variant or "baseline") then
@@ -312,7 +344,7 @@ function M.main(args, out, err)
       function(_, o, w) return run_run(o, w) end)
   end
   if args[1] == "matrix" then
-    return command(args, out, err, { races = true, addon = true, date = true, out = true },
+    return command(args, out, err, { races = true, addon = true, date = true, out = true, ["relative-to"] = true },
       function(o)
         local races = {}
         for r in (o.races or "Dwarf,Gnome"):gmatch("[^,]+") do

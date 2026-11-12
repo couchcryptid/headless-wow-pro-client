@@ -68,6 +68,30 @@ describe("cli", function()
     assert.matches("run default Dwarf", text())
   end)
 
+  it("run and matrix accept --relative-to (parsed as an option, so the race check is what fails)", function()
+    for _, args in ipairs({
+      { "run", "--class", "WARRIOR", "--race", "Orc", "--relative-to", "/x" },
+      { "matrix", "--races", "Orc", "--relative-to", "/x" },
+    }) do
+      local out, _ = capture()
+      local err, etext = capture()
+      assert.equal(2, cli.main(args, out, err))
+      assert.matches("race not in scope", etext())
+      assert.is_nil(etext():match("unknown or incomplete"))
+    end
+  end)
+
+  it("the wrote line names both files and pluralises the character count", function()
+    assert.equal("hwc: wrote out/s.md and out/s.json (1 character)\n", cli.wrote_line("out/s", 1))
+    assert.equal("hwc: wrote out/s.md and out/s.json (2 characters)\n", cli.wrote_line("out/s", 2))
+  end)
+
+  it("USAGE documents --relative-to", function()
+    local out, text = capture()
+    cli.main({ "--help" }, out)
+    assert.matches("%-%-relative%-to DIR", text())
+  end)
+
   -- Final review minor 7: no combos means no findings file, not an "Addon: nil" header.
   it("matrix with no combos exits 2 with a message and writes nothing", function()
     local matrix = require("hwc.driver.matrix")

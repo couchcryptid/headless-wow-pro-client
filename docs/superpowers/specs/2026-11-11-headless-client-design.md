@@ -260,6 +260,8 @@ A quest is an object: id, name, quest level, required level, races, classes, pre
 
 ### 7.2 Findings file
 
+Superseded in part by `2026-11-12-findings-report-design.md` (report layout, JSON contract, relative paths).
+
 One markdown file per invocation: `findings/YYYY-MM-DD-<scope>.md`, for example `findings/2026-11-12-forever-alliance-dwarf-gnome-1-25.md`.
 - **Header:**
   - the addon repo path, branch and commit;
@@ -273,6 +275,8 @@ One markdown file per invocation: `findings/YYYY-MM-DD-<scope>.md`, for example 
 - **Per-character run logs** (JSON) sit beside it, uncommitted by default, so any finding can be traced step by step.
 
 ## 8. `/triage` skill
+
+Superseded in part by `2026-11-12-findings-report-design.md` (report layout, JSON contract, relative paths). `/triage` reads the JSON and writes its verdict into the markdown's `Triage:` line.
 
 A Claude Code skill in this repo (`.claude/skills/triage/SKILL.md`), run on demand with `/triage findings/<file>.md`.
 
