@@ -174,6 +174,9 @@ local function play(combos, scope, opts, out)
   local report = require("hwc.findings.report")
   local cwd = paths.cwd()
   local base = paths.resolve(opts["relative-to"] or cwd, cwd)
+  -- Absolute, so addon paths and chunk names enter the logs in a form
+  -- paths.rewrite can match.
+  if opts.addon then opts.addon = paths.resolve(opts.addon, cwd) end
   local raw, labels = {}, {}
   for _, c in ipairs(combos) do
     local cfg = config.load({
@@ -187,6 +190,7 @@ local function play(combos, scope, opts, out)
     labels[#labels + 1] = string.format("%s %s %s", c.race, c.class, c.variant)
   end
   local first = raw[1] or {}
+  -- Roots come from the first log: every combo shares one config.
   local roots = { base }
   if first.addon and first.addon.path then roots[#roots + 1] = first.addon.path end
   local sources = (first.catalog or {}).sources or {}

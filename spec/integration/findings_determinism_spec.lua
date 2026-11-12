@@ -81,4 +81,41 @@ describe("findings determinism across processes #slow", function()
     walk(dir)
     assert.is_true(files >= 3)
   end)
+
+  it("rewrites a relative --addon against a --relative-to that is not the cwd", function()
+    local cwd = lfs.currentdir()
+    local abs = flow.ADDON
+    local rel = "local/addon/main"
+    if lfs.attributes(cwd .. "/" .. rel .. "/WoWPro/WoWPro.toc", "mode") == nil then
+      pending("no addon checkout at " .. rel)
+      return
+    end
+    abs = cwd .. "/" .. rel
+    local base = cwd .. "/local/addon"
+    local dir = os.tmpname()
+    os.remove(dir)
+    local _, code = shell(string.format(
+      "bin/hwc run --race Dwarf --class WARRIOR --stop-level 6 --date 2026-11-12 --addon '%s' --relative-to '%s' --out '%s' 2>/dev/null",
+      rel, base, dir))
+    assert.equal(0, code)
+    local doc = require("dkjson").decode(slurp(dir .. "/2026-11-12-Dwarf-WARRIOR-baseline.json"))
+    local hdr = doc.header or doc
+    assert.equal("main", hdr.addon.path)
+    assert.equal("addon", hdr.paths_relative_to)
+    local function walk(d)
+      for name in lfs.dir(d) do
+        if name ~= "." and name ~= ".." then
+          local p = d .. "/" .. name
+          if lfs.attributes(p, "mode") == "directory" then
+            walk(p)
+          else
+            local text = slurp(p)
+            assert.is_nil(text:find(abs, 1, true), "addon path in " .. p)
+            assert.is_nil(text:find(cwd, 1, true), "cwd in " .. p)
+          end
+        end
+      end
+    end
+    walk(dir)
+  end)
 end)

@@ -68,7 +68,6 @@ describe("cli", function()
     assert.matches("run default Dwarf", text())
   end)
 
-  -- Final review minor 7: no combos means no findings file, not an "Addon: nil" header.
   it("run and matrix accept --relative-to (parsed as an option, so the race check is what fails)", function()
     for _, args in ipairs({
       { "run", "--class", "WARRIOR", "--race", "Orc", "--relative-to", "/x" },
@@ -88,6 +87,7 @@ describe("cli", function()
     assert.matches("%-%-relative%-to DIR", text())
   end)
 
+  -- Final review minor 7: no combos means no findings file, not an "Addon: nil" header.
   it("matrix with no combos exits 2 with a message and writes nothing", function()
     local matrix = require("hwc.driver.matrix")
     local real = matrix.combos
