@@ -300,7 +300,7 @@ describe("driver.run", function()
       { action = "A", name = "Low", qids = { 5 }, outcome = { kind = "acted", grind = { kills = 9, to = 4 } } },
     }
     local script = { G1 = { nil, nil, nil, { complete = { 4 } } } }
-    local log = drive(one_guide(steps), script)
+    local log = drive(one_guide(steps), script, {}, fx.fake_world({ [5] = { name = "Low Quest" } }))
     assert.equal(1, #signals(log, "log-full"))
     local ar = signals(log, "accept-refused")
     assert.equal(1, #ar)
@@ -312,6 +312,9 @@ describe("driver.run", function()
     assert.equal(1, #b)
     assert.equal(5, b[1].qid)
     assert.equal("Orphan", b[1].before.name)
+    assert.equal("T", b[1].before.action)
+    assert.equal("Low Quest", b[1].qname)
+    assert.same({ kills = 9, to = 4 }, b[1].grind)
     assert.equal(3, #signals(log, "did-not-advance"))
   end)
 

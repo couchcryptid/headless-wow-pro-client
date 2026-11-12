@@ -72,7 +72,7 @@ local function new_finding(s, key)
   local f = {
     id = "F-" .. group.fnv1a32(key), signal = s.signal, file = s.file, line = s.line, gid = s.gid,
     action = s.action, name = s.name, qid = s.qid, why = s.why, before = s.before, after = s.after,
-    level = s.level, log = s.log, confidence = s.confidence, combos = {}, causes = {}, reasons = {},
+    qname = s.qname, grind = s.grind, level = s.level, log = s.log, confidence = s.confidence, combos = {}, causes = {}, reasons = {},
   }
   if s.signal == "lua-error" then
     f.name, f.message, f.stack = s.message, s.message, s.stack

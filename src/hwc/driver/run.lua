@@ -79,13 +79,20 @@ function Driver:confidence(qid)
   return "verified"
 end
 
+-- The catalog's name for a quest id; nil without a qid or a catalog entry.
+function Driver:quest_name(qid)
+  local catalog = qid ~= nil and self.W.catalog
+  local quest = catalog and catalog:quest(qid)
+  return quest and quest.name or nil
+end
+
 -- Appends a Signal. step (an Engine:step record) supplies the location fields;
 -- fields may override any of them. Step signals wait for `after` (the name of
 -- the next step acted on).
 function Driver:signal(kind, step, fields)
   fields = fields or {}
   local s = { signal = kind, level = self.W.player.level, log = self:log_qids() }
-  if self.before_name then s.before = { name = self.before_name } end
+  if self.before_name then s.before = { name = self.before_name, action = self.before_action } end
   if step then
     local info = self.info[step.gid or self.gid]
     s.gid, s.line, s.action, s.name = step.gid or self.gid, step.line, step.action, step.name
@@ -104,6 +111,7 @@ function Driver:signal(kind, step, fields)
     end
   end
   for k, v in pairs(fields) do s[k] = v end
+  s.qname = self:quest_name(s.qid)
   s.confidence = self:confidence(s.qid)
   self.log.signals[#self.log.signals + 1] = s
   if step and fields.after == nil then self.awaiting[#self.awaiting + 1] = s end
@@ -166,9 +174,11 @@ function Driver:close(gid, full)
       local sig = {
         signal = "never-shown-accept", gid = gid, file = info.file, line = s.line, ordinal = s.ordinal, action = s.action,
         name = s.name, qid = s.qids[1], why = info.why[i], level = self.W.player.level, log = self:log_qids(),
-        before = prev and { name = prev.name } or nil, after = nxt and { name = nxt.name } or nil,
+        before = prev and { name = prev.name, action = prev.action } or nil,
+        after = nxt and { name = nxt.name, action = nxt.action } or nil,
       }
       if s.dungeon and self.E:completed(i, gid) then sig.reason = "engine-dungeon-skip" end
+      sig.qname = self:quest_name(sig.qid)
       sig.confidence = self:confidence(sig.qid)
       self.log.signals[#self.log.signals + 1] = sig
     end
@@ -305,9 +315,10 @@ end
 -- Performs one shown step: before/after bookkeeping, wrong-race-class, the action,
 -- its snapshot, settle-limit and refusal signals. Returns the outcome and snapshot.
 function Driver:act(step, rows, info)
-  for _, s in ipairs(self.awaiting) do s.after = { name = step.name } end
+  for _, s in ipairs(self.awaiting) do s.after = { name = step.name, action = step.action } end
   self.awaiting = {}
   self.before_name, self.last_name = self.last_name, step.name
+  self.before_action, self.last_action = self.last_action, step.action
   self:wrong_race_class(step)
   local why = self.E:why(step.index)
   self.acting = { gid = step.gid, index = step.index, why = why }

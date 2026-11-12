@@ -42,6 +42,17 @@ describe("group.findings", function()
     assert.truthy(f.id:match("^F%-%x%x%x%x%x%x%x%x$"))
   end)
 
+  it("passes grind, qname and neighbour actions through to the finding", function()
+    local sig = { signal = "below-level", gid = "G1", file = "f", line = 1, action = "A", name = "L", qid = 412,
+      qname = "Pre", grind = { kills = 4, to = 6 }, before = { name = "b", action = "T" },
+      after = { name = "c", action = "C" } }
+    local f = group.findings({ runlog("Dwarf", "WARRIOR", { sig }) })[1]
+    assert.same({ kills = 4, to = 6 }, f.grind)
+    assert.equal("Pre", f.qname)
+    assert.same({ name = "b", action = "T" }, f.before)
+    assert.same({ name = "c", action = "C" }, f.after)
+  end)
+
   it("keeps the id when the line changes", function()
     local a = group.findings({ runlog("Dwarf", "WARRIOR", { dna({ line = 40 }) }) })[1]
     local b = group.findings({ runlog("Dwarf", "WARRIOR", { dna({ line = 99 }) }) })[1]
