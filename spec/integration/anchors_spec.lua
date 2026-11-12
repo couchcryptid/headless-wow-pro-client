@@ -112,21 +112,26 @@ describe("anchor #3535 (Camping 101: Cooking prereq gates) #slow", function()
     return
   end
 
-  -- 98321 (Flintfire's Shipment) and 96629 (Camping 101: Cooking) are Forever-added:
+  -- 98321 (Flintfire's Shipment), 96392 (Farsen's Watch) and 96629 (Camping 101: Cooking) are Forever-added:
   -- the pinned QuestieDB lacks them and wh.json rows carry no name, so without a
   -- local supplement the catalog knows the quests but cannot name them.
   it("the catalog knows the three Red QIDs and names them where a source does", function()
     local w = run_of("main").world
     local want = { [COOKING] = "Camping 101: Cooking" }
     for qid, name in pairs(RED_3535) do want[qid] = name end
+    local unnamed = {}
     for _, qid in ipairs({ 400, 98321, 96392, COOKING }) do
       local q = w.catalog:quest(qid)
       assert.is_truthy(q, "catalog has no quest " .. qid)
       if q.name == nil then
-        print(string.format("#3535 catalog has no name for %d (%s)", qid, want[qid]))
+        unnamed[#unnamed + 1] = string.format("%d (%s)", qid, want[qid])
       else
         assert.equal(want[qid], q.name)
       end
+    end
+    if #unnamed > 0 then
+      pending("no catalog source names " .. table.concat(unnamed, ", ")
+        .. ": not in the pinned QuestieDB, no name in wh.json, no local supplement")
     end
   end)
 
@@ -152,10 +157,10 @@ describe("anchor #3535 (Camping 101: Cooking prereq gates) #slow", function()
     local f = never_shown(run_of("main"), DUN_MOROGH, 96392)
     assert.is_truthy(f)
     if not tostring(f.why):find(tostring(COOKING), 1, true) then
-      -- Engine result, reported not patched: the engine's why names only the first
-      -- unmet prereq of PRE|314&96408 (WoWPro_Broker.lua:2292). Farsen's Watch reaches
-      -- 96629 only through 96408's chain, so its why does not contain 96629.
-      pending("Farsen's Watch why is \"" .. tostring(f.why) .. "\": PRE 314&96408 does not name 96629 directly")
+      -- Engine result, reported not patched: PRE 314&96408 names no 96629; the fix
+      -- branch changes the PRE to 96408 (drops 314).
+      pending("Farsen's Watch why is \"" .. tostring(f.why) .. "\": PRE 314&96408 names no 96629; "
+        .. "the fix branch changes the PRE to 96408 (drops 314)")
       return
     end
   end)
@@ -228,7 +233,9 @@ describe("anchor: dungeon accepts and harness completeness on main #slow", funct
     assert.is_true(#in_guide > 0)
   end)
 
-  it("a full run has zero harness lua-error findings and prints the missing globals", function()
+  -- Zero addon lua-errors too: a missing client stub raises inside an addon file, so it
+  -- is classed as an addon error, not a harness one.
+  it("a full run has zero harness or addon lua-error findings and prints the missing globals", function()
     local r = run_of("main")
     print("main run stop: " .. tostring(r.log.stop.reason) .. " at level " .. tostring(r.log.stop.level))
     local harness, addon, missing = {}, 0, {}
@@ -243,5 +250,6 @@ describe("anchor: dungeon accepts and harness completeness on main #slow", funct
     print("addon lua-error findings: " .. addon)
     print("missing-global: " .. table.concat(missing, " "))
     assert.same({}, harness)
+    assert.equal(0, addon)
   end)
 end)

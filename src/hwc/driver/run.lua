@@ -158,7 +158,7 @@ function Driver:close(gid, full)
   if info.max_acted == 0 then return end -- loaded, never played (stopped on load)
   local limit = full and math.huge or info.max_acted
   for _, i in ipairs(info.accepts) do
-    if not info.seen[i] and i < limit then
+    if not info.seen[i] and i < limit and not run.already_done(info.why[i]) then
       local s = info.steps[i]
       local prev, nxt = info.steps[i - 1], info.steps[i + 1]
       local sig = {
@@ -174,6 +174,13 @@ function Driver:close(gid, full)
   for _, q in ipairs(self:log_qids()) do
     self:signal("leftover-quests", nil, { gid = gid, file = info.file, qid = q })
   end
+end
+
+-- Ruling X: the engine skips a step whose quest is already completed with this why
+-- (WoWPro_Broker.lua:2042, "NextStep(): QID is complete: " .. tostring(QID)). Such an
+-- accept is hidden because the quest is done, not by a defect, so it is no signal.
+function run.already_done(why)
+  return type(why) == "string" and why:find("NextStep(): QID is complete:", 1, true) == 1
 end
 
 function Driver:addon_error_count()

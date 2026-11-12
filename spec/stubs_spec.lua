@@ -169,7 +169,7 @@ describe("stubs", function()
   end)
 
   it("reports no item cooldown and no area names (CompatUtil.lua:231-237, Broker.lua:2559)", function()
-    assert.same({ 0, 0, 1 }, { env.C_Container.GetItemCooldown(5456) })
+    assert.same({ 0, 0, true }, { env.C_Container.GetItemCooldown(5456) })
     assert.is_nil(env.C_Map.GetAreaInfo(1455))
   end)
 

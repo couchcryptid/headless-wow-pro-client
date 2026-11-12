@@ -189,6 +189,8 @@ function M.install(sb, cfg)
     GetBestMapForUnit = function() return player().map_id end,
     -- WoWPro_Broker.lua:2559 (IZ tag with a numeric id). The catalog has no AreaTable, so every id
     -- answers nil as an unknown one does; the uiMapID comparison on the same line still applies.
+    -- Valid only while the numeric IZ ids on the played path are uiMapIDs (e.g. 12_20_Eastern_Kingdom
+    -- :315 IZ|-1455): an IZ holding an AreaTable id would need real area names here.
     GetAreaInfo = function() return nil end,
     GetPlayerMapPosition = function()
       return { GetXY = function() local p = player(); return p.x, p.y end }
@@ -250,9 +252,9 @@ function M.install(sb, cfg)
   env.Dismount = function() end
 
   -- WoWPro_CompatUtil.lua:231-237 (GetItemCooldown falls back to C_Container.GetItemCooldown), read by
-  -- the U-step item button (RowUpdate.lua:555). The world models no cooldowns: start 0, duration 0, enabled.
+  -- the U-step item button (RowUpdate.lua:555). The world models no cooldowns: start 0, duration 0, enabled true.
   env.C_Container = trap(sb, "C_Container", {
-    GetItemCooldown = function() return 0, 0, 1 end,
+    GetItemCooldown = function() return 0, 0, true end,
   })
 
   -- WoWPro_Trade.lua:439-476 (UpdateTradeSkills, Forever/Retail path) via WoWPro_Events.lua:282, backed by player.skills.

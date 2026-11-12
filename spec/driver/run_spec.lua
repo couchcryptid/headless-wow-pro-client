@@ -165,6 +165,25 @@ describe("driver.run", function()
     assert.equal("no-next-guide", log.stop.reason)
   end)
 
+  -- Ruling X: an accept the engine skipped because its quest is already done
+  -- (WoWPro_Broker.lua:2042, "NextStep(): QID is complete: " .. QID) is not a hidden accept.
+  it("records no never-shown-accept for an A step skipped as 'QID is complete', but does for a PRE why", function()
+    local guides = {
+      G1 = { startlevel = 1, file = "g1.lua", steps = {
+        { action = "R", name = "a" },
+        { action = "A", name = "Done Before", qids = { 55 }, why = "NextStep(): QID is complete: 55", hidden = true },
+        { action = "A", name = "Gated", qids = { 56 },
+          why = "NextStep:PRE&(55): A mandatory prereq was not met: 55", hidden = true },
+        { action = "D", name = "Done" },
+      } },
+    }
+    local script = { G1 = { { complete = { 1 } }, nil, nil, { complete = { 4 }, done = true } } }
+    local log = drive(guides, script, {})
+    local hidden = signals(log, "never-shown-accept")
+    assert.equal(1, #hidden)
+    assert.equal("Gated", hidden[1].name)
+  end)
+
   it("closes G1 when the right-click on its D step loads G2 (Review Focus 1, manual path)", function()
     local world = fx.fake_world({}, { 77 })
     local guides = {
