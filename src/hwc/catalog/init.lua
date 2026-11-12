@@ -23,7 +23,7 @@ local ANY_RACES = { [0] = true, [4294967373] = true, [77] = true, [2047] = true 
 -- Quest fields a supplement entry may set.
 local SUPPLEMENT_FIELDS = {
   "name", "level", "required_level", "xp", "races", "classes", "pre_single", "pre_group",
-  "objectives", "starter", "ender", "requires_skill",
+  "objectives", "starter", "ender", "requires_skill", "completed_by_training", "source_item",
 }
 
 -- Python's `a or b` treats 0 as missing; the old simulator's data relies on it.
@@ -103,6 +103,10 @@ function Catalog.load(cfg)
     self.questie = questie.load(qdir)
     self.sources.questie.sha256 = self.questie.sha256
     self.sources.questie.commit = basename(qdir)
+    if #self.questie.missing > 0 then
+      self.sources.questie.present = "partial"
+      self.sources.questie.missing = self.questie.missing
+    end
   end
 
   local function json_source(name, path, default)
@@ -142,20 +146,20 @@ local function questie_objectives(self, ob)
   local out = {}
   local function simple(group, kind)
     for _, e in ipairs(ob[group] or {}) do
-      out[#out + 1] = { kind = kind, ids = { e[1] }, count = 1, text = e[2] or name_of(self, kind, e[1]) }
+      out[#out + 1] = { kind = kind, ids = { e[1] }, count = 1, count_assumed = true, text = e[2] or name_of(self, kind, e[1]) }
     end
   end
   simple(1, "npc")
   simple(2, "object")
   simple(3, "item")
   for _, e in ipairs(ob[4] and { ob[4] } or {}) do
-    out[#out + 1] = { kind = "other", ids = {}, count = 1, text = "Reputation " .. tostring(e[1]) .. " " .. tostring(e[2]) }
+    out[#out + 1] = { kind = "other", ids = {}, count = 1, count_assumed = true, text = "Reputation " .. tostring(e[1]) .. " " .. tostring(e[2]) }
   end
   for _, e in ipairs(ob[5] or {}) do
-    out[#out + 1] = { kind = "npc", ids = copy_array(e[1]), count = 1, text = e[3] or name_of(self, "npc", e[2]) }
+    out[#out + 1] = { kind = "npc", ids = copy_array(e[1]), count = 1, count_assumed = true, text = e[3] or name_of(self, "npc", e[2]) }
   end
   for _, e in ipairs(ob[6] or {}) do
-    out[#out + 1] = { kind = "other", ids = {}, count = 1, text = e[2] or ("Spell " .. tostring(e[1])) }
+    out[#out + 1] = { kind = "other", ids = {}, count = 1, count_assumed = true, text = e[2] or ("Spell " .. tostring(e[1])) }
   end
   return out
 end
@@ -279,6 +283,21 @@ local function build_quest(self, id)
   quest.objectives = objectives_for(self, id, q, notes)
   quest.starter, quest.starter_kind = starter_of(q.startedBy)
   quest.ender, quest.ender_kind = starter_of(q.finishedBy)
+  -- QuestieDB sourceItemId: "item provided by quest starter" (the client puts it in the bags on accept).
+  quest.source_item = nz(q.sourceItemId)
+
+  -- Camping 101 profession quests (design spec §3, the user in game 2026-11-11;
+  -- Wowhead progress text): "Camping 101: <Prof>" ends at the trainer and gates
+  -- on knowing <Prof>, except Cooking, whose turn-in is completed by training
+  -- Cooking. The supplement below may override either field, and a
+  -- supplement-set name is taken into account.
+  local final_name = (sup and sup.name) or quest.name
+  local prof = type(final_name) == "string" and final_name:match("^Camping 101: (.+)$")
+  if prof == "Cooking" then
+    quest.completed_by_training = "Cooking"
+  elseif prof then
+    quest.requires_skill = prof
+  end
 
   -- The supplement may override any field for a listed quest.
   if sup then
@@ -293,7 +312,24 @@ local function build_quest(self, id)
     end
   end
 
-  quest.confidence = (xp_known and quest.level ~= nil) and "verified" or "unverified"
+  -- A count nobody supplied is assumed 1; the quest cannot be called verified.
+  local assumed = false
+  for i, o in ipairs(quest.objectives) do
+    if o.count == nil then
+      o.count = 1
+      o.count_assumed = true
+      note("objective " .. i .. " has no count (assumed 1)")
+    end
+    if o.count_assumed then assumed = true end
+  end
+
+  -- Ruling AB: rules keyed on the name (Camping 101's requires_skill and
+  -- completed_by_training above) cannot apply to a quest no source names, so its
+  -- data cannot be called verified.
+  local named = type(quest.name) == "string" and quest.name ~= ""
+  if not named then note("no name in any source; name-based rules (Camping 101) cannot apply") end
+
+  quest.confidence = (xp_known and quest.level ~= nil and not assumed and named) and "verified" or "unverified"
   quest.notes = notes
   return quest
 end
@@ -329,6 +365,9 @@ function Catalog:npc(id)
     self._npcs[id] = n and {
       id = id, name = n.name, level_min = n.minLevel, level_max = n.maxLevel, rank = n.rank,
       spawns = n.spawns or {}, zone_id = n.zoneID,
+      -- npcFlags (foreverNpcDB.lua npcKeys :21-22): service bits, e.g. gossip 1,
+      -- questgiver 2, vendor 4, trainer 16 (kills.objective_kills, Ruling AC).
+      flags = n.npcFlags,
     } or false
   end
   return self._npcs[id] or nil

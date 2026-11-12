@@ -19,6 +19,17 @@ describe("stubs", function()
     assert.same({ "Warrior", "WARRIOR" }, { env.UnitClass("player") })
   end)
 
+  it("defines ERR_NEWTAXIPATH as the client string AutoCompleteGetFP compares against", function()
+    assert.equal("New flight path discovered!", env.ERR_NEWTAXIPATH)
+  end)
+
+  it("IsPlayerSpell coerces the string spell id the engine passes (Broker.lua:3332-3340)", function()
+    sb.world.player:learn_spell(3273)
+    assert.is_true(env.IsPlayerSpell("3273"))
+    assert.is_true(env.IsPlayerSpell(3273))
+    assert.is_false(env.IsPlayerSpell("1"))
+  end)
+
   it("reads the addon version from its TOC", function()
     assert.is_string(env.GetAddOnMetadata("WoWPro", "Version"))
     assert.equal(env.GetAddOnMetadata("WoWPro", "Version"), env.C_AddOns.GetAddOnMetadata("WoWPro", "Version"))
@@ -56,6 +67,15 @@ describe("stubs", function()
     assert.equal("", env.GetTitleText())
   end)
 
+  it("GetTitleText follows the open dialog", function()
+    sb.world.catalog = { quest = function(_, id) return id == 179 and { name = "Dwarven Outfitters" } or nil end }
+    assert.equal("", env.GetTitleText())
+    sb.world.dialog = { qid = 179, kind = "detail" }
+    assert.equal("Dwarven Outfitters", env.GetTitleText())
+    sb.world.dialog = nil
+    assert.equal("", env.GetTitleText())
+  end)
+
   it("answers GetItemInfo from the catalog by id, numeric string or name", function()
     sb.world.catalog = {
       item = function(_, id) return tonumber(id) == 750 and { id = 750, name = "Tough Wolf Meat" } or nil end,
@@ -73,6 +93,16 @@ describe("stubs", function()
 
   it("returns nil from GetItemInfo without a catalog", function()
     assert.is_nil(env.GetItemInfo(750))
+  end)
+
+  it("answers GetItemIcon for catalog items, the global C_Item_GetItemIconByID prefers (CompatUtil.lua:342-348)", function()
+    sb.world.catalog = {
+      item = function(_, id) return tonumber(id) == 750 and { id = 750, name = "Tough Wolf Meat" } or nil end,
+      item_id = function() return nil end,
+    }
+    assert.equal(select(10, env.GetItemInfo(750)), env.GetItemIcon(750))
+    assert.equal(env.GetItemIcon(750), env.C_Item.GetItemIconByID(750))
+    assert.is_nil(env.GetItemIcon(1))
   end)
 
   it("returns strings for zone text and a map position", function()
@@ -123,9 +153,30 @@ describe("stubs", function()
     assert.is_nil(sb.override_bindings[owner])
   end)
 
+  it("lists the learned flight points on the taxi map in sorted order (AutoComplete.lua:9-30)", function()
+    assert.equal(0, env.NumTaxiNodes())
+    sb.world.player:learn_flight_point("Thelsamar")
+    sb.world.player:learn_flight_point("Ironforge")
+    assert.equal(2, env.NumTaxiNodes())
+    assert.same({ "Ironforge", "Thelsamar" }, { env.TaxiNodeName(1), env.TaxiNodeName(2) })
+    assert.equal("REACHABLE", env.TaxiNodeGetType(1))
+    assert.equal(1, env.GetNumRoutes(2))
+    assert.equal(2, env.TaxiGetNodeSlot(2, 1, false))
+    assert.is_false(env.IsMounted())
+    env.Dismount()
+    env.TakeTaxiNode(2)
+    assert.same({ "Thelsamar" }, sb.taxi_taken)
+  end)
+
+  it("reports no item cooldown and no area names (CompatUtil.lua:231-237, Broker.lua:2559)", function()
+    assert.same({ 0, 0, true }, { env.C_Container.GetItemCooldown(5456) })
+    assert.is_nil(env.C_Map.GetAreaInfo(1455))
+  end)
+
   it("models the open world out of combat with no professions", function()
     assert.same({ false, "none" }, { env.IsInInstance() })
     assert.is_false(env.UnitAffectingCombat("player"))
+    assert.is_false(env.UnitOnTaxi("player"))
     assert.same({}, env.C_TradeSkillUI.GetAllProfessionTradeSkillLines())
     assert.equal(0, select("#", env.GetProfessions()))
   end)

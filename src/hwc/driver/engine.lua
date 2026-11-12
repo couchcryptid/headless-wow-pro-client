@@ -1,0 +1,294 @@
+-- Read-only adapter over the running WoW-Pro engine (design spec §5.2). The
+-- driver and step actions look at the engine only through here. Nothing in
+-- this module writes env.WoWPro.* or SavedVariables.
+--
+-- Engine functions it calls:
+--   mutating, the two player equivalents only:
+--     WoWPro.CompleteStep(i, "Right-Click")   complete_manual (WoWPro_Broker.lua:3857)
+--     WoWPro:UpdateGuide("sim:level")         update_guide (after a ding; no level-up handler)
+--   pure reads:
+--     WoWPro:NextGuide(gid)                   guide(), only when the registry names a nextGID
+--                                             (it pops the guide stack otherwise, Broker:777-808)
+--     WoWPro.GuideRank(gid)                   rank() (WoWPro_Broker.lua:602-618)
+--     WoWPro:GetActiveStickyCount()           sticky_count() / current() / rows()
+-- Everything else is a read of WoWPro.*, WoWProDB and WoWProCharDB tables, plus
+-- firing client events through the sandbox's frames (fire).
+local guide_source = require("hwc.driver.guide_source")
+
+local Engine = {}
+Engine.__index = Engine
+
+Engine.SETTLE_MAX_VIRTUAL = 60
+
+-- Per-index tag arrays copied into Step.tags: engine key per tag, as
+-- DefineTag(tag, key, ...) names them (WoWPro_Parser.lua:460-590).
+Engine.TAG_KEYS = {
+  "active",    -- ACTIVE :469 (qid fallback, see Engine.qids_of)
+  "questtext", -- QO   Parser:511
+  "use",       -- U    :529
+  "lootitem",  -- L    :491
+  "zone",      -- Z    :483
+  "targetzone", -- TZ  :484 (Ruling Y: where F/b/P land)
+  "map",       -- M    :481
+  "level",     -- LVL  :547
+  "elite",     -- ELITE:516
+  "noncombat", -- NC   :521
+  "dungeon",   -- DUNGEON:527
+  "prof",      -- P    :548
+  "spell",     -- SPELL:553
+  "note",      -- N    :586
+  "optional",  -- O    :464
+  "sticky",    -- S    :572
+  "unsticky",  -- US   :571
+  "rank",      -- RANK :588
+  "target",    -- T    :528
+}
+
+local function copy(v)
+  if type(v) ~= "table" then return v end
+  local out = {}
+  for k, x in pairs(v) do out[k] = copy(x) end
+  return out
+end
+
+-- sb:call returns false on a raised error, else true followed by the
+-- function's results. Returns ok, first result.
+local function call(sb, fn, ...)
+  local ok, value = sb:call(fn, ...)
+  return ok, value
+end
+
+function Engine.new(result)
+  return setmetatable({ sb = result.sb, result = result, env = result.sb.env }, Engine)
+end
+
+function Engine:W() return self.env.WoWPro end
+
+function Engine:fire(event, ...)
+  local sb = self.sb
+  sb:call(sb.frames.fire, sb.frames, event, ...)
+end
+
+-- Same read-only lockdown predicate as boot: the engine's own OnUpdate handler
+-- (WoWPro_Broker.lua:4840-4874) clears LockdownTimer.
+function Engine:settle()
+  local env = self.env
+  return self.sb.clock:settle({
+    max_virtual = Engine.SETTLE_MAX_VIRTUAL,
+    busy = function()
+      local w = rawget(env, "WoWPro")
+      return type(w) == "table" and w.LockdownTimer ~= nil
+    end,
+  })
+end
+
+function Engine:gid()
+  local db = rawget(self.env, "WoWProDB")
+  return db and db.char and db.char.currentguide or nil
+end
+
+-- The guide file's lines, read once per Engine (the addon is read-only input).
+function Engine:file_lines(file)
+  self._lines = self._lines or {}
+  if self._lines[file] == nil then
+    self._lines[file] = guide_source.read_lines(self.result.addon.path .. "/" .. file) or false
+  end
+  return self._lines[file] or nil
+end
+
+-- The character the engine parsed the guide for ({ race, class, faction } tokens),
+-- from the simulated player the stubs answer UnitRace/UnitClass from; nil without a world.
+function Engine:character()
+  local p = self.result.world and self.result.world.player
+  if not p then return nil end
+  return { race = p.race_token, class = p.class_token, faction = p.faction }
+end
+
+function Engine:source_index()
+  local path = self.result.addon and self.result.addon.path
+  if not path then return nil end
+  self._index = self._index or guide_source.index(path)
+  return self._index
+end
+
+function Engine:guide(gid)
+  gid = gid or self:gid()
+  local W = self:W()
+  local g = W.Guides and W.Guides[gid] or {}
+  local next_gid
+  -- NextGuide pops the guide stack when nextGID is nil (PopCurrentGuide may
+  -- mutate), so only resolve it when the registry names one (Broker:777-808).
+  if g.nextGID then
+    local ok, value = call(self.sb, W.NextGuide, W, gid)
+    if ok then next_gid = value end
+  end
+  local char = rawget(self.env, "WoWProCharDB")
+  local saved = char and char.Guide and char.Guide[gid]
+  local index = self:source_index()
+  return {
+    gid = gid, startlevel = g.startlevel, endlevel = g.endlevel, next_gid = next_gid,
+    file = index and index[gid] or nil, done = saved and saved.done,
+  }
+end
+
+-- QID is a string; several ids join with ^ or & (the engine splits on "^&":
+-- WoWPro_Parser.lua:321, 1028; Broker:254-258 QidMapReduce("^","&")).
+local function split_qids(s)
+  local out = {}
+  if type(s) ~= "string" then return out end
+  for part in s:gmatch("[^%^&]+") do
+    local n = tonumber(part)
+    if n then out[#out + 1] = n end
+  end
+  return out
+end
+
+-- Ruling Z: actions whose qids fall back to the ACTIVE tag. The engine fills QID
+-- from ACTIVE only when the step has a QO (WoWPro_Parser.lua:834-837), so an
+-- ACTIVE-only K/C/l/B/U step (e.g. `K Vagash|ACTIVE|314|L|3627|`) has no QID; the
+-- quest it works on is still the ACTIVE one.
+Engine.ACTIVE_FALLBACK = guide_source.ACTIVE_FALLBACK
+
+-- The step's quest ids: QID, else ACTIVE for the fallback actions.
+function Engine.qids_of(action, qid, active)
+  local qids = split_qids(qid)
+  if #qids == 0 and Engine.ACTIVE_FALLBACK[action] then qids = split_qids(active) end
+  return qids
+end
+
+function Engine:step(i)
+  local W = self:W()
+  local qids = Engine.qids_of(W.action and W.action[i], W.QID and W.QID[i], W.active and W.active[i])
+  local tags = {}
+  for _, key in ipairs(Engine.TAG_KEYS) do
+    local arr = W[key]
+    if type(arr) == "table" and arr[i] ~= nil then tags[key] = copy(arr[i]) end
+  end
+  local gid = self:gid()
+  local step = {
+    index = i, gid = gid, action = W.action and W.action[i], name = W.step and W.step[i],
+    qid = W.QID and W.QID[i], qids = qids, tags = tags,
+  }
+  local index = self:source_index()
+  local file = index and index[gid]
+  -- occurrence: the n-th engine step of this guide with the same action, name and
+  -- first qid. The engine's arrays hold only the lines it loaded for this character
+  -- (WoWPro_Parser.lua:1209-1212), so line_in skips the lines the character's
+  -- C|/R|/FACTION| exclude (Ruling AA). step.ordinal is the matched line's
+  -- character-independent source ordinal (the findings grouping key); without a
+  -- source line it falls back to the engine occurrence.
+  local occurrence = 1
+  for j = 1, i - 1 do
+    if W.action[j] == step.action and W.step[j] == step.name
+      and Engine.qids_of(W.action[j], W.QID and W.QID[j], W.active and W.active[j])[1] == qids[1] then
+      occurrence = occurrence + 1
+    end
+  end
+  step.ordinal = occurrence
+  if file then
+    local line, ordinal = guide_source.line_in(self:file_lines(file), step, occurrence, self:character())
+    step.line = line
+    if ordinal then step.ordinal = ordinal end
+  end
+  return step
+end
+
+-- The raw guide source line of a step (nil without one): the driver's actions read
+-- tags the engine does not parse (B, Ruling M) from it.
+function Engine:source_line(step)
+  local index = self:source_index()
+  local file = index and index[step.gid or self:gid()]
+  if not file or not step.line then return nil end
+  local lines = self:file_lines(file)
+  return lines and lines[step.line] or nil
+end
+
+-- The newest error the sandbox recorded (the failed call put it there).
+function Engine:last_error()
+  local errs = self.sb.errors
+  local e = errs and errs[#errs]
+  return e and e.msg or "engine call failed"
+end
+
+-- Returns the count, or nil, err when the addon call raised. A failed call must
+-- never read as 0 (that would treat a sticky row as the current step).
+function Engine:sticky_count()
+  local W = self:W()
+  local ok, n = call(self.sb, W.GetActiveStickyCount, W)
+  if not ok then return nil, self:last_error() end
+  return n or 0
+end
+
+-- The step the engine itself treats as current: the first row after the sticky
+-- rows (WoWPro_Events.lua:742, 752, 776, 786). Returns nil when there is none,
+-- or nil, err when the sticky-count call failed.
+function Engine:current()
+  local W = self:W()
+  local sticky, err = self:sticky_count()
+  if not sticky then return nil, err end
+  local row = W.rows[sticky + 1]
+  return row and row.index and self:step(row.index) or nil
+end
+
+function Engine:rows()
+  local W = self:W()
+  local sticky, err = self:sticky_count()
+  if not sticky then return nil, err end
+  local out = {}
+  for n, row in ipairs(W.rows) do
+    local visible = row.IsVisible == nil or row:IsVisible()
+    if visible and row.index then
+      local s = self:step(row.index)
+      s.sticky = n <= sticky
+      out[#out + 1] = s
+    end
+  end
+  return out
+end
+
+function Engine:num_steps()
+  local W = self:W()
+  local n = 0
+  for k in pairs(W.action or {}) do if type(k) == "number" and k > n then n = k end end
+  return n
+end
+
+-- gid defaults to the current guide; the driver passes the guide it is closing
+-- (WoWProCharDB.Guide[gid].completion outlives the switch to the next guide).
+function Engine:completed(i, gid)
+  gid = gid or self:gid()
+  local char = rawget(self.env, "WoWProCharDB")
+  local saved = char and char.Guide and char.Guide[gid]
+  return saved and saved.completion and saved.completion[i] and true or false
+end
+
+function Engine:why(i)
+  local why = self:W().why
+  return why and why[i] or nil
+end
+
+-- Player equivalent of right-clicking the step (WoWPro_Broker.lua:3857).
+-- Returns true, or false, err when the addon raised (the error is also in
+-- sb.errors; the driver records it as a finding and carries on).
+function Engine:complete_manual(i)
+  local W = self:W()
+  if not call(self.sb, W.CompleteStep, i, "Right-Click") then return false, self:last_error() end
+  return true
+end
+
+-- Same return contract as complete_manual.
+function Engine:update_guide()
+  local W = self:W()
+  if not call(self.sb, W.UpdateGuide, W, "sim:level") then return false, self:last_error() end
+  return true
+end
+
+-- The engine's own rank lookup for the current guide (WoWPro_Broker.lua:602-618).
+function Engine:rank()
+  local W = self:W()
+  local ok, rank = call(self.sb, W.GuideRank, self:gid())
+  if not ok then return nil, self:last_error() end
+  return rank
+end
+
+return Engine

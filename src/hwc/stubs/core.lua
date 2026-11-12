@@ -2,6 +2,10 @@
 -- the client, never what the addon "should" see.
 local M = {}
 
+-- Client global ERR_NEWTAXIPATH (quoted at WoWPro_AutoComplete.lua:96); AutoCompleteGetFP
+-- compares UI_INFO_MESSAGE's msg to it (:98). The driver fires the same string.
+M.ERR_NEWTAXIPATH = "New flight path discovered!"
+
 local function read_toc_field(cfg, name, field)
   local f = io.open(cfg.addon_path .. "/" .. name .. "/" .. name .. ".toc", "rb")
   if not f then return nil end
@@ -126,8 +130,20 @@ function M.install(sb, cfg)
     local link = "|cffffffff|Hitem:" .. id .. "::::::::1:::::::|h[" .. it.name .. "]|h|r"
     return it.name, link, 1, 1, 0, "", "", 1, "", QUESTION_MARK_ICON, 0
   end
-  -- WoWPro_Broker.lua:3341 (IsPlayerSpell)
-  env.IsPlayerSpell = function(id) return player().spells[id] == true end
+  -- WoWPro_CompatUtil.lua:342-348 (C_Item_GetItemIconByID prefers the GetItemIcon global), called
+  -- by RowUpdate.lua:529,553 and Broker.lua:1370,1438 for U/* item buttons. The icon is only a
+  -- texture; catalog items get the question-mark icon, unknown ids nil (as an invalid id does).
+  local function item_icon(id)
+    local catalog = sb.world.catalog
+    local it = catalog and tonumber(id) and catalog:item(tonumber(id))
+    return it and QUESTION_MARK_ICON or nil
+  end
+  env.GetItemIcon = item_icon
+  env.C_Item.GetItemIconByID = item_icon
+  -- WoWPro_Broker.lua:3341 (IsPlayerSpell): spellID comes from a (";"):split of the SPELL tag
+  -- (:3332), so it is a string; the client API coerces numeric strings.
+  env.IsPlayerSpell = function(id) return player().spells[tonumber(id)] == true end
+  env.ERR_NEWTAXIPATH = M.ERR_NEWTAXIPATH
   -- WoW client GetBindLocation: the hearth location text, nil when unbound
   env.GetBindLocation = function() local b = player().bind; return b and b.name or nil end
 
@@ -171,6 +187,11 @@ function M.install(sb, cfg)
       return { mapID = m.mapID, name = m.name, mapType = m.mapType, parentMapID = m.parentMapID }
     end,
     GetBestMapForUnit = function() return player().map_id end,
+    -- WoWPro_Broker.lua:2559 (IZ tag with a numeric id). The catalog has no AreaTable, so every id
+    -- answers nil as an unknown one does; the uiMapID comparison on the same line still applies.
+    -- Valid only while the numeric IZ ids on the played path are uiMapIDs (e.g. 12_20_Eastern_Kingdom
+    -- :315 IZ|-1455): an IZ holding an AreaTable id would need real area names here.
+    GetAreaInfo = function() return nil end,
     GetPlayerMapPosition = function()
       return { GetXY = function() local p = player(); return p.x, p.y end }
     end,
@@ -206,6 +227,35 @@ function M.install(sb, cfg)
   env.IsInInstance = function() return false, "none" end
   -- WoWPro.lua:1120 (ShouldCombatHide). Out of combat.
   env.UnitAffectingCombat = function() return false end
+  -- WoWPro_AutoComplete.lua:474,507, WoWPro_Events.lua:842,853, WoWPro_Mapping.lua:106. The driver
+  -- performs an F step as an arrival (actions.lua perform_travel), never a flight in progress.
+  env.UnitOnTaxi = function() return false end
+
+  -- The Classic taxi map (WoWPro_AutoComplete.lua:9-30 RecordTaxiLocations and :32-52 TakeTaxiClassic,
+  -- both on TAXIMAP_OPENED, WoWPro_Events.lua:814-825; AutoSelect defaults true, WoWPro.lua:490-492).
+  -- Nodes are the player's learned flight points in sorted name order, all reachable; the driver
+  -- already moves the player on an F step, so TakeTaxiNode only records the chosen node.
+  local function taxi_nodes()
+    local names = {}
+    for name in pairs(player().flight_points) do names[#names + 1] = name end
+    table.sort(names)
+    return names
+  end
+  sb.taxi_taken = sb.taxi_taken or {}
+  env.NumTaxiNodes = function() return #taxi_nodes() end
+  env.TaxiNodeName = function(i) return taxi_nodes()[i] end
+  env.TaxiNodeGetType = function(i) return taxi_nodes()[i] and "REACHABLE" or "NONE" end
+  env.GetNumRoutes = function(i) return taxi_nodes()[i] and 1 or 0 end
+  env.TaxiGetNodeSlot = function(i) return i end
+  env.TakeTaxiNode = function(i) sb.taxi_taken[#sb.taxi_taken + 1] = taxi_nodes()[i] end
+  env.IsMounted = function() return false end
+  env.Dismount = function() end
+
+  -- WoWPro_CompatUtil.lua:231-237 (GetItemCooldown falls back to C_Container.GetItemCooldown), read by
+  -- the U-step item button (RowUpdate.lua:555). The world models no cooldowns: start 0, duration 0, enabled true.
+  env.C_Container = trap(sb, "C_Container", {
+    GetItemCooldown = function() return 0, 0, true end,
+  })
 
   -- WoWPro_Trade.lua:439-476 (UpdateTradeSkills, Forever/Retail path) via WoWPro_Events.lua:282, backed by player.skills.
   -- Parent skill-line ids from the Forever WoWPro.ProfessionSkillLines table (WoWPro_Trade.lua:27-52).
@@ -256,8 +306,14 @@ function M.install(sb, cfg)
   -- so a missing global aborts every completion). Client returns willPlay; headless plays nothing.
   env.PlaySoundFile = function() return true end
   -- WoWPro_Events.lua:689, :743, :753, :787 (compared with == to the step name). GetTitleText is the open
-  -- NPC quest dialog's title; the harness opens no dialog (no QUEST_DETAIL/QUEST_COMPLETE), so "".
-  env.GetTitleText = function() return "" end
+  -- NPC quest dialog's title: the catalog name of world.dialog's quest, "" with no dialog open.
+  -- Reads sb.world per call, never a captured copy.
+  env.GetTitleText = function()
+    local w = sb.world
+    local d = w and w.dialog
+    local q = d and w.catalog and w.catalog:quest(d.qid)
+    return q and q.name or ""
+  end
 
   -- FrameXML constant. WoWPro_Widgets.lua:510 (CreateScrollbar border colour)
   env.TOOLTIP_DEFAULT_COLOR = { r = 1, g = 1, b = 1 }

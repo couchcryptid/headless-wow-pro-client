@@ -11,9 +11,10 @@ function M.install(sb)
   local function log() return sb.world.log end
   local function entry_at(i) return log():entries()[i] end
 
+  -- have is the log's own read (Ruling Z: an item objective is the bag count).
   local function objective(e, i)
     local obj = e.quest.objectives[i]
-    local have = e.have[i]
+    local have = log():have(e.id, i)
     return {
       text = (obj.text or "") .. ": " .. have .. "/" .. obj.count,
       type = OBJECTIVE_TYPE[obj.kind] or "object",
@@ -72,8 +73,9 @@ function M.install(sb)
     IsComplete = function(qid) return log():is_complete(qid) end,
     -- CompatUtil:184 (QuestLog_IsComplete)
     IsFailed = function() return false end,
-    -- CompatUtil:194 (QuestLog_IsQuestFlaggedCompleted)
-    IsQuestFlaggedCompleted = function(qid) return log().history[qid] == true end,
+    -- CompatUtil:194 (QuestLog_IsQuestFlaggedCompleted); callers pass raw WoWPro.QID[qidx]
+    -- strings (AutoComplete.lua:522) and split prereq ids (Broker.lua:2275), so coerce.
+    IsQuestFlaggedCompleted = function(qid) return log().history[tonumber(qid)] == true end,
     -- CompatUtil:201 (QuestLog_IsQuestFlaggedCompletedOnAccount)
     IsQuestFlaggedCompletedOnAccount = function() return false end,
     -- CompatUtil:204 (ForAccount fallback)

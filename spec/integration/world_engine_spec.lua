@@ -96,7 +96,7 @@ describe("world + real engine", function()
   end)
 
   for _, who in ipairs({ { "Dwarf", "WARRIOR" }, { "Gnome", "MAGE" } }) do
-    it("gives identical events, engine snapshots and errors in two processes: " .. who[1] .. " " .. who[2], function()
+    it("gives identical events, engine snapshots and errors in two processes: " .. who[1] .. " " .. who[2] .. " #slow", function()
       local a = events_in_process(who[1], who[2])
       local b = events_in_process(who[1], who[2])
       assert.matches("quest_turn_in", a)

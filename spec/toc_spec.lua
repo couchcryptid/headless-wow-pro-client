@@ -84,7 +84,12 @@ describe("toc.files (real addon)", function()
     local e = find(entries, "WoWPro_Leveling/Forever/Alliance/01_12_Dun_Morogh.lua")
     assert.truthy(e)
     assert.is_false(e.skipped)
-    assert.truthy(find(entries, "WoWPro_Leveling/Forever/Alliance/14_24_Dungeon_Deadmines.lua"))
+    -- Guide-specific toc assertions must not depend on files the guides team toggles
+    -- in Guides.xml (a3df10408 commented out 14_24_Dungeon_Deadmines.lua on some
+    -- branches): assert on a chain guide every branch lists.
+    local ek = find(entries, "WoWPro_Leveling/Forever/Alliance/12_20_Eastern_Kingdom.lua")
+    assert.truthy(ek)
+    assert.is_false(ek.skipped)
     assert.is_nil(find(entries, "WoWPro_Leveling/Forever/Alliance/15_24_Dungeon_Wailing_Caverns.lua"))
   end)
 end)

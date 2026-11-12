@@ -1,0 +1,21 @@
+{"quests": {
+  "179": {"name": "Fixture Outfitters", "level": 1, "required_level": 1, "xp": 80,
+          "objectives": [{"kind": "item", "ids": [5001], "count": 2, "text": "Fixture Pelt"}], "source": "invented fixture"},
+  "180": {"name": "Fixture Outfitters Alt", "level": 1, "required_level": 1, "xp": 80, "objectives": [], "source": "invented fixture"},
+  "92001": {"name": "Fixture Human Only", "level": 1, "required_level": 1, "xp": 50, "races": ["Human"], "objectives": [], "source": "invented fixture"},
+  "92002": {"name": "Fixture Level Three", "level": 3, "required_level": 3, "xp": 50, "objectives": [], "source": "invented fixture"},
+  "92003": {"name": "Fixture Two Kills", "level": 1, "required_level": 1, "xp": 50,
+            "objectives": [{"kind": "npc", "ids": [2001], "count": 2, "text": "Fixture Giver"},
+                           {"kind": "npc", "ids": [2002], "count": 6, "text": "Fixture Taker"}], "source": "invented fixture"},
+  "92004": {"name": "Fixture Big Reward", "level": 1, "required_level": 1, "xp": 2000, "objectives": [], "source": "invented fixture"},
+  "92005": {"name": "Fixture Errand", "level": 1, "required_level": 1, "xp": 50,
+            "objectives": [{"kind": "other", "ids": [], "count": 1, "text": "Do it"}], "source": "invented fixture"},
+  "92006": {"name": "Fixture Mage Only", "level": 1, "required_level": 1, "xp": 50, "classes": ["MAGE"], "objectives": [], "source": "invented fixture"},
+  "92007": {"name": "Fixture Needs Prior", "level": 1, "required_level": 1, "xp": 50, "pre_single": [92004], "objectives": [], "source": "invented fixture"},
+  "92008": {"name": "Fixture Pack Run", "level": 1, "required_level": 1, "xp": 50,
+            "objectives": [{"kind": "item", "ids": [5002], "count": 8, "text": "Fixture Fang"}], "source": "invented fixture"},
+  "92009": {"name": "Fixture Human Level Three", "level": 3, "required_level": 3, "xp": 50, "races": ["Human"], "objectives": [], "source": "invented fixture"},
+  "92010": {"name": "Fixture Ribs And Malt", "level": 1, "required_level": 1, "xp": 50,
+            "objectives": [{"kind": "item", "ids": [5010], "count": 6, "text": "Fixture Rib"},
+                           {"kind": "item", "ids": [5011], "count": 1, "text": "Fixture Malt"}], "source": "invented fixture"}
+ }}

@@ -25,6 +25,73 @@ describe("cli", function()
     assert.matches("Usage", etext())
   end)
 
+  it("run without --class exits 2 with usage", function()
+    local out, _ = capture()
+    local err, etext = capture()
+    assert.equal(2, cli.main({ "run", "--race", "Dwarf" }, out, err))
+    assert.matches("Usage", etext())
+    assert.matches("%-%-class", etext())
+  end)
+
+  it("run with an unknown variant exits 2", function()
+    local out, _ = capture()
+    local err, etext = capture()
+    assert.equal(2, cli.main({ "run", "--class", "WARRIOR", "--variant", "nope" }, out, err))
+    assert.matches("variant", etext())
+  end)
+
+  it("run with a race outside the scope exits 2", function()
+    local out, _ = capture()
+    local err, etext = capture()
+    assert.equal(2, cli.main({ "run", "--race", "Orc", "--class", "WARRIOR" }, out, err))
+    assert.matches("race not in scope", etext())
+  end)
+
+  -- Final review minor 8: a --date like ../x would change the write path.
+  it("run and matrix reject a --date that is not YYYY-MM-DD with status 2", function()
+    for _, args in ipairs({
+      { "run", "--class", "WARRIOR", "--date", "../x" },
+      { "matrix", "--date", "2026-11-1" },
+    }) do
+      local out, _ = capture()
+      local err, etext = capture()
+      assert.equal(2, cli.main(args, out, err))
+      assert.matches("%-%-date", etext())
+    end
+  end)
+
+  -- Final review minor 6: each command states its race default.
+  it("USAGE states the per-command race defaults", function()
+    local out, text = capture()
+    cli.main({ "--help" }, out)
+    assert.matches("boot default Human", text())
+    assert.matches("run default Dwarf", text())
+  end)
+
+  -- Final review minor 7: no combos means no findings file, not an "Addon: nil" header.
+  it("matrix with no combos exits 2 with a message and writes nothing", function()
+    local matrix = require("hwc.driver.matrix")
+    local real = matrix.combos
+    matrix.combos = function() return {} end
+    local out, _ = capture()
+    local err, etext = capture()
+    local dir = os.tmpname()
+    os.remove(dir)
+    local ok, status = pcall(cli.main, { "matrix", "--races", "Dwarf", "--out", dir }, out, err)
+    matrix.combos = real
+    assert.is_true(ok, tostring(status))
+    assert.equal(2, status)
+    assert.matches("no combos", etext())
+    assert.is_nil(lfs.attributes(dir, "mode"))
+  end)
+
+  it("matrix --races Orc exits 2 (race not in scope)", function()
+    local out, _ = capture()
+    local err, etext = capture()
+    assert.equal(2, cli.main({ "matrix", "--races", "Orc" }, out, err))
+    assert.matches("race not in scope", etext())
+  end)
+
   local PIN_DIR = "local/questie/d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc"
   if present and lfs.attributes(PIN_DIR, "mode") == "directory" then
     it("quest prints the quest and its sources as sorted JSON", function()
