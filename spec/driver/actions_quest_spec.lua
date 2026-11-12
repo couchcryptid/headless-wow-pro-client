@@ -21,6 +21,14 @@ describe("actions.perform: A", function()
     assert.is_nil(w.dialog)
   end)
 
+  it("puts the quest's source item in the bags on accept and fires BAG_UPDATE", function()
+    local ctx, E, w = setup()
+    local o = actions.perform(ctx, step("A", { 1010 }))
+    assert.are.equal("acted", o.kind)
+    assert.are.equal(1, w.player:item_count(5002))
+    assert.are.same({ "QUEST_ACCEPTED", "QUEST_LOG_UPDATE", "BAG_UPDATE" }, names(E))
+  end)
+
   it("holds world.dialog = {qid, detail} while the accept events fire", function()
     local ctx, E, w = setup()
     local seen

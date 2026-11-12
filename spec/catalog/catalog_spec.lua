@@ -165,6 +165,11 @@ describe("catalog (fixtures)", function()
     assert.is_nil(cat:quest(1007).completed_by_training)
   end)
 
+  it("carries QuestieDB sourceItemId (the item the starter hands over) as source_item", function()
+    assert.are.equal(5002, cat:quest(1010).source_item)
+    assert.is_nil(cat:quest(1001).source_item)
+  end)
+
   it("gives Camping 101: Cooking completed_by_training = Cooking and no requires_skill", function()
     local q = cat:quest(1009)
     assert.are.equal("Camping 101: Cooking", q.name)

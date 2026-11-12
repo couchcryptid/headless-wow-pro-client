@@ -13,6 +13,7 @@ QuestieDB.questKeys = {
     ['objectives'] = 8,
     ['preQuestGroup'] = 9,
     ['preQuestSingle'] = 10,
+    ['sourceItemId'] = 11,
 }
 
 QuestieDB.questData = [[return {
@@ -24,4 +25,5 @@ QuestieDB.questData = [[return {
 [1007] = {"Fixture Disagree",{{2001}},{{2002}},1,2,1,nil,nil,nil,nil},
 [1008] = {"Camping 101: Fishing",{{2001}},{{2002}},1,5,nil,nil,nil,nil,nil},
 [1009] = {"Camping 101: Cooking",{{2001}},{{2002}},1,5,nil,nil,nil,nil,nil},
+[1010] = {"Fixture Provided Item",{{2001}},{{2002}},1,5,nil,nil,nil,nil,nil,5002},
 }]]

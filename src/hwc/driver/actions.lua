@@ -230,6 +230,16 @@ local function perform_accept(ctx, step, out)
   fire(ctx, out, "QUEST_ACCEPTED", log_index(w, qid), qid)
   fire(ctx, out, "QUEST_LOG_UPDATE")
   w.dialog = nil
+  -- A quest whose starter hands over an item (catalog source_item, QuestieDB sourceItemId) puts it
+  -- in the bags with the accept: e.g. Elemental Bracers (1016) gives the Divining Scroll (5456)
+  -- that its U step uses, and the engine shows a U step only while the U item is in the bags
+  -- (WoWPro_Broker.lua NextStep, SelectItemToUse). BAG_UPDATE after the accept events: the in-game
+  -- order of the item push against QUEST_ACCEPTED is not confirmed.
+  local src = w.log:get(qid).quest.source_item
+  if src and w.player:item_count(src) == 0 then
+    w.player:add_item(src, 1)
+    fire(ctx, out, "BAG_UPDATE", 0)
+  end
 
   -- Camping 101 (spec §5.2): the client abstracts levelling the profession and
   -- turns the quest in at once, unless the guide has its own T step or the

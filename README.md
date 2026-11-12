@@ -6,7 +6,9 @@ The addon is read-only input, read from a configured path
 
 - Run: `bin/hwc --help`
 - Test: `~/.luarocks/bin/busted` (the integration specs are pending when the
-  addon checkout or the local catalog is absent)
+  addon checkout or the local catalog is absent). Specs tagged `#slow` (full
+  guide runs, cross-process determinism, the anchors) are skipped by default;
+  run them with `~/.luarocks/bin/busted --tags=slow`.
 
 ## Booting the addon
 
@@ -80,6 +82,44 @@ SHAMAN, WARRIOR and Gnome MAGE, PRIEST, ROGUE, WARLOCK, WARRIOR: 11 classes,
 | `lw-skin` | Leatherworking, Skinning |
 | `eng-ench` | Engineering, Enchanting |
 | `tailoring` | Tailoring |
+
+## Addon worktrees and Red/Green anchors
+
+The anchor specs run the client against results known from the addon's own
+history (design spec §10). They read pinned, detached worktrees under
+`local/addon/` (git-ignored), never `~/Projects/WoW-Pro-Guides` itself: that
+checkout's branch is what the game's AddOns folder loads.
+
+```sh
+tools/addon-worktree.sh main                       # local/addon/main
+tools/addon-worktree.sh fix/forever-prereq-gates   # local/addon/fix-forever-prereq-gates
+tools/addon-worktree.sh fix/u-step-loot-result     # local/addon/fix-u-step-loot-result
+tools/addon-worktree.sh <ref> /other/addon/checkout
+```
+
+The script runs `git worktree add --detach` in the addon repo (this writes
+worktree metadata into its `.git`), names the directory after the ref with `/`
+turned into `-`, refuses an existing path and prints the path and commit. It
+never checks out, switches or resets anything in the main checkout. To move a
+worktree to a newer commit, remove it first with
+`git -C ~/Projects/WoW-Pro-Guides worktree remove <path>`.
+
+`spec/integration/anchors_spec.lua` (`#slow`) plays a full Dwarf Warrior
+baseline to level 25 on each worktree. Each anchor is pending while its
+worktree or the pinned catalog is absent.
+
+| Anchor | Red (`main`) | Green |
+|---|---|---|
+| #3535 Camping 101: Cooking prereq gates | `never-shown-accept` for Tools for Steelgrill (400), Flintfire's Shipment (98321), Farsen's Watch (96392) in `01_12_Dun_Morogh.lua` | absent on `fix/forever-prereq-gates` |
+| #3554 U step gated on its `L` result | the `U` step for QID 1016 with `U\|5456` (`19_25_Alliance.lua:447`) is never shown | shown on `fix/u-step-loot-result` |
+| Dungeons | one `engine-dungeon-skip` root whose causes include `19_25_Alliance.lua` `DUNGEON` accepts | n/a |
+| Harness completeness | zero harness `lua-error` findings in the full run | n/a |
+
+The spec prints what it doesn't assert: each Red why, the `never-shown-accept`
+totals on both #3535 branches, how many of 19_25's 9 `DUNGEON` accepts sit
+under the root, and the `missing-global` list. "Farsen's Watch why names
+96629" stays pending: the engine's why names only the first unmet prereq of
+`PRE|314&96408`, which is 96408.
 
 ## World and catalog
 
@@ -179,6 +219,8 @@ boot.
 | `PlayerGetTimerunningSeasonID`, `C_Seasons`, `C_PetBattles`, `C_Covenants`, `C_QuestLine`, `C_QuestInfoSystem`, `C_Garrison`, `SetSuperTrackedQuestID` | guarded probes for other flavors |
 | `LE_EXPANSION_*` (12 constants) | feed `guide.expansion` (`WoWPro_GuideRegistry.lua:309`), read only by the guide-list UI |
 | `FACTION_HORDE`, `FACTION_ALLIANCE`, `OKAY`, `CANCEL`, `GameFontNormal`, `GameFontNormalSmall`, `BackdropTemplateMixin` | UI strings, fonts and templates |
+| `GetItemCooldown` | probed by `WoWPro_CompatUtil.lua:232`; Forever uses `C_Container.GetItemCooldown` |
+| `issecretvalue` | guarded probe (`WoWPro_AutoComplete.lua:118`, `:131`, `:432`) |
 | `GetBindLocation` | guarded probe (`WoWPro_Events.lua:249`). The hearth location is player state for a later plan, so `WoWProDB.char.hearth` stays unset. |
 
 Frame methods the mock doesn't model show up as `Frame:<Name>`, and

@@ -23,7 +23,7 @@ local ANY_RACES = { [0] = true, [4294967373] = true, [77] = true, [2047] = true 
 -- Quest fields a supplement entry may set.
 local SUPPLEMENT_FIELDS = {
   "name", "level", "required_level", "xp", "races", "classes", "pre_single", "pre_group",
-  "objectives", "starter", "ender", "requires_skill", "completed_by_training",
+  "objectives", "starter", "ender", "requires_skill", "completed_by_training", "source_item",
 }
 
 -- Python's `a or b` treats 0 as missing; the old simulator's data relies on it.
@@ -283,6 +283,8 @@ local function build_quest(self, id)
   quest.objectives = objectives_for(self, id, q, notes)
   quest.starter, quest.starter_kind = starter_of(q.startedBy)
   quest.ender, quest.ender_kind = starter_of(q.finishedBy)
+  -- QuestieDB sourceItemId: "item provided by quest starter" (the client puts it in the bags on accept).
+  quest.source_item = nz(q.sourceItemId)
 
   -- Camping 101 profession quests (design spec §3, the user in game 2026-11-11;
   -- Wowhead progress text): "Camping 101: <Prof>" ends at the trainer and gates
