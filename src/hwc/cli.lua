@@ -3,11 +3,13 @@
 local USAGE = [[
 Usage: hwc [-h|--help]
        hwc boot [--race RACE] [--class CLASS] [--addon PATH] [--json]
+       hwc quest <id> [--addon PATH]
 
 Headless WoW-Pro client: loads the real WoW-Pro addon under LuaJIT.
 
 Commands:
   boot          Boot the addon to the first shown steps and print them
+  quest         Print a quest from the catalog, with its sources, as JSON
 
 Options:
   -h, --help    Show this help
@@ -97,6 +99,20 @@ local function run_boot(opts, out)
   return 0
 end
 
+local function run_quest(id, addon, out, err)
+  local config = require("hwc.config")
+  local catalog = require("hwc.catalog")
+  local cfg = config.load({ addon_path = addon })
+  local cat = catalog.load(cfg)
+  local quest = cat:quest(id)
+  if not quest then
+    err:write("hwc: quest ", id, " is in no catalog source\n")
+    return 1
+  end
+  out:write(require("hwc.json").encode({ quest = quest, sources = cat.sources }, { indent = true }), "\n")
+  return 0
+end
+
 function M.main(args, out, err)
   out, err = out or io.stdout, err or io.stderr
   args = args or {}
@@ -113,6 +129,29 @@ function M.main(args, out, err)
       return 2
     end
     local ok, res = pcall(run_boot, opts, out)
+    if not ok then
+      err:write(tostring(res), "\n")
+      return 1
+    end
+    return res
+  end
+  if args[1] == "quest" then
+    local id = tonumber(args[2] or "")
+    local addon
+    local i = 3
+    while id and i <= #args do
+      if args[i] == "--addon" and args[i + 1] then
+        addon = args[i + 1]
+        i = i + 2
+      else
+        id = nil
+      end
+    end
+    if not id then
+      err:write("hwc: quest needs a numeric id\n", USAGE)
+      return 2
+    end
+    local ok, res = pcall(run_quest, id, addon, out, err)
     if not ok then
       err:write(tostring(res), "\n")
       return 1

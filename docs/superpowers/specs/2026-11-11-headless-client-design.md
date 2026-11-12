@@ -117,14 +117,21 @@ Its job is to let the addon load and run as if it were in the game, with the WoW
   - *Amended 2026-11-11 during Plan 1:* Widgets and CurrentGuide were taken off the skip list. `WoWPro_Frames.lua:1767` builds every row from Widgets constructors, and `WoWPro_Broker.lua:1880` reads `CurrentGuideFrame:IsVisible()` on every update. The skip list is configuration, and each entry records why it's skipped.
 - **Stand-ins for what skipped files define and the engine calls:** `WoWPro.RefreshConfig` and `WoWPro.SetDefaults`, which `OnInitialize`'s AceDB callbacks require. Without them CallbackHandler errors (`CallbackHandler-1.0.lua:101–102`). Also `WoWPro:InitializeTutorial` and `QueueTutorial`, `CreateConfig`, and minimap and binding calls. Each is a no-op that logs, kept in one file so they're easy to review.
 - **Guides:** load all Forever `Alliance` and `Neutral` `Guides.xml` files as the TOC does. Faction filtering is the engine's (`WoWPro_GuideRegistry.lua:266`).
-- **Saved variables:** start each run with a fresh character: `WoWProCharDB = { QID2Guide = {} }` before the guide files load, and AceDB creating the rest. Pin `WoWProCharDB.DebugLevel = 0`, because the default of 1 turns `;` comment lines into steps (`WoWPro_Parser.lua:691`) and changes step indices. Seed `math.random` (`SelectHearthstone`).
+- **Saved variables:** start each run with a fresh character and no pre-seeded saved variables (per §4.3, `OnInitialize` creates the sub-tables such as `QID2Guide`). Pin `WoWProCharDB.DebugLevel = 0`, because the default of 1 turns `;` comment lines into steps (`WoWPro_Parser.lua:691`) and changes step indices. Seed `math.random` (`SelectHearthstone`).
 
 ### 4.3 Boot sequence
 
+The client loads addons one at a time: an addon's files run, its SavedVariables are assigned, then `ADDON_LOADED` fires for that addon, and only then does the next addon's TOC load. The final Plan 1 review found that loading both TOCs before firing either `ADDON_LOADED` did not match this (the Leveling module's AceAddon `baseName` came out as `"WoWPro"`), so the order is:
+
 1. Install stubs, the virtual clock, frames and the event bus, then set the character and world.
-2. Load the libraries, then the addon files in TOC order.
-3. Fire `ADDON_LOADED("WoWPro")` and `ADDON_LOADED("WoWPro_Leveling")`, set `IsLoggedIn()` to true, and fire `PLAYER_LOGIN`. AceAddon then runs `OnInitialize` and `OnEnable` for the addon and its module.
-4. Fire `PLAYER_ENTERING_WORLD`, then `settle()` until the lockdown releases. `WoWPro.LoadGuide()` then loads the race's start guide through the real Leveling `OnEnable` path.
+2. Load the WoWPro TOC files (libraries first, then the addon files in TOC order), then install the UI stand-ins.
+3. Assign WoWPro's SavedVariables: `WoWProData = nil` (fresh account) and `WoWProCharDB = { DebugLevel = 0 }` (a saved setting, §4.2). `OnInitialize` creates the sub-tables, as in the client.
+4. Fire `ADDON_LOADED("WoWPro")`.
+5. Load the WoWPro_Leveling TOC files, then fire `ADDON_LOADED("WoWPro_Leveling")`.
+6. Set `IsLoggedIn()` to true and fire `PLAYER_LOGIN`. AceAddon then runs `OnInitialize` and `OnEnable` for the addon and its module.
+7. Fire `PLAYER_ENTERING_WORLD(true, false)`, then `settle()` until the lockdown releases. `WoWPro.LoadGuide()` then loads the race's start guide through the real Leveling `OnEnable` path.
+
+`boot.run` records the fired events in `result.addon_events`, and calls the optional `cfg.on_phase(name, sb)` after each step so a spec can inspect the sandbox between steps.
 
 **Open for the builder:** let the real `OnEnable` run behind frame stand-ins, or replace it with the minimal equivalent discovery describes (tag tables, `Nickname2Guide`, `Leveling:RegisterGuide` per guide). Prefer the real `OnEnable`, and fall back only for parts that can't run headless. Record which parts fell back.
 

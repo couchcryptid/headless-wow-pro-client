@@ -1,0 +1,102 @@
+local config = require("hwc.config")
+local sandbox = require("hwc.sandbox")
+local stubs = require("hwc.stubs.core")
+local World = require("hwc.world")
+
+local catalog = { item_id = function(_, name) if name == "Tough Wolf Meat" then return 750 end end }
+
+local function setup(tbl, cat)
+  local cfg = config.load(tbl or { race = "Dwarf", class = "WARRIOR" })
+  local sb = sandbox.new(cfg)
+  sb.world = World.new(cfg, cat, sb.clock)
+  stubs.install(sb, cfg)
+  return sb, sb.env, sb.world.player
+end
+
+describe("Player behind the stubs", function()
+  it("reads zone changes on every call", function()
+    local sb, env, p = setup()
+    p:set_zone("Ironforge", "", 1455, 0.5, 0.5)
+    assert.equal("Ironforge", env.GetZoneText())
+    assert.equal("Ironforge", env.GetRealZoneText())
+    assert.equal(1455, env.C_Map.GetBestMapForUnit("player"))
+    assert.same({ 0.5, 0.5 }, { env.C_Map.GetPlayerMapPosition(1455, "player"):GetXY() })
+    assert.equal("zone", sb.world.events[1].kind)
+  end)
+
+  it("counts items by id, numeric string and name", function()
+    local _, env, p = setup(nil, catalog)
+    p:add_item(750, 8)
+    assert.equal(8, env.GetItemCount(750))
+    assert.equal(8, env.GetItemCount("750"))
+    assert.equal(8, env.GetItemCount("Tough Wolf Meat"))
+    assert.equal(8, env.C_Item.GetItemCount(750))
+    assert.equal(0, env.GetItemCount("Unknown Thing"))
+  end)
+
+  it("gives 0 for names without a catalog", function()
+    local _, env, p = setup()
+    p:add_item(750, 8)
+    assert.equal(0, env.GetItemCount("Tough Wolf Meat"))
+  end)
+
+  it("removes items only when enough are held", function()
+    local _, _, p = setup()
+    p:add_item(750, 3)
+    assert.is_false(p:remove_item(750, 4))
+    assert.equal(3, p:item_count(750))
+    assert.is_true(p:remove_item(750, 3))
+    assert.equal(0, p:item_count(750))
+  end)
+
+  it("tracks spells, bind, flight points and level/xp", function()
+    local _, env, p = setup()
+    assert.is_false(env.IsPlayerSpell(2550))
+    p:learn_spell(2550)
+    assert.is_true(env.IsPlayerSpell(2550))
+    assert.is_nil(env.GetBindLocation())
+    p:set_bind("Kharanos", 1426)
+    assert.equal("Kharanos", env.GetBindLocation())
+    p:learn_flight_point("Ironforge")
+    assert.is_true(p.flight_points.Ironforge)
+    p.level, p.xp = 5, 12
+    assert.same({ 5, 12, 2800 }, { env.UnitLevel(), env.UnitXP(), env.UnitXPMax() })
+  end)
+
+  it("records an xp world event with the resulting level and xp", function()
+    local _, _, p = setup()
+    local events = {}
+    p._record = function(kind, f) events[#events + 1] = { kind = kind, f = f } end
+    assert.equal(1, p:add_xp(400 + 1))
+    assert.equal("xp", events[1].kind)
+    assert.same({ n = 401, level = p.level, xp = p.xp, levels = 1 }, events[1].f)
+  end)
+
+  it("reports Night Elf identity from the Alliance table", function()
+    local _, env = setup({ race = "NightElf", class = "DRUID" })
+    assert.same({ "Night Elf", "NightElf" }, { env.UnitRace() })
+  end)
+
+  it("stamps world events with the clock", function()
+    local sb, _, p = setup()
+    p:learn_spell(1)
+    assert.same({ t = sb.clock:now(), kind = "learn_spell", id = 1 }, sb.world.events[1])
+  end)
+
+  it("applies configured professions to the Trade stubs", function()
+    local _, env, p = setup({ race = "Human", class = "WARRIOR",
+      professions = { { name = "First Aid", rank = 1, max = 75 } } })
+    assert.is_true(p:knows_skill("First Aid"))
+    assert.same({ 129 }, env.C_TradeSkillUI.GetAllProfessionTradeSkillLines())
+    local info = env.C_TradeSkillUI.GetProfessionInfoBySkillLineID(129)
+    assert.same({ "First Aid", 1, 75 }, { info.professionName, info.skillLevel, info.maxSkillLevel })
+    assert.same({ 1 }, { env.GetProfessions() })
+    assert.same({ "First Aid", 0, 1, 75, 0, 0, 129, 0 }, { env.GetProfessionInfo(1) })
+  end)
+end)
+
+describe("config race scope", function()
+  it("rejects races outside the Alliance table", function()
+    assert.has_error(function() config.load({ race = "Orc" }) end, "hwc: race not in scope: Orc")
+  end)
+end)

@@ -63,6 +63,36 @@ describe("boot", function()
     assert.same({}, harness_errors(r))
   end)
 
+  it("fires addon events in client order", function()
+    assert.same({ "ADDON_LOADED:WoWPro", "ADDON_LOADED:WoWPro_Leveling", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD" },
+      dwarf.addon_events)
+  end)
+
+  it("names the Leveling module after its own addon", function()
+    assert.equal("WoWPro_Leveling", dwarf.sb.env.WoWPro.Leveling.baseName)
+  end)
+
+  it("assigns WoWProCharDB only after WoWPro's files, and loads Leveling after ADDON_LOADED(WoWPro)", function()
+    local config = require("hwc.config")
+    local cfg = config.load({ addon_path = ADDON, race = "Dwarf", class = "WARRIOR" })
+    local seen = {}
+    cfg.on_phase = function(name, sb)
+      seen[#seen + 1] = name
+      local env = sb.env
+      if name == "after_stubs" or name == "after_wowpro_files" then
+        seen[name] = rawget(env, "WoWProCharDB") == nil
+      elseif name == "after_addon_loaded_wowpro" then
+        seen[name] = type(rawget(env, "WoWProCharDB")) == "table"
+        seen.leveling_absent = rawget(env.WoWPro, "Leveling") == nil
+      end
+    end
+    require("hwc.boot").run(cfg)
+    assert.is_true(seen.after_stubs)
+    assert.is_true(seen.after_wowpro_files)
+    assert.is_true(seen.after_addon_loaded_wowpro)
+    assert.is_true(seen.leveling_absent)
+  end)
+
   it("Gnome Mage boots into Dun Morogh", function()
     local r = boot("Gnome", "MAGE")
     print_addon_errors(r)

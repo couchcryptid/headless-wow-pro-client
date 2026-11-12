@@ -10,7 +10,7 @@ describe("stubs", function()
     local cfg = config.load({ race = "Dwarf", class = "WARRIOR" })
     sb = sandbox.new(cfg)
     env = sb.env
-    stubs.install(sb, cfg, stubs.player_from(cfg))
+    stubs.install(sb, cfg)
   end)
 
   it("reports the Forever build and player identity", function()
@@ -51,6 +51,30 @@ describe("stubs", function()
     assert.same({ "hi" }, sb.chat)
   end)
 
+  it("plays sounds silently and has no quest dialog title", function()
+    assert.is_true(env.PlaySoundFile("Sound/Interface/MapPing.ogg"))
+    assert.equal("", env.GetTitleText())
+  end)
+
+  it("answers GetItemInfo from the catalog by id, numeric string or name", function()
+    sb.world.catalog = {
+      item = function(_, id) return tonumber(id) == 750 and { id = 750, name = "Tough Wolf Meat" } or nil end,
+      item_id = function(_, name) return name == "Tough Wolf Meat" and 750 or nil end,
+    }
+    local name, link, _, _, _, _, _, _, _, texture = env.GetItemInfo(750)
+    assert.equal("Tough Wolf Meat", name)
+    assert.matches("|Hitem:750:", link, 1, true)
+    assert.matches("[Tough Wolf Meat]", link, 1, true)
+    assert.is_not_nil(texture)
+    assert.equal("Tough Wolf Meat", (env.GetItemInfo("750")))
+    assert.equal("Tough Wolf Meat", (env.GetItemInfo("Tough Wolf Meat")))
+    assert.is_nil(env.GetItemInfo(1))
+  end)
+
+  it("returns nil from GetItemInfo without a catalog", function()
+    assert.is_nil(env.GetItemInfo(750))
+  end)
+
   it("returns strings for zone text and a map position", function()
     assert.is_string(env.GetSubZoneText())
     assert.is_string(env.GetZoneText())
@@ -58,11 +82,11 @@ describe("stubs", function()
   end)
 
   it("records unstubbed namespaced reads as misses", function()
-    assert.is_nil(env.C_QuestLog.GetQuestObjectives)
-    assert.is_nil(env.C_QuestLog.GetQuestObjectives)
-    assert.is_true(sb.missing["C_QuestLog.GetQuestObjectives"])
+    assert.is_nil(env.C_QuestLog.GetQuestLogRewardXP)
+    assert.is_nil(env.C_QuestLog.GetQuestLogRewardXP)
+    assert.is_true(sb.missing["C_QuestLog.GetQuestLogRewardXP"])
     local n = 0
-    for _, k in ipairs(sb.missing_order) do if k == "C_QuestLog.GetQuestObjectives" then n = n + 1 end end
+    for _, k in ipairs(sb.missing_order) do if k == "C_QuestLog.GetQuestLogRewardXP" then n = n + 1 end end
     assert.equal(1, n)
   end)
 
@@ -71,6 +95,12 @@ describe("stubs", function()
     assert.is_nil(env.C_QuestLog.GetInfo(1))
     assert.is_false(env.C_QuestLog.IsQuestFlaggedCompleted(1))
     assert.is_false(env.C_QuestLog.IsQuestFlaggedCompletedOnAccount(1))
+    assert.same({}, env.C_QuestLog.GetQuestObjectives(1))
+    assert.is_false(env.C_QuestLog.IsFailed(1))
+    assert.equal(0, env.GetNumQuestLeaderBoards(1))
+    assert.equal(0, env.GetQuestProgressBarPercent(1))
+    assert.equal(1, env.LE_QUEST_FREQUENCY_DAILY)
+    assert.same({ Default = 0, Daily = 1, Weekly = 2 }, env.Enum.QuestFrequency)
   end)
 
   it("routes a timer callback's error to the error handler and keeps running", function()

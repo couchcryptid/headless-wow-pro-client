@@ -64,7 +64,6 @@ function polyfills.install(env)
     env.format, env.strupper, env.strlower, env.strsub, env.strlen =
         string.format, string.upper, string.lower, string.sub, string.len
     env.strfind, env.strmatch, env.gsub = string.find, string.match, string.gsub
-    env.date, env.time = os.date, os.time
     env.debugstack = function()
         return debug.traceback()
     end

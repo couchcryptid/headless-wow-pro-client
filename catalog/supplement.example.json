@@ -1,0 +1,19 @@
+{
+  "quests": {
+    "12345": {
+      "source": "how this was hand-checked (e.g. Wowhead page, date)",
+      "name": "Example Quest Name",
+      "level": 20,
+      "required_level": 18,
+      "xp": 1200,
+      "races": ["Human", "Dwarf"],
+      "classes": ["WARRIOR"],
+      "pre_single": [12340],
+      "pre_group": [],
+      "objectives": [{"kind": "item", "ids": [1000], "count": 4, "text": "Example Item"}],
+      "starter": 1111,
+      "ender": 2222,
+      "requires_skill": "First Aid"
+    }
+  }
+}

@@ -71,11 +71,19 @@ function M.new(cfg)
     sb.chat[#sb.chat + 1] = table.concat(parts, " ")
   end
 
-  -- getfenv(0) / bare getfenv at a sandboxed chunk's top level is the sandbox
-  local real_getfenv = getfenv
+  -- Every way of asking for an environment answers with the sandbox: any
+  -- numeric level (0 = the global env, n = the env of the function n levels up)
+  -- and any function whose real env is the real _G (C functions, harness code).
+  local real_getfenv, real_setfenv, real_G = getfenv, setfenv, _G
   function env.getfenv(f)
-    if f == nil or f == 0 then return env end
-    return real_getfenv(f)
+    if f == nil or type(f) == "number" then return env end
+    local e = real_getfenv(f)
+    if e == real_G then return env end
+    return e
+  end
+  function env.setfenv(f, t)
+    if t == real_G then error("hwc: setfenv to real _G refused", 2) end
+    return real_setfenv(f, t)
   end
 
   -- Ace libs (e.g. CallbackHandler-1.0) build code with loadstring; compile it
@@ -94,7 +102,9 @@ function M.new(cfg)
   local function handler(msg)
     if active then return msg end
     active = true
-    sb:record(msg, "call")
+    -- every path resets the guard: a throwing record or custom handler must
+    -- not leave the handler dead for the rest of the run
+    pcall(sb.record, sb, msg, sb.frames.where or "call", debug.traceback("", 2))
     if custom then pcall(custom, msg) end
     active = false
     return msg
@@ -105,14 +115,16 @@ function M.new(cfg)
 end
 
 function Sandbox:record(err, where, tb)
+  local ok, msg = pcall(tostring, err)
+  if not ok then msg = "<error object with failing __tostring>" end
   self.errors[#self.errors + 1] = {
-    msg = tostring(err), stack = tb or debug.traceback("", 3), where = where,
+    msg = msg, stack = tb or debug.traceback("", 3), where = where,
   }
 end
 
 local function protected(sb, where, fn, ...)
   local res = { xpcall(fn, function(e)
-    sb:record(e, where, debug.traceback("", 2))
+    pcall(sb.record, sb, e, where, debug.traceback("", 2))
     return e
   end, ...) }
   if not res[1] then return false end

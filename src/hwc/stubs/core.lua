@@ -2,18 +2,6 @@
 -- the client, never what the addon "should" see.
 local M = {}
 
-local function titlecase(s) return (s:sub(1, 1):upper() .. s:sub(2):lower()) end
-
-function M.player_from(cfg)
-  return {
-    name = "Hwc", realm = "HwcRealm", race = cfg.race,
-    race_token = (cfg.race:gsub("%s", "")), class = titlecase(cfg.class),
-    class_token = cfg.class:upper(), faction = cfg.faction, sex = cfg.sex,
-    level = 1, xp = 0, xp_max = 400, zone = "Dun Morogh", subzone = "",
-    map_id = 1426, x = 0.3, y = 0.7,
-  }
-end
-
 local function read_toc_field(cfg, name, field)
   local f = io.open(cfg.addon_path .. "/" .. name .. "/" .. name .. ".toc", "rb")
   if not f then return nil end
@@ -40,14 +28,22 @@ end
 
 M.trap = trap
 
-function M.install(sb, cfg, player)
+function M.install(sb, cfg)
   local env, clock, frames = sb.env, sb.clock, sb.frames
-  player = player or M.player_from(cfg)
+  -- Every player-facing stub reads sb.world.player when called, never a captured copy.
+  sb.world = sb.world or require("hwc.world").new(cfg, nil, clock)
+  local function player() return sb.world.player end
 
   -- AceTimer-3.0.lua:30 captures GetTime and C_Timer.After as upvalues at load, so install before any library
   env.GetTime = function() return clock:now() end
   -- The client reports a timer callback's error to the error handler and keeps running.
-  local function fire(fn, ...) xpcall(fn, env.geterrorhandler(), ...) end
+  -- frames.where tags the error's origin for the handler (sandbox.lua)
+  local function fire(fn, ...)
+    local prev = frames.where
+    frames.where = "timer"
+    xpcall(fn, env.geterrorhandler(), ...)
+    frames.where = prev
+  end
   local function new_timer(delay, fn)
     local t = { cancelled = false }
     function t:Cancel() self.cancelled = true end
@@ -102,15 +98,38 @@ function M.install(sb, cfg, player)
 
   -- WoWPro_RowUpdate.lua:1302-1314 and WoWPro_Parser.lua:1075 (UnitName/UnitClass/UnitRace/GetRealmName; AceDB-3.0.lua:254-258 at load)
   -- WoWPro.lua:285 (UnitFactionGroup), :267 (UnitLevel/UnitXP), :979 (UnitXPMax); WoWPro_Broker.lua:3131 (UnitSex); WoWPro_RowUpdate.lua:1311 (GetRealmName)
-  env.UnitName = function() return player.name end
-  env.GetRealmName = function() return player.realm end
-  env.UnitClass = function() return player.class, player.class_token end
-  env.UnitRace = function() return player.race, player.race_token end
-  env.UnitFactionGroup = function() return player.faction, player.faction end
-  env.UnitSex = function() return player.sex end
-  env.UnitLevel = function() return player.level end
-  env.UnitXP = function() return player.xp end
-  env.UnitXPMax = function() return player.xp_max end
+  env.UnitName = function() return player().name end
+  env.GetRealmName = function() return player().realm end
+  env.UnitClass = function() local p = player(); return p.class, p.class_token end
+  env.UnitRace = function() local p = player(); return p.race, p.race_token end
+  env.UnitFactionGroup = function() local p = player(); return p.faction, p.faction end
+  env.UnitSex = function() return player().sex end
+  env.UnitLevel = function() return player().level end
+  env.UnitXP = function() return player().xp end
+  env.UnitXPMax = function() return player():xp_max() end
+
+  -- WoWPro_CompatUtil.lua:333-338 (C_Item_GetItemCount prefers the GetItemCount global); WoWPro_Broker.lua:940 and :953 pass item names from step text
+  local function item_count(id_or_name) return player():item_count(id_or_name) end
+  env.GetItemCount = item_count
+  env.C_Item = trap(sb, "C_Item", { GetItemCount = item_count })
+  -- WoWPro_CompatUtil.lua:325-331 (C_Item_GetItemInfo prefers the GetItemInfo global). Read by
+  -- AutoComplete.lua:210-212 (loot tracker, on every RowUpdate of an L step), Markup.lua:41,
+  -- Widgets.lua:317, Broker.lua:859: only name (1), link (2) and texture (10) are used.
+  -- Name from the catalog; nil for items it does not know, as the client does for uncached items.
+  local QUESTION_MARK_ICON = 134400 -- Interface\Icons\INV_Misc_QuestionMark file id
+  env.GetItemInfo = function(item)
+    local catalog = sb.world.catalog
+    if not catalog then return nil end
+    local id = tonumber(item) or catalog:item_id(item)
+    local it = id and catalog:item(id)
+    if not (it and it.name) then return nil end
+    local link = "|cffffffff|Hitem:" .. id .. "::::::::1:::::::|h[" .. it.name .. "]|h|r"
+    return it.name, link, 1, 1, 0, "", "", 1, "", QUESTION_MARK_ICON, 0
+  end
+  -- WoWPro_Broker.lua:3341 (IsPlayerSpell)
+  env.IsPlayerSpell = function(id) return player().spells[id] == true end
+  -- WoW client GetBindLocation: the hearth location text, nil when unbound
+  env.GetBindLocation = function() local b = player().bind; return b and b.name or nil end
 
   -- WoWPro_Localization.lua:8 (GetLocale); AceDB-3.0.lua:263 (GetCurrentRegion/GetCurrentRegionName)
   env.GetLocale = function() return "enUS" end
@@ -136,9 +155,9 @@ function M.install(sb, cfg, player)
   end
 
   -- WoWPro_CurrentGuide.lua:251-257 (GetBestMapForUnit, GetPlayerMapPosition, GetRealZoneText); WoWPro_Command.lua:56 and WoWPro_AutoComplete.lua:489-490 (GetSubZoneText)
-  env.GetZoneText = function() return player.zone end
-  env.GetRealZoneText = function() return player.zone end
-  env.GetSubZoneText = function() return player.subzone end
+  env.GetZoneText = function() return player().zone end
+  env.GetRealZoneText = function() return player().zone end
+  env.GetSubZoneText = function() return player().subzone end
   -- WoWPro_Mapping.lua:624 (CheckHBDData via WoWPro_Events.lua:302). Client map facts for the starting
   -- maps only; any other id returns nil like an unknown map.
   local MAPS = {
@@ -151,9 +170,9 @@ function M.install(sb, cfg, player)
       if not m then return nil end
       return { mapID = m.mapID, name = m.name, mapType = m.mapType, parentMapID = m.parentMapID }
     end,
-    GetBestMapForUnit = function() return player.map_id end,
+    GetBestMapForUnit = function() return player().map_id end,
     GetPlayerMapPosition = function()
-      return { GetXY = function() return player.x, player.y end }
+      return { GetXY = function() local p = player(); return p.x, p.y end }
     end,
   })
 
@@ -188,18 +207,64 @@ function M.install(sb, cfg, player)
   -- WoWPro.lua:1120 (ShouldCombatHide). Out of combat.
   env.UnitAffectingCombat = function() return false end
 
-  -- WoWPro_Trade.lua:439 and :458 (UpdateTradeSkills, Forever/Retail path) via WoWPro_Events.lua:282. Fresh character: no professions.
+  -- WoWPro_Trade.lua:439-476 (UpdateTradeSkills, Forever/Retail path) via WoWPro_Events.lua:282, backed by player.skills.
+  -- Parent skill-line ids from the Forever WoWPro.ProfessionSkillLines table (WoWPro_Trade.lua:27-52).
+  local SKILL_LINES = require("hwc.world.skill_lines")
+  local function skill_names()
+    local names = {}
+    for name in pairs(player().skills) do names[#names + 1] = name end
+    table.sort(names)
+    return names
+  end
   env.C_TradeSkillUI = trap(sb, "C_TradeSkillUI", {
-    GetAllProfessionTradeSkillLines = function() return {} end,
+    -- :439; ids of learned skill lines
+    GetAllProfessionTradeSkillLines = function()
+      local ids = {}
+      for _, name in ipairs(skill_names()) do
+        if SKILL_LINES[name] then ids[#ids + 1] = SKILL_LINES[name] end
+      end
+      return ids
+    end,
+    -- :442; the table is indexed unguarded, so unknown ids get zero ranks rather than nil
+    GetProfessionInfoBySkillLineID = function(id)
+      for name, line in pairs(SKILL_LINES) do
+        local s = line == id and player().skills[name]
+        if s then
+          return { professionName = name, skillLevel = s.rank, maxSkillLevel = s.max, skillModifier = 0 }
+        end
+      end
+      return { professionName = "", skillLevel = 0, maxSkillLevel = 0, skillModifier = 0 }
+    end,
   })
-  env.GetProfessions = function() return end
+  -- :458 (GetProfessions returns indices into the learned list; none when fresh)
+  env.GetProfessions = function()
+    local n = #skill_names()
+    if n == 0 then return end
+    local idx = {}
+    for i = 1, n do idx[i] = i end
+    return unpack(idx)
+  end
+  -- :460 name, icon, rank, maxRank, numAbilities, spellOffset, skillLineID, skillModifier
+  env.GetProfessionInfo = function(index)
+    local name = skill_names()[index]
+    if not name then return nil end
+    local s = player().skills[name]
+    return name, 0, s.rank, s.max, 0, 0, SKILL_LINES[name], 0
+  end
+
+  -- WoWPro_Broker.lua:3883 (CompleteStep plays the check sound before it records completion at :3888,
+  -- so a missing global aborts every completion). Client returns willPlay; headless plays nothing.
+  env.PlaySoundFile = function() return true end
+  -- WoWPro_Events.lua:689, :743, :753, :787 (compared with == to the step name). GetTitleText is the open
+  -- NPC quest dialog's title; the harness opens no dialog (no QUEST_DETAIL/QUEST_COMPLETE), so "".
+  env.GetTitleText = function() return "" end
 
   -- FrameXML constant. WoWPro_Widgets.lua:510 (CreateScrollbar border colour)
   env.TOOLTIP_DEFAULT_COLOR = { r = 1, g = 1, b = 1 }
   -- FrameXML table. WoWPro_CurrentGuide.lua:44 (ESC-closable frames)
   env.UISpecialFrames = {}
 
-  require("hwc.stubs.questlog").install(sb, player)
+  require("hwc.stubs.questlog").install(sb)
 end
 
 return M

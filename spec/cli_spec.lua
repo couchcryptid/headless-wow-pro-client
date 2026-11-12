@@ -25,6 +25,35 @@ describe("cli", function()
     assert.matches("Usage", etext())
   end)
 
+  local PIN_DIR = "local/questie/d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc"
+  if present and lfs.attributes(PIN_DIR, "mode") == "directory" then
+    it("quest prints the quest and its sources as sorted JSON", function()
+      local out, text = capture()
+      assert.equal(0, cli.main({ "quest", "282", "--addon", ADDON }, out))
+      local d = require("dkjson").decode(text())
+      assert.equal(282, d.quest.id)
+      assert.same({ 218 }, d.quest.pre_single)
+      assert.is_true(d.sources.questie.present)
+      assert.matches('"pre_single":%[218%]', text())
+    end)
+
+    it("quest reports an unknown id with status 1", function()
+      local out, _ = capture()
+      local err, etext = capture()
+      assert.equal(1, cli.main({ "quest", "777777", "--addon", ADDON }, out, err))
+      assert.matches("777777", etext())
+    end)
+  else
+    pending("quest command needs the addon checkout and pinned QuestieDB")
+  end
+
+  it("quest requires a numeric id", function()
+    local out, _ = capture()
+    local err, etext = capture()
+    assert.equal(2, cli.main({ "quest", "abc" }, out, err))
+    assert.matches("Usage", etext())
+  end)
+
   if present then
     it("boot prints the addon identity, guide and first steps", function()
       local out, text = capture()

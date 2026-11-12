@@ -3,16 +3,16 @@
 local addon_info = require("hwc.addon_info")
 local sandbox = require("hwc.sandbox")
 local toc = require("hwc.toc")
+local World = require("hwc.world")
+local catalog = require("hwc.catalog")
 local stubs = require("hwc.stubs.core")
 local hbd = require("hwc.stubs.hbd")
 local standins = require("hwc.stubs.standins")
 
 local M = {}
 
-local TOCS = {
-  { addon = "WoWPro", toc = "WoWPro/WoWPro.toc" },
-  { addon = "WoWPro_Leveling", toc = "WoWPro_Leveling/WoWPro_Leveling.toc" },
-}
+local WOWPRO = { addon = "WoWPro", toc = "WoWPro/WoWPro.toc" }
+local LEVELING = { addon = "WoWPro_Leveling", toc = "WoWPro_Leveling/WoWPro_Leveling.toc" }
 local MAX_STEPS = 15
 local SETTLE_MAX_VIRTUAL = 60
 
@@ -110,26 +110,54 @@ function M.run(cfg)
 
   local sb = sandbox.new(cfg)
   local env = sb.env
-  stubs.install(sb, cfg, stubs.player_from(cfg))
+  -- World facts come from the catalog (design spec §6); absent sources are
+  -- recorded in catalog.sources, never fatal.
+  sb.world = World.new(cfg, catalog.load(cfg), sb.clock)
+  stubs.install(sb, cfg)
   env.math = seeded_math(cfg.seed)
-  -- design spec §4.2: fresh character; DebugLevel 0 keeps ';' lines out of the steps
-  env.WoWProCharDB = { QID2Guide = {}, DebugLevel = 0 }
+  local function phase(name)
+    if cfg.on_phase then cfg.on_phase(name, sb) end
+  end
+  phase("after_stubs")
 
   local result = {
     addon = { path = cfg.addon_path, branch = info.branch, commit = info.commit, dirty = info.dirty },
     files_loaded = 0, files_failed = {}, skipped = {},
     errors = sb.errors, missing_order = sb.missing_order, standin_calls = sb.standin_calls,
-    sb = sb,
+    sb = sb, world = sb.world,
   }
-  for _, spec in ipairs(TOCS) do load_addon(sb, cfg, spec, result) end
-  standins.override(sb)
+  result.addon_events = {}
 
-  local fire = function(...) sb:call(sb.frames.fire, sb.frames, ...) end
+  -- Client order (design spec §4.3): each addon's files load, then its
+  -- ADDON_LOADED fires, before the next addon's files load.
+  local function fire(...)
+    sb:call(sb.frames.fire, sb.frames, ...)
+    local event, arg1 = ...
+    result.addon_events[#result.addon_events + 1] = event == "ADDON_LOADED" and (event .. ":" .. arg1) or event
+  end
+
+  load_addon(sb, cfg, WOWPRO, result)
+  -- UI stand-ins replace WoWPro's own UI entry points; they must be in place
+  -- before any event reaches WoWPro.
+  standins.override(sb)
+  phase("after_wowpro_files")
+  -- The client assigns SavedVariables after the addon's files run and before
+  -- ADDON_LOADED. Design spec §4.2: fresh account (WoWProData nil); a saved
+  -- DebugLevel 0 keeps ';' lines out of the steps. OnInitialize creates the rest.
+  env.WoWProData = nil
+  env.WoWProCharDB = { DebugLevel = 0 }
+  phase("after_saved_variables")
   fire("ADDON_LOADED", "WoWPro")
+  phase("after_addon_loaded_wowpro")
+  load_addon(sb, cfg, LEVELING, result)
+  phase("after_leveling_files")
   fire("ADDON_LOADED", "WoWPro_Leveling")
+  phase("after_addon_loaded_wowpro_leveling")
   env.IsLoggedIn = function() return true end
   fire("PLAYER_LOGIN")
+  phase("after_player_login")
   fire("PLAYER_ENTERING_WORLD", true, false)
+  phase("after_player_entering_world")
   -- The startup lockdown (WoWPro_Events.lua:279) is released by an OnUpdate
   -- handler (WoWPro_Broker.lua:4840-4874), not a timer: keep frames ticking
   -- while it is pending. Read only; the engine's own handler clears it.
