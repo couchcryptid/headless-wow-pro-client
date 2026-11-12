@@ -25,30 +25,39 @@ local function contains(list, v)
   return false
 end
 
--- opts.placeholder_qo = n shapes an unknown quest from the guide step's QO count (catalog:placeholder).
-function QuestLog:accept(qid, opts)
+-- The refusal reason accept would give, or nil, quest when it would succeed.
+-- opts.ignore_level skips the level check (the grind-then-accept path asks
+-- whether levelling alone would make the quest acceptable).
+function QuestLog:refusal(qid, opts)
   local w, player = self.world, self.world.player
   local quest = w.catalog and w.catalog:quest(qid)
   if not quest and opts and opts.placeholder_qo and w.catalog then
     quest = w.catalog:placeholder(qid, opts.placeholder_qo)
   end
-  if not quest then return false, "unknown-quest" end
-  if self.entries_by_id[qid] then return false, "already-in-log" end
-  if self.history[qid] then return false, "already-completed" end
-  if #self.order >= QuestLog.SIZE then return false, "log-full" end
-  if player.level < (quest.required_level or 1) then return false, "below-level" end
-  if quest.races and not contains(quest.races, player.race_token) then return false, "race" end
-  if quest.classes and not contains(quest.classes, player.class_token) then return false, "class" end
+  if not quest then return "unknown-quest" end
+  if self.entries_by_id[qid] then return "already-in-log" end
+  if self.history[qid] then return "already-completed" end
+  if #self.order >= QuestLog.SIZE then return "log-full" end
+  if not (opts and opts.ignore_level) and player.level < (quest.required_level or 1) then return "below-level" end
+  if quest.races and not contains(quest.races, player.race_token) then return "race" end
+  if quest.classes and not contains(quest.classes, player.class_token) then return "class" end
   if quest.pre_single and #quest.pre_single > 0 then
     local any = false
     for _, p in ipairs(quest.pre_single) do
       if self.history[p] then any = true end
     end
-    if not any then return false, "prerequisite" end
+    if not any then return "prerequisite" end
   end
   for _, p in ipairs(quest.pre_group or {}) do
-    if not self.history[p] then return false, "prerequisite" end
+    if not self.history[p] then return "prerequisite" end
   end
+  return nil, quest
+end
+
+-- opts.placeholder_qo = n shapes an unknown quest from the guide step's QO count (catalog:placeholder).
+function QuestLog:accept(qid, opts)
+  local reason, quest = self:refusal(qid, opts and { placeholder_qo = opts.placeholder_qo })
+  if reason then return false, reason end
   local have = {}
   for i = 1, #(quest.objectives or {}) do have[i] = 0 end
   self.entries_by_id[qid] = { id = qid, quest = quest, have = have }

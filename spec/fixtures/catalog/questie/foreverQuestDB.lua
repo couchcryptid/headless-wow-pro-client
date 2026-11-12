@@ -22,4 +22,6 @@ QuestieDB.questData = [[return {
 [1004] = {"Fixture Horde Only",{{2001}},{{2002}},1,4,8589934770,64,{{{2003,"Fixture Boss"}},{{3001}}},nil,nil},
 [1005] = {"Fixture Level From XP",nil,nil,nil,nil,nil,nil,nil,nil,nil},
 [1007] = {"Fixture Disagree",{{2001}},{{2002}},1,2,1,nil,nil,nil,nil},
+[1008] = {"Camping 101: Fishing",{{2001}},{{2002}},1,5,nil,nil,nil,nil,nil},
+[1009] = {"Camping 101: Cooking",{{2001}},{{2002}},1,5,nil,nil,nil,nil,nil},
 }]]
