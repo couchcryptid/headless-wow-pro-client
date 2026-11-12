@@ -11,7 +11,6 @@ M.ADDON = os.getenv("HOME") .. "/Projects/WoW-Pro-Guides"
 M.GUIDE = M.ADDON .. "/WoWPro_Leveling/Forever/Alliance/01_12_Dun_Morogh.lua"
 M.QID = 179
 M.ITEM = 750
-M.SETTLE_MAX_VIRTUAL = 60
 
 local lfs = require("lfs")
 
@@ -31,36 +30,24 @@ function M.boot(race, class)
   return require("hwc.boot").run(cfg)
 end
 
--- Fire a client event through the frame mock, as boot does.
-function M.fire(sb, ...)
-  sb:call(sb.frames.fire, sb.frames, ...)
+-- Engine access goes through the read-only adapter (src/hwc/driver/engine.lua).
+local Engine = require("hwc.driver.engine")
+
+function M.fire(r, ...) Engine.new(r):fire(...) end
+
+-- Settle the virtual clock (same read-only lockdown predicate as boot).
+function M.settle(r) return Engine.new(r):settle() end
+
+-- The step the engine itself treats as current (adapter: the row after the
+-- sticky rows). Returns { index, action, step, qid } or an empty table.
+function M.current(r)
+  local s = Engine.new(r):current()
+  if not s then return {} end
+  return { index = s.index, action = s.action, step = s.name, qid = s.qid }
 end
 
--- Settle the virtual clock. Same read-only lockdown predicate as boot: the
--- engine's own OnUpdate handler (WoWPro_Broker.lua:4840-4874) clears it.
-function M.settle(sb)
-  local env = sb.env
-  return sb.clock:settle({
-    max_virtual = M.SETTLE_MAX_VIRTUAL,
-    busy = function()
-      local w = rawget(env, "WoWPro")
-      return type(w) == "table" and w.LockdownTimer ~= nil
-    end,
-  })
-end
-
--- The step the engine itself treats as current: the first row after the
--- sticky rows (the addon's own lookup, WoWPro_Events.lua:742, 752, 776, 786).
-function M.current(env)
-  local W = env.WoWPro
-  local row = W.rows[W:GetActiveStickyCount() + 1]
-  local i = row and row.index
-  return { index = i, action = i and W.action[i], step = i and W.step[i], qid = i and W.QID[i] }
-end
-
-function M.completion(env, index)
-  local gid = env.WoWProDB.char.currentguide
-  return env.WoWProCharDB.Guide[gid].completion[index]
+function M.completion(r, index)
+  return Engine.new(r):completed(index) or nil
 end
 
 local function log_index(world, qid)
@@ -83,28 +70,28 @@ end
 function M.accept(r, qid)
   local ok, reason = r.world.log:accept(qid)
   assert(ok, "accept " .. qid .. ": " .. tostring(reason))
-  M.fire(r.sb, "QUEST_ACCEPTED", log_index(r.world, qid), qid)
-  M.fire(r.sb, "QUEST_LOG_UPDATE")
-  return M.settle(r.sb)
+  M.fire(r, "QUEST_ACCEPTED", log_index(r.world, qid), qid)
+  M.fire(r, "QUEST_LOG_UPDATE")
+  return M.settle(r)
 end
 
 function M.progress(r, qid, index, amount, item)
   assert(r.world.log:progress(qid, index, amount), "progress " .. qid)
   if item then r.world.player:add_item(item, amount) end
-  M.fire(r.sb, "QUEST_LOG_UPDATE")
-  M.fire(r.sb, "BAG_UPDATE", 0)
-  return M.settle(r.sb)
+  M.fire(r, "QUEST_LOG_UPDATE")
+  M.fire(r, "BAG_UPDATE", 0)
+  return M.settle(r)
 end
 
 -- Returns the settle result and the levels gained.
 function M.turn_in(r, qid)
   local ok, reason, xp, levels = r.world.log:turn_in(qid)
   assert(ok, "turn in " .. qid .. ": " .. tostring(reason))
-  M.fire(r.sb, "QUEST_TURNED_IN", qid, xp, 0)
-  M.fire(r.sb, "QUEST_LOG_UPDATE")
+  M.fire(r, "QUEST_TURNED_IN", qid, xp, 0)
+  M.fire(r, "QUEST_LOG_UPDATE")
   -- The addon has no level-up handler (design spec §5.2): force an update.
-  if levels and levels > 0 then r.sb:call(r.sb.env.WoWPro.UpdateGuide, r.sb.env.WoWPro, "sim:level") end
-  return M.settle(r.sb), levels
+  if levels and levels > 0 then Engine.new(r):update_guide() end
+  return M.settle(r), levels
 end
 
 -- The whole Dwarven Outfitters flow; returns the boot result plus snapshots
@@ -113,19 +100,19 @@ function M.run(race, class)
   local r = M.boot(race, class)
   local env = r.sb.env
   local snap = { settles = {} }
-  snap.boot = M.current(env)
+  snap.boot = M.current(r)
 
   snap.settles[#snap.settles + 1] = M.accept(r, M.QID)
-  snap.accept = { completed = M.completion(env, snap.boot.index), current = M.current(env) }
+  snap.accept = { completed = M.completion(r, snap.boot.index), current = M.current(r) }
 
   snap.c_index = snap.accept.current.index
   snap.settles[#snap.settles + 1] = M.progress(r, M.QID, 1, 8, M.ITEM)
-  snap.progress = { completed = M.completion(env, snap.c_index), current = M.current(env) }
+  snap.progress = { completed = M.completion(r, snap.c_index), current = M.current(r) }
 
   snap.t_index = snap.progress.current.index
   local s, levels = M.turn_in(r, M.QID)
   snap.settles[#snap.settles + 1] = s
-  snap.turn_in = { completed = M.completion(env, snap.t_index), current = M.current(env), levels = levels }
+  snap.turn_in = { completed = M.completion(r, snap.t_index), current = M.current(r), levels = levels }
   return r, snap
 end
 
