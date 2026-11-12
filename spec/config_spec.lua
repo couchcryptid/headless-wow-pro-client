@@ -44,6 +44,14 @@ describe("config.load", function()
     os.execute("rm -rf '" .. dir .. "'")
   end)
 
+  it("rejects unknown profession names", function()
+    local dir = fake_addon()
+    local ok, err = pcall(config.load, { addon_path = dir, professions = { { name = "Basketweaving", rank = 1, max = 75 } } })
+    assert.is_false(ok)
+    assert.equal("hwc: unknown profession: Basketweaving", err)
+    os.execute("rm -rf '" .. dir .. "'")
+  end)
+
   it("defaults the catalog paths and resolves relative ones against the repo root", function()
     local dir = fake_addon()
     local c = config.load({ addon_path = dir }).catalog

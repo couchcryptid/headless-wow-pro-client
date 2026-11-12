@@ -209,11 +209,7 @@ function M.install(sb, cfg)
 
   -- WoWPro_Trade.lua:439-476 (UpdateTradeSkills, Forever/Retail path) via WoWPro_Events.lua:282, backed by player.skills.
   -- Parent skill-line ids from the Forever WoWPro.ProfessionSkillLines table (WoWPro_Trade.lua:27-52).
-  local SKILL_LINES = {
-    Blacksmithing = 164, Leatherworking = 165, Alchemy = 171, Herbalism = 182, Mining = 186,
-    Tailoring = 197, Engineering = 202, Enchanting = 333, Skinning = 393, ["First Aid"] = 129,
-    Cooking = 185, Fishing = 356, Lockpicking = 633,
-  }
+  local SKILL_LINES = require("hwc.world.skill_lines")
   local function skill_names()
     local names = {}
     for name in pairs(player().skills) do names[#names + 1] = name end

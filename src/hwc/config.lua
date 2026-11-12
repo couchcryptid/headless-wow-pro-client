@@ -1,5 +1,6 @@
 -- Harness configuration: defaults plus validation of the addon checkout path.
 local Player = require("hwc.world.player")
+local SKILL_LINES = require("hwc.world.skill_lines")
 local lfs = require("lfs")
 
 local M = {}
@@ -52,6 +53,11 @@ function M.load(tbl)
   local race = tbl.race or "Human"
   if not Player.RACES[race] then
     error("hwc: race not in scope: " .. tostring(race), 0)
+  end
+  for _, p in ipairs(tbl.professions or {}) do
+    if not SKILL_LINES[p.name] then
+      error("hwc: unknown profession: " .. tostring(p.name), 0)
+    end
   end
   return {
     addon_path = addon_path,
