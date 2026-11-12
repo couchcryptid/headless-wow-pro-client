@@ -24,8 +24,9 @@
 -- any listed id is involved: the A test is QIDsInTable(QID, QuestLog), any of
 -- "^&" (WoWPro_Events.lua:709; Broker.lua:266-275), and AutoCompleteQuestUpdate
 -- walks every listed id for the T/C branches (AutoComplete.lua:329-336). So A
--- acts on qids[1]; C/K/T act on the first listed id in the log (qids[1] when
--- none is), which is the id an A on qids[1] put there.
+-- accepts the first listed id the world allows (alternatives such as
+-- 5926^5927^5928 are race/class variants); C/K/T act on the first listed id in
+-- the log (qids[1] when none is).
 local kills = require("hwc.world.kills")
 
 local actions = {}
@@ -127,33 +128,61 @@ local function turn_in(ctx, out, qid)
   return true
 end
 
+local function accept_opts(w, qid, qo)
+  if w.catalog and w.catalog:quest(qid) then return nil end
+  return { placeholder_qo = placeholder_count(qo) }
+end
+
+-- Picks the id to accept from a multi-QID A step (any-of, as the engine's own
+-- QIDsInTable test at WoWPro_Events.lua:709): the first id acceptable now, else
+-- the first id whose only refusal is below-level (acceptable after a grind).
+-- Returns qid, opts, needs_grind; or nil, first id's reason when every id is refused.
+local function choose_accept(w, qids, qo)
+  local first_reason, grind_qid, grind_opts
+  for _, qid in ipairs(qids) do
+    local opts = accept_opts(w, qid, qo)
+    local reason = w.log:refusal(qid, opts)
+    if not reason then return qid, opts, false end
+    first_reason = first_reason or reason
+    if reason == "below-level" and not grind_qid then
+      local other = w.log:refusal(qid, { placeholder_qo = opts and opts.placeholder_qo, ignore_level = true })
+      if not other then grind_qid, grind_opts = qid, opts end
+    end
+  end
+  if grind_qid then return grind_qid, grind_opts, true end
+  -- Every id refused: the first id's reason, the world unchanged (no grind for a
+  -- quest the player can't take even once levelled).
+  if first_reason == "below-level" then
+    local o = accept_opts(w, qids[1], qo)
+    first_reason = w.log:refusal(qids[1], { placeholder_qo = o and o.placeholder_qo, ignore_level = true }) or first_reason
+  end
+  return nil, first_reason
+end
+
 local function perform_accept(ctx, step, out)
   local w = ctx.world
-  local qid = step.qids[1]
-  out.qid = qid
   local qo = parse_qo(step.tags and step.tags.questtext)
-  local opts = nil
-  if not (w.catalog and w.catalog:quest(qid)) then opts = { placeholder_qo = placeholder_count(qo) } end
+  local qid, opts, needs_grind = choose_accept(w, step.qids, qo)
+  if not qid then
+    local reason = opts
+    out.qid = step.qids[1]
+    out.kind, out.reason = (reason == "already-in-log") and "noop" or "refused", reason
+    return
+  end
+  out.qid = qid
 
-  local ok, reason = w.log:accept(qid, opts)
-  -- Under-levelled only (spec §5.2): when levelling alone would make the quest
-  -- acceptable, grind generic mobs to the required level, fire nothing until
-  -- the ding, force the update, then accept. Otherwise the other refusal stands
-  -- and the world is left unchanged (no grind for a quest the player can't take).
-  local other = (not ok and reason == "below-level")
-    and w.log:refusal(qid, { placeholder_qo = opts and opts.placeholder_qo, ignore_level = true })
-  if other then reason = other end
-  if not ok and reason == "below-level" then
-    local quest = w.catalog:quest(qid)
-    local target = quest.required_level
+  if needs_grind then
+    -- Under-levelled only (spec §5.2): grind generic mobs to the required level,
+    -- fire nothing until the ding, force the update, then accept.
+    local target = w.catalog:quest(qid).required_level
     local n, _, levels = kills.grind_to(w.player, target)
     out.grind = { kills = n, to = target }
     out.levels = out.levels + levels
     after_levels(ctx, levels)
-    ok, reason = w.log:accept(qid, opts)
   end
+  local ok, reason = w.log:accept(qid, opts)
   if not ok then
-    out.kind, out.reason = (reason == "already-in-log") and "noop" or "refused", reason
+    out.kind, out.reason = "refused", reason
     return
   end
 
@@ -165,15 +194,19 @@ local function perform_accept(ctx, step, out)
 
   -- Camping 101 (spec §5.2): the client abstracts levelling the profession and
   -- turns the quest in at once, unless the guide has its own T step or the
-  -- character lacks the gating skill.
+  -- character lacks the gating skill. No skill is trained here: the baseline
+  -- trains only when a guide step says so (spec §11), and Cooking has no
+  -- requires_skill gate, so it is turned in without learning Cooking.
   local quest = w.log:get(qid).quest
   if not is_camping(quest) or guide_turns_in(ctx.engine, qid) then return end
   if quest.requires_skill and not w.player:knows_skill(quest.requires_skill) then return end
-  -- Cooking's turn-in is completed by training (spec §3), so the player trains first.
-  if quest.completed_by_training then train(ctx, out, quest.completed_by_training) end
   w.log:complete_objectives(qid, nil)
-  w.log:_record("abstracted-turnin", { id = qid })
-  turn_in(ctx, out, qid)
+  local done, why = turn_in(ctx, out, qid)
+  if done then
+    w.log:record_abstracted_turnin(qid)
+  else
+    out.reason = why -- accepted, but the abstracted turn-in was refused; it stays in the log
+  end
 end
 
 -- Credits one objective's progress delta: kill XP (drop kills for items) and the items.

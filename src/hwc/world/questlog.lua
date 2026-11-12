@@ -130,6 +130,11 @@ function QuestLog:turn_in(qid)
   return true, nil, gained, levels
 end
 
+-- Marks a turn-in the client did without a guide step (Camping 101, spec §5.2).
+function QuestLog:record_abstracted_turnin(qid)
+  self:_record("abstracted-turnin", { id = qid })
+end
+
 function QuestLog:abandon(qid)
   if not self.entries_by_id[qid] then return false end
   remove(self, qid)
