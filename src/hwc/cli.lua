@@ -18,7 +18,7 @@ Commands:
 
 Options:
   -h, --help    Show this help
-  --race RACE   Player race (default Human)
+  --race RACE   Player race (boot default Human; run default Dwarf)
   --class CLASS Player class token, e.g. WARRIOR (default WARRIOR)
   --addon PATH  WoW-Pro checkout (default ~/Projects/WoW-Pro-Guides)
   --json        Print the boot result as JSON
@@ -26,7 +26,7 @@ Options:
                 eng-ench, tailoring (default baseline)
   --races LIST  Comma list of races for matrix (default Dwarf,Gnome)
   --stop-level N  Level at which a run stops (default 25)
-  --date D      Findings date (default today, host clock)
+  --date D      Findings date, YYYY-MM-DD (default today, host clock)
   --out DIR     Findings directory (default findings/)
 ]]
 
@@ -185,7 +185,10 @@ local function play(combos, scope, opts, out)
   local first = logs[1] or {}
   local header = {
     scope = scope, date = date, addon = first.addon, catalog = (first.catalog or {}).sources,
-    client = { commit = addon_info.read(config.repo_root()).commit },
+    client = (function()
+      local c = addon_info.read(config.repo_root(), { tracked_only = true })
+      return { commit = c.commit, dirty = c.dirty }
+    end)(),
     matrix = { combos = labels }, rank = first.rank,
   }
   local path = outdir .. "/" .. date .. "-" .. scope .. ".md"
@@ -204,9 +207,15 @@ local function run_run(opts, out)
   return play({ combo }, string.format("%s-%s-%s", combo.race, combo.class, combo.variant), opts, out)
 end
 
-local function run_matrix(races, opts, out)
+local function run_matrix(races, opts, out, err)
   local combos = require("hwc.driver.matrix").combos(
     opts.addon or (os.getenv("HOME") .. "/Projects/WoW-Pro-Guides"), races)
+  -- Nothing to play: no findings file (it would carry an "Addon: nil" header).
+  if #combos == 0 then
+    err:write("hwc: matrix: no combos for ", table.concat(races, ","),
+      " (the start guide names no class for these races)\n")
+    return 2
+  end
   local names = {}
   for i, r in ipairs(races) do names[i] = r:lower() end
   return play(combos, "forever-alliance-" .. table.concat(names, "-") .. "-1-25", opts, out)
@@ -217,6 +226,11 @@ local function command(args, out, err, allowed, prepare, fn)
   if opts and opts["stop-level"] then
     opts.stop_level = tonumber(opts["stop-level"])
     if not opts.stop_level then opts, perr = nil, "--stop-level needs a number" end
+  end
+  -- The date names the output files: anything but YYYY-MM-DD (e.g. ../x) would
+  -- change the write path.
+  if opts and opts.date and not opts.date:match("^%d%d%d%d%-%d%d%-%d%d$") then
+    opts, perr = nil, "--date needs YYYY-MM-DD"
   end
   local arg
   if opts then opts, arg, perr = prepare(opts) end
@@ -309,7 +323,7 @@ function M.main(args, out, err)
         if #races == 0 then return nil, nil, "--races is empty" end
         return o, races
       end,
-      function(races, o, w) return run_matrix(races, o, w) end)
+      function(races, o, w) return run_matrix(races, o, w, err) end)
   end
   err:write(USAGE)
   return 2

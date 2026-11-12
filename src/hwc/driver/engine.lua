@@ -1,7 +1,18 @@
 -- Read-only adapter over the running WoW-Pro engine (design spec §5.2). The
 -- driver and step actions look at the engine only through here. Nothing in
--- this module writes env.WoWPro.* or SavedVariables; the only engine calls it
--- makes are the player equivalents complete_manual and update_guide.
+-- this module writes env.WoWPro.* or SavedVariables.
+--
+-- Engine functions it calls:
+--   mutating, the two player equivalents only:
+--     WoWPro.CompleteStep(i, "Right-Click")   complete_manual (WoWPro_Broker.lua:3857)
+--     WoWPro:UpdateGuide("sim:level")         update_guide (after a ding; no level-up handler)
+--   pure reads:
+--     WoWPro:NextGuide(gid)                   guide(), only when the registry names a nextGID
+--                                             (it pops the guide stack otherwise, Broker:777-808)
+--     WoWPro.GuideRank(gid)                   rank() (WoWPro_Broker.lua:602-618)
+--     WoWPro:GetActiveStickyCount()           sticky_count() / current() / rows()
+-- Everything else is a read of WoWPro.*, WoWProDB and WoWProCharDB tables, plus
+-- firing client events through the sandbox's frames (fire).
 local guide_source = require("hwc.driver.guide_source")
 
 local Engine = {}

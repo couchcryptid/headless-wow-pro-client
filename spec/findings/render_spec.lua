@@ -56,6 +56,17 @@ describe("render.markdown", function()
     assert.truthy(out:find("Gnome MAGE baseline", 1, true))
   end)
 
+  -- Final review minor 9: the Client line flags a dirty hwc tree like the Addon line.
+  it("flags the client tree clean, dirty or unknown", function()
+    local h = header()
+    h.client = { commit = "c0ffee", dirty = true }
+    assert.truthy(render.markdown({}, h):find("\n%- Client: c0ffee %(dirty%)\n"))
+    h.client.dirty = false
+    assert.truthy(render.markdown({}, h):find("\n%- Client: c0ffee %(clean%)\n"))
+    h.client.dirty = nil
+    assert.truthy(render.markdown({}, h):find("\n%- Client: c0ffee %(unknown%)\n"))
+  end)
+
   -- Rulings AB and AC: the known false-finding sources are named in the header.
   it("names the nameless Camping 101 and talk-to NPC gaps", function()
     assert.truthy(out:find("  - Camping 101 quests without catalog names are not recognised; profession variants " ..

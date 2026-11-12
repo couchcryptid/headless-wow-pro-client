@@ -291,6 +291,7 @@ local function perform_accept(ctx, step, out)
   local done, why = turn_in(ctx, out, qid)
   if done then
     w.log:record_abstracted_turnin(qid)
+    out.abstracted_turnin = qid -- the run log's snapshot carries it (spec §5.2)
   else
     out.reason = why -- accepted, but the abstracted turn-in was refused; it stays in the log
   end
@@ -574,6 +575,19 @@ local function perform_item_step(ctx, step, out)
   fire(ctx, out, "BAG_UPDATE", 0)
 end
 
+-- `*` (trash an item): the player destroys the item the step names, every copy held.
+-- The step name is the item name, resolved by the catalog (Player:item_count). The
+-- engine leaves the step for a right-click, so it is expected manual.
+local function perform_trash(ctx, step, out)
+  local w = ctx.world
+  local id = w.catalog and w.catalog.item_id and w.catalog:item_id(step.name)
+  local n = id and w.player:item_count(id) or 0
+  if n == 0 then return end
+  remove_item(ctx, out, id, n)
+  out.kind = "acted"
+  fire(ctx, out, "BAG_UPDATE", 0)
+end
+
 local function perform_level(ctx, step, out)
   local w = ctx.world
   local want = tonumber(tostring(step.tags and step.tags.level or ""):match("%d+"))
@@ -624,13 +638,13 @@ local QUEST_HANDLERS = { A = perform_accept, C = perform_objectives, K = perform
 local OTHER_HANDLERS = {
   R = perform_travel, F = perform_arrival, b = perform_arrival, P = perform_arrival, H = perform_travel,
   f = perform_flight_point, h = perform_bind, U = perform_use, L = perform_level,
-  l = perform_item_step, B = perform_item_step,
+  l = perform_item_step, B = perform_item_step, ["*"] = perform_trash,
 }
 
 -- Actions whose completion is expected to need a right-click (Task 6 splits
 -- manual-completion into expected and unexpected with this). A step whose note says
 -- "Manually check this step off" is also expected: see actions.expects_manual.
-actions.EXPECTED_MANUAL = { N = true, D = true, ["="] = true, r = true }
+actions.EXPECTED_MANUAL = { N = true, D = true, ["="] = true, r = true, ["*"] = true }
 
 function actions.expects_manual(step)
   if actions.EXPECTED_MANUAL[step.action] then return true end

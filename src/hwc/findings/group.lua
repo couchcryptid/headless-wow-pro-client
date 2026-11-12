@@ -40,6 +40,9 @@ local SEVERITY = {
   ["did-not-advance"] = "medium", stuck = "medium", ["manual-completion"] = "medium",
   ["leftover-quests"] = "low", ["missing-global"] = "low",
 }
+local SEVERITY_ORDER = { "high", "medium-high", "medium", "low" }
+local SEVERITY_RANK = {}
+for i, s in ipairs(SEVERITY_ORDER) do SEVERITY_RANK[s] = i end
 local REFUSALS = { ["accept-refused"] = true, ["log-full"] = true }
 local FOLLOWS_REFUSAL = { ["orphan-turnin"] = true, ["did-not-advance"] = true, ["leftover-quests"] = true }
 
@@ -201,7 +204,13 @@ function group.findings(runlogs)
   table.sort(findings, function(a, b) return a.id < b.id end)
   link_roots(findings)
   for _, f in ipairs(findings) do table.sort(f.causes) end
+  -- Final review minor 1: severity rank (high first), then file with file-less
+  -- findings last, line, signal, id. Ids are unique, so this is a total order.
+  -- Expected manual completions carry no severity and sort after low.
   table.sort(findings, function(a, b)
+    local ra, rb = SEVERITY_RANK[a.severity] or #SEVERITY_ORDER + 1, SEVERITY_RANK[b.severity] or #SEVERITY_ORDER + 1
+    if ra ~= rb then return ra < rb end
+    if (a.file == nil) ~= (b.file == nil) then return b.file == nil end
     if (a.file or "") ~= (b.file or "") then return (a.file or "") < (b.file or "") end
     if (a.line or 0) ~= (b.line or 0) then return (a.line or 0) < (b.line or 0) end
     if a.signal ~= b.signal then return a.signal < b.signal end

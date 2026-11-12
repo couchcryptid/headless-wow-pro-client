@@ -254,6 +254,20 @@ describe("actions.perform: noops and EXPECTED_MANUAL", function()
     assert.are.same({}, E.fired)
   end)
 
+  -- Final review minor 3: `*` steps trash an item.
+  it("a * step is expected manual and drops the item it names from the bags", function()
+    assert.is_true(actions.EXPECTED_MANUAL["*"])
+    local ctx, E, w = setup()
+    w.player:add_item(5001, 3)
+    local o = actions.perform(ctx, step("*", {}, {}, "Fixture Pelt"))
+    assert.are.equal("acted", o.kind)
+    assert.are.equal(0, w.player:item_count(5001))
+    assert.are.same({ "BAG_UPDATE" }, names(E))
+    E.fired = {}
+    assert.are.equal("noop", actions.perform(ctx, step("*", {}, {}, "Nothing Held")).kind)
+    assert.are.same({}, names(E))
+  end)
+
   it("EXPECTED_MANUAL names N, D, = and r", function()
     assert.is_true(actions.EXPECTED_MANUAL["N"])
     assert.is_true(actions.EXPECTED_MANUAL["D"])

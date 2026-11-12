@@ -248,6 +248,8 @@ function Driver:snapshot(cur, why, rows, out)
       kind = out.kind, reason = out.reason, qid = out.qid, events = copy_array(out.events),
       levels = out.levels, grind = out.grind and { kills = out.grind.kills, to = out.grind.to } or nil,
       elite = out.elite,
+      -- spec §5.2: the Camping 101 abstraction is "logged as an abstracted-turnin event".
+      abstracted_turnin = out.abstracted_turnin,
     },
     level = p.level, xp = p.xp, log = self:log_qids(),
   }

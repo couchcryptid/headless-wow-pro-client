@@ -197,4 +197,21 @@ describe("group.findings", function()
     assert.equal("A.lua", fs[1].file)
     assert.same({ "alpha", "zeta" }, fs[2].reasons)
   end)
+
+  -- Final review minor 1: severity rank first, file-less findings last within it.
+  it("sorts by severity rank, then file (file-less last), line, signal, id", function()
+    local fs = group.findings({ runlog("Dwarf", "WARRIOR", {
+      { signal = "leftover-quests", gid = "G1", file = "A.lua", qid = 5 },
+      dna({ file = "Z.lua", line = 9 }),
+      { signal = "lua-error", message = "boom" },
+      { signal = "never-shown-accept", gid = "G1", file = "Z.lua", line = 3, action = "A", name = "N", qid = 6 },
+      { signal = "below-level", gid = "G1", file = "B.lua", line = 1, action = "A", name = "L", qid = 7 },
+      { signal = "missing-global", global = "Foo" },
+      { signal = "manual-completion", gid = "G1", file = "A.lua", line = 1, action = "N", name = "x", expected = true },
+    }) })
+    local got = {}
+    for _, f in ipairs(fs) do got[#got + 1] = f.signal .. "@" .. tostring(f.file) end
+    assert.same({ "never-shown-accept@Z.lua", "lua-error@nil", "below-level@B.lua", "did-not-advance@Z.lua",
+      "leftover-quests@A.lua", "missing-global@nil", "manual-completion@A.lua" }, got)
+  end)
 end)

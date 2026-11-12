@@ -6,7 +6,7 @@
 --   - Gaps: a "- Gaps:" line followed by "  - <gap>" lines
 --   ## Summary          two tables: per signal, per severity (sorted)
 --   ## Findings
---   ### F-xxxxxxxx      one section per finding (sorted file, line, signal, id)
+--   ### F-xxxxxxxx      one section per finding (sorted severity, file, line, signal, id)
 --   - Severity: / Signal: / Location: / Step: / Quest: / Why: / Combos: /
 --     Before: / After: / Level: / Quest log: / Confidence: / Caused by: /
 --     Causes: / Reasons:      (always present, "none" when empty)
@@ -141,7 +141,8 @@ function render.markdown(findings, header)
   out[#out + 1] = string.format("- Addon: %s (branch %s, commit %s, %s)", tostring(a.path), tostring(a.branch),
     tostring(a.commit), yes_no(a.dirty))
   catalog_lines(header.catalog, out)
-  out[#out + 1] = "- Client: " .. tostring((header.client or {}).commit or "unknown")
+  local client = header.client or {}
+  out[#out + 1] = string.format("- Client: %s (%s)", tostring(client.commit or "unknown"), yes_no(client.dirty))
   local combos = {}
   local seen = {}
   for _, c in ipairs((header.matrix or {}).combos or {}) do

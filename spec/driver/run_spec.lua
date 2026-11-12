@@ -53,6 +53,13 @@ describe("driver.run", function()
     assert.equal("acted", log.steps[1].outcome.kind)
   end)
 
+  -- Final review minor 2: spec §5.2 "logged as an abstracted-turnin event".
+  it("copies an abstracted turn-in into the snapshot outcome", function()
+    local log = drive(one_guide({ { action = "A", name = "Camping 101: Cooking", qids = { 96629 },
+      outcome = { kind = "acted", abstracted_turnin = 96629 } } }), { G1 = completes(1) })
+    assert.equal(96629, log.steps[1].outcome.abstracted_turnin)
+  end)
+
   it("records an expected manual-completion for an N step", function()
     local log = drive(one_guide({ { action = "N", name = "Read this", outcome = { kind = "noop" } } }), {})
     local m = signals(log, "manual-completion")
