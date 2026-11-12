@@ -33,8 +33,11 @@ describe("driver.run against the real engine #slow", function()
   it("Dwarf Warrior plays Dun Morogh to the next guide", function()
     local l = get()
     assert.equal("ClassicDunMorogh0112", l.guides[1])
-    -- guides[2] is Dun Morogh's nextGID as the engine resolves it (engine_real_spec)
-    assert.equal("ClassicEasternKingdom1220", l.guides[2])
+    -- guides[2] is Dun Morogh's nextGID as the engine itself resolves it
+    local E = require("hwc.driver.engine").new(flow.boot("Dwarf", "WARRIOR"))
+    local next_gid = E:guide("ClassicDunMorogh0112").next_gid
+    assert.is_string(next_gid)
+    assert.equal(next_gid, l.guides[2])
     assert.equal("max-guides", l.stop.reason)
     assert.equal(2, l.rank)
   end)

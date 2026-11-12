@@ -274,6 +274,39 @@ local function wanted(obj, have, part)
   return have -- "<" / "<=": already satisfied by not progressing
 end
 
+local parse_loot -- defined with the tag parsers below
+
+-- Ruling M: the item objectives a no-QO C/K step names through its item tags: the
+-- engine-parsed L tag (loot, credited to the tag's count) or a raw B|<id> in the
+-- step's guide source line (buy). The engine defines no B tag (WoWPro_Parser.lua:795
+-- logs it as unknown), so it is read from the source line; global constraints allow a
+-- step's own item tags to say what the player buys or loots. The old simulator did
+-- the same for L (sim.py:840-843). Returns a todo list, or nil when no tag names one.
+local function tagged_item_objectives(ctx, step, quest)
+  local loot = {}
+  for _, it in ipairs(parse_loot(step.tags and step.tags.lootitem)) do loot[it.id] = it.n end
+  local bought = {}
+  local raw = ctx.engine.source_line and ctx.engine:source_line(step)
+  if type(raw) == "string" then
+    for id in (raw .. "|"):gmatch("|B|(%d+)") do bought[tonumber(id)] = true end
+  end
+  local todo = {}
+  for i, obj in ipairs(quest.objectives or {}) do
+    if obj.kind == "item" then
+      for _, id in ipairs(obj.ids or {}) do
+        if bought[id] then
+          todo[#todo + 1] = { index = i, bought = true }
+          break
+        elseif loot[id] then
+          todo[#todo + 1] = { index = i, cap = math.min(obj.count, loot[id]) }
+          break
+        end
+      end
+    end
+  end
+  return #todo > 0 and todo or nil
+end
+
 local function perform_objectives(ctx, step, out)
   local w = ctx.world
   local qid = in_log_qid(w, step.qids)
@@ -294,7 +327,11 @@ local function perform_objectives(ctx, step, out)
   if parts then
     for _, p in ipairs(parts) do todo[#todo + 1] = { index = p.index, part = p } end
   else
-    for i = 1, #quest.objectives do todo[#todo + 1] = { index = i } end
+    todo = tagged_item_objectives(ctx, step, quest)
+    if not todo then
+      todo = {}
+      for i = 1, #quest.objectives do todo[#todo + 1] = { index = i } end
+    end
   end
 
   local items_changed = false
@@ -302,8 +339,13 @@ local function perform_objectives(ctx, step, out)
     local obj = quest.objectives[t.index]
     if obj then
       local have = entry.have[t.index]
-      local delta = wanted(obj, have, t.part) - have
-      if delta > 0 then
+      local delta = (t.cap or wanted(obj, have, t.part)) - have
+      if delta > 0 and t.bought then
+        -- Bought, not looted: the item and its progress, no drop kills.
+        w.player:add_item(obj.ids[1], delta)
+        w.log:progress(qid, t.index, delta)
+        items_changed = true
+      elseif delta > 0 then
         local levels, elite, items = credit_objective(ctx, obj, delta)
         w.log:progress(qid, t.index, delta)
         out.levels = out.levels + levels
@@ -358,7 +400,7 @@ end
 
 -- L: { [itemID] = qty } as the engine stores it, or the raw "id qty;id qty" text.
 -- Returns a list of { id, n } sorted by id (deterministic).
-local function parse_loot(value)
+function parse_loot(value)
   local items = {}
   if type(value) == "table" then
     for id, n in pairs(value) do items[#items + 1] = { id = tonumber(id), n = tonumber(n) or 1 } end

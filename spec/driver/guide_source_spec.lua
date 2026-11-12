@@ -24,6 +24,11 @@ describe("guide_source", function()
     assert.equal(9, gs.line_of(ROOT, "Fix/forever/G1.lua", { action = "T", name = "Bar", qids = { 7, 8 } }, 1))
   end)
 
+  it("matches an ACTIVE-only step (no QID in the source line) on action and name", function()
+    -- the engine fills QID from ACTIVE, so the step carries qid 9; the line has no |QID|
+    assert.equal(10, gs.line_of(ROOT, "Fix/forever/G1.lua", { action = "K", name = "Baz", qids = { 9 } }, 1))
+  end)
+
   it("returns nil for an unknown step or file", function()
     assert.is_nil(gs.line_of(ROOT, "Fix/forever/G1.lua", { action = "A", name = "Nope", qids = { 5 } }, 1))
     assert.is_nil(gs.line_of(ROOT, "Fix/forever/Missing.lua", { action = "A", name = "Foo", qids = { 5 } }, 1))

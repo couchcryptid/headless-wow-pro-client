@@ -7,5 +7,6 @@ A Foo|QID|5|
 C Foo|QID|5|
 C Foo|QID|5|
 T Bar|QID|7^8|
+K Baz|ACTIVE|9|QO|1|
 ]]
 end)

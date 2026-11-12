@@ -165,6 +165,31 @@ describe("driver.run", function()
     assert.equal("no-next-guide", log.stop.reason)
   end)
 
+  it("closes G1 when the right-click on its D step loads G2 (Review Focus 1, manual path)", function()
+    local world = fx.fake_world({}, { 77 })
+    local guides = {
+      G1 = { startlevel = 1, next_gid = "G2", file = "g1.lua", steps = {
+        { action = "R", name = "a" },
+        { action = "A", name = "Hidden", qids = { 55 }, why = "PRE not met", hidden = true },
+        { action = "D", name = "Onwards" },
+      } },
+      G2 = { startlevel = 5, file = "g2.lua", steps = {
+        { action = "R", name = "g2 first" },
+        { action = "D", name = "Done" },
+      } },
+    }
+    local script = { G1 = { { complete = { 1 } }, nil, { on_manual = { switch = "G2" } } }, G2 = completes(1) }
+    local log, E = drive(guides, script, {}, world)
+    assert.same({ "G1", "G2" }, log.guides)
+    assert.same({ "G1:1", "G1:3", "G2:1", "G2:2" }, E.acted)
+    assert.same({ "G1:3", "G2:2" }, E.manual)
+    local hidden = signals(log, "never-shown-accept")
+    assert.equal(1, #hidden)
+    assert.equal("Hidden", hidden[1].name)
+    assert.equal("G1", signals(log, "leftover-quests")[1].gid)
+    assert.equal("Onwards", signals(log, "manual-completion")[1].name)
+  end)
+
   it("tags an engine-completed unshown DUNGEON accept engine-dungeon-skip", function()
     local steps = {
       { action = "R", name = "a" },
@@ -241,6 +266,46 @@ describe("driver.run", function()
     assert.equal(1, #w)
     assert.equal("race", w[1].reason)
     assert.equal("unverified", w[1].confidence)
+  end)
+
+  it("flags wrong-race-class only when every listed QID excludes the character (Ruling P)", function()
+    local world = fx.fake_world({ [8] = { races = { "Human" } }, [9] = {}, [10] = { classes = { "MAGE" } } })
+    local steps = {
+      { action = "A", name = "Variants", qids = { 8, 9 } },
+      { action = "A", name = "None for me", qids = { 8, 10 } },
+    }
+    local log = drive(one_guide(steps), {}, {}, world)
+    local w = signals(log, "wrong-race-class")
+    assert.equal(1, #w)
+    assert.equal("None for me", w[1].name)
+    assert.equal(8, w[1].qid)
+    assert.equal("race", w[1].reason)
+  end)
+
+  it("reads why from the acted step's guide when a signal follows a guide switch", function()
+    local guides = {
+      G1 = { startlevel = 1, next_gid = "G2", steps = {
+        { action = "A", name = "Full", qids = { 1 }, why = "g1 why", outcome = { kind = "refused", reason = "log-full" } },
+      } },
+      G2 = { startlevel = 5, steps = { { action = "R", name = "b", why = "g2 why" } } },
+    }
+    local log = drive(guides, { G1 = { { switch = "G2" } } }, { max_guides = 2 })
+    local f = signals(log, "log-full")[1]
+    assert.equal("G1", f.gid)
+    assert.equal("g1 why", f.why)
+  end)
+
+  it("records the right-click error as the manual-completion reason", function()
+    local world = fx.fake_world()
+    local E = fx.scripted_engine(one_guide({ { action = "N", name = "note", outcome = { kind = "noop" } } }), {}, "G1", world)
+    local real = E.complete_manual
+    function E:complete_manual(i)
+      real(self, i)
+      if i == 1 then return false, "Broker.lua:1: boom" end
+      return true
+    end
+    local log = run.drive({ engine = E, world = world, cfg = {}, errors = {}, missing_order = {} }, { perform = E.perform })
+    assert.equal("Broker.lua:1: boom", signals(log, "manual-completion")[1].reason)
   end)
 
   it("records stuck with settle-limit when a settle hits its limit", function()

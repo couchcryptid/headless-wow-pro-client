@@ -196,6 +196,36 @@ describe("actions.perform: C/K", function()
     assert.is_true(w.log:is_complete(92003))
   end)
 
+  -- Ruling M: a no-QO C/K whose item tag names an item objective does only that one.
+  it("completes only the objective a raw B|id in the source line names (no QO)", function()
+    local ctx, E, w = setup()
+    function E:source_line() return "C Fixture Ribs And Malt|QID|92010|NC|N|Buy malt.|B|5011|" end
+    actions.perform(ctx, step("A", { 92010 }))
+    local xp = w.player.xp
+    local o = actions.perform(ctx, step("C", { 92010 }))
+    assert.are.equal("acted", o.kind)
+    assert.are.same({ 0, 1 }, w.log:get(92010).have)
+    assert.are.equal(1, w.player.bags[5011])
+    assert.is_nil(w.player.bags[5010])
+    assert.are.equal(xp, w.player.xp) -- bought, not looted: no drop-kill XP
+    assert.is_false(w.log:is_complete(92010))
+  end)
+
+  it("completes only the objective an L tag names, to the tag's count (no QO)", function()
+    local ctx, E, w = setup()
+    actions.perform(ctx, step("A", { 92010 }))
+    actions.perform(ctx, step("C", { 92010 }, { lootitem = { [5010] = 4 } }))
+    assert.are.same({ 4, 0 }, w.log:get(92010).have)
+  end)
+
+  it("completes every objective of a no-QO C without a B or L objective item", function()
+    local ctx, E, w = setup()
+    function E:source_line() return "C Fixture Ribs And Malt|QID|92010|B|9999|" end
+    actions.perform(ctx, step("A", { 92010 }))
+    actions.perform(ctx, step("C", { 92010 }))
+    assert.is_true(w.log:is_complete(92010))
+  end)
+
   it("adds the items of an item objective, credits drop-kill XP and fires BAG_UPDATE(0)", function()
     local ctx, E, w = setup()
     actions.perform(ctx, step("A", { 179 }))

@@ -91,7 +91,16 @@ function Driver:signal(kind, step, fields)
     s.gid, s.line, s.action, s.name = step.gid or self.gid, step.line, step.action, step.name
     s.file = info and info.file
     s.qid = step.qids and step.qids[1]
-    s.why = self.E:why(step.index)
+    -- After a guide switch inside the action's settle, E:why reads the new guide:
+    -- use the why captured before the action (or the closing guide's last read).
+    local acting = self.acting
+    if self.E:gid() == s.gid then
+      s.why = self.E:why(step.index)
+    elseif acting and acting.gid == s.gid and acting.index == step.index then
+      s.why = acting.why
+    else
+      s.why = info and info.why[step.index]
+    end
   end
   for k, v in pairs(fields) do s[k] = v end
   s.confidence = self:confidence(s.qid)
@@ -176,22 +185,28 @@ function Driver:addon_error_count()
   return self.addon_errors
 end
 
+-- Ruling P: only when every listed QID excludes the character (a multi-QID step
+-- lists race/class variants; one admitting id is enough). A QID the catalog does
+-- not know admits. One signal per (gid, index), with the first id's reason.
 function Driver:wrong_race_class(cur)
   local W = self.W
   local p = W.player
-  for _, q in ipairs(cur.qids or {}) do
-    local key = cur.gid .. ":" .. cur.index .. ":" .. q
+  local key = cur.gid .. ":" .. cur.index
+  local qids = cur.qids or {}
+  if #qids == 0 or self.race_class_seen[key] then return end
+  local first_qid, first_reason
+  for _, q in ipairs(qids) do
     local quest = W.catalog and W.catalog:quest(q)
-    if quest and not self.race_class_seen[key] then
-      local reason
+    local reason
+    if quest then
       if quest.races and not contains(quest.races, p.race_token) then reason = "race"
       elseif quest.classes and not contains(quest.classes, p.class_token) then reason = "class" end
-      if reason then
-        self.race_class_seen[key] = true
-        self:signal("wrong-race-class", cur, { qid = q, reason = reason })
-      end
     end
+    if not reason then return end
+    if not first_reason then first_qid, first_reason = q, reason end
   end
+  self.race_class_seen[key] = true
+  self:signal("wrong-race-class", cur, { qid = first_qid, reason = first_reason })
 end
 
 function Driver:refusals(cur, out)
@@ -251,6 +266,7 @@ function Driver:act(step, rows, info)
   self.before_name, self.last_name = self.last_name, step.name
   self:wrong_race_class(step)
   local why = self.E:why(step.index)
+  self.acting = { gid = step.gid, index = step.index, why = why }
   local out = self.perform(self.ctx, step)
   if step.index > info.max_acted then info.max_acted = step.index end
   local snap = self:snapshot(step, why, rows, out)
@@ -333,9 +349,12 @@ function Driver:iterate()
     if not expected then
       self:signal("did-not-advance", cur, { qid = out.qid, reason = out.reason, outcome = out.kind })
     end
-    self:signal("manual-completion", cur, { qid = out.qid, reason = out.reason, outcome = out.kind, expected = expected })
-    -- An addon error inside the right-click is in sb.errors (a lua-error at the end).
-    E:complete_manual(cur.index)
+    local manual = self:signal("manual-completion", cur,
+      { qid = out.qid, reason = out.reason, outcome = out.kind, expected = expected })
+    -- An addon error inside the right-click is in sb.errors (a lua-error at the end)
+    -- and becomes this signal's reason.
+    local ok, merr = E:complete_manual(cur.index)
+    if not ok then manual.reason = merr end
     self:check_settle(E:settle(), cur)
   end
 

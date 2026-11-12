@@ -62,7 +62,9 @@ local function parse_line(line)
 end
 
 -- The source line of the `occurrence`-th line (default 1) whose action char,
--- step name and first QID match `step` ({action, name, qids}), or nil.
+-- step name and first QID match `step` ({action, name, qids}), or nil. A line with
+-- no |QID| (ACTIVE-only K/C steps: the engine fills QID from ACTIVE, so the step
+-- has a qid the line does not) matches on action and name alone (Ruling Q).
 function M.line_of(addon_path, rel_file, step, occurrence)
   local lines = read_lines(addon_path .. "/" .. rel_file)
   if not lines or not step then return nil end
@@ -70,12 +72,19 @@ function M.line_of(addon_path, rel_file, step, occurrence)
   local seen = 0
   for n, line in ipairs(lines) do
     local action, name, first = parse_line(line)
-    if action == step.action and name == (step.name or "") and first == (step.qids and step.qids[1]) then
+    if action == step.action and name == (step.name or "")
+      and (first == nil or first == (step.qids and step.qids[1])) then
       seen = seen + 1
       if seen == want then return n end
     end
   end
   return nil
+end
+
+-- The text of line n of a guide file, or nil.
+function M.line_text(addon_path, rel_file, n)
+  local lines = read_lines(addon_path .. "/" .. rel_file)
+  return lines and lines[n] or nil
 end
 
 return M

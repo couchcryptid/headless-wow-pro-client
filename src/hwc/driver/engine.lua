@@ -141,6 +141,15 @@ function Engine:step(i)
   return step
 end
 
+-- The raw guide source line of a step (nil without one): the driver's actions read
+-- tags the engine does not parse (B, Ruling M) from it.
+function Engine:source_line(step)
+  local index = self:source_index()
+  local file = index and index[step.gid or self:gid()]
+  if not file or not step.line then return nil end
+  return guide_source.line_text(self.result.addon.path, file, step.line)
+end
+
 -- The newest error the sandbox recorded (the failed call put it there).
 function Engine:last_error()
   local errs = self.sb.errors
