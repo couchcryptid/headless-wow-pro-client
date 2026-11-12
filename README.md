@@ -1,14 +1,78 @@
 # headless-wow-pro-client
 
-Loads the real WoW-Pro addon (Lua 5.1) under LuaJIT outside the game.
-The addon is read-only input, read from a configured path
-(default `~/Projects/WoW-Pro-Guides`).
+Runs the real [WoW-Pro](https://github.com/Ludovicus-Maior/WoW-Pro-Guides) guide
+addon outside World of Warcraft. A simulated character plays every step the
+addon shows, and the client writes down everywhere a guide breaks: accepts the
+character never sees, turn-ins for quests it never had, steps that don't
+advance, quests it can't take, and Lua errors.
 
-- Run: `bin/hwc --help`
-- Test: `~/.luarocks/bin/busted` (the integration specs are pending when the
-  addon checkout or the local catalog is absent). Specs tagged `#slow` (full
-  guide runs, cross-process determinism, the anchors) are skipped by default;
-  run them with `~/.luarocks/bin/busted --tags=slow`.
+The point is to check guide fixes without levelling an alt in the game.
+- **Bug finding:** play the Forever Alliance guides from level 1 to 25 for each
+  race, class and profession combination, then read the findings.
+- **Red/Green:** run the same characters against `main` and against a fix
+  branch, and compare the findings.
+
+The addon's code is loaded unmodified from a WoW-Pro-Guides checkout and is
+never patched. The client fakes the WoW API underneath it: a player, a 40-slot
+quest log, Classic XP rules, a virtual clock, frames and events. Quest facts
+come from a catalog built from QuestieDB and a Wowhead extract, never from the
+guide lines.
+
+**Status:**
+- **Scope:** Forever Alliance, Dwarf and Gnome, levels 1 to 25.
+- **Next:** the `/triage` skill.
+- **Data gaps:** listed in every findings file's header.
+- **Design:** the design spec, the plans and the per-plan rulings are in
+  `docs/superpowers/`.
+
+## Requirements
+
+- **LuaJIT 2.1** (Lua 5.1), e.g. `brew install luajit`. A Lua 5.4+ `lua` won't
+  work.
+- **busted 2.3** for Lua 5.1, plus `luafilesystem` and `dkjson`:
+  ```sh
+  luarocks --lua-version 5.1 install busted
+  luarocks --lua-version 5.1 install luafilesystem
+  luarocks --lua-version 5.1 install dkjson
+  ```
+- **A WoW-Pro-Guides checkout**, default `~/Projects/WoW-Pro-Guides`. Other
+  checkouts are selectable with `--addon`.
+- **Optional:** `curl` and `shasum` for `tools/fetch-questie.sh`, and `python3`.
+
+## Quick start
+
+```sh
+tools/fetch-questie.sh d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc   # local catalog data
+bin/hwc boot --race Dwarf --class WARRIOR                         # load the addon, show the first step
+bin/hwc run --race Dwarf --class WARRIOR                          # play one character 1-25
+bin/hwc matrix --races Dwarf,Gnome                                # every combination; writes findings/
+~/.luarocks/bin/busted                                            # specs (slow ones: --tags=slow)
+```
+
+- Run: `bin/hwc --help`.
+- Test: `~/.luarocks/bin/busted`.
+  - The integration specs are pending when the addon checkout or the local
+    catalog is absent.
+  - Specs tagged `#slow` (full guide runs, cross-process determinism, the
+    anchors) are skipped by default. Run them with
+    `~/.luarocks/bin/busted --tags=slow`.
+
+## Licence and third-party data
+
+- **This repository** is MIT-licensed; see [LICENSE](LICENSE).
+- **WoW-Pro Addons and Guides** belong to The WoW-Pro Community, under
+  [CC BY-NC-ND 3.0](https://creativecommons.org/licenses/by-nc-nd/3.0/). Nothing
+  from the addon is included or redistributed here.
+  - The client reads your own checkout at run time.
+  - Source comments cite addon file and line numbers so harness behaviour can be
+    checked against the engine.
+- **QuestieDB and Wowhead data** is never committed. It's fetched into, or kept
+  in, the git-ignored `local/` directory on your machine. See
+  [World and catalog](#world-and-catalog).
+- **Not affiliated with Blizzard Entertainment.** World of Warcraft is a
+  trademark of Blizzard Entertainment, Inc.
+
+Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Booting the addon
 
