@@ -110,6 +110,10 @@ function QuestLog:turn_in(qid)
   end
   local gained = xp.quest_xp(quest.xp or 0, player.level, quest.level or player.level)
   local levels = player:add_xp(gained)
+  -- The client takes the collected objective items on turn-in.
+  for _, obj in ipairs(quest.objectives or {}) do
+    if obj.kind == "item" and obj.ids and obj.ids[1] then player:remove_item(obj.ids[1], obj.count) end
+  end
   self.history[qid] = true
   remove(self, qid)
   self:_record("quest_turn_in", { id = qid, xp = gained, levels = levels })

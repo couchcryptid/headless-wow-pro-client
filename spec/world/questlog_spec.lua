@@ -130,6 +130,19 @@ describe("QuestLog", function()
     assert.same({ false, "not-in-log" }, { w.log:turn_in(179) })
   end)
 
+  it("takes the collected objective items from the bags on turn-in", function()
+    local _, env, w = setup()
+    w.log:accept(179)
+    w.log:progress(179, 1, 8)
+    w.player:add_item(750, 8)
+    assert.equal(8, env.GetItemCount(750))
+    assert.is_true((w.log:turn_in(179)))
+    assert.equal(0, env.GetItemCount(750))
+    local last
+    for _, e in ipairs(w.events) do if e.kind == "remove_item" then last = e end end
+    assert.same({ 750, 8 }, { last.id, last.n })
+  end)
+
   it("gates Camping turn-ins on the skill", function()
     local _, _, w = setup()
     w.log:accept(181)
@@ -144,6 +157,6 @@ describe("QuestLog", function()
     w.log:accept(179); w.log:progress(179, 1, 8); w.log:turn_in(179)
     local kinds = {}
     for _, e in ipairs(w.events) do kinds[#kinds + 1] = e.kind end
-    assert.same({ "quest_accept", "quest_progress", "quest_turn_in" }, kinds)
+    assert.same({ "quest_accept", "quest_progress", "xp", "quest_turn_in" }, kinds)
   end)
 end)
