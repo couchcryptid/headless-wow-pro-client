@@ -323,3 +323,12 @@ describe("catalog (pinned data)", function()
     assert.are.equal(PIN, cat.sources.questie.commit)
   end)
 end)
+
+-- Quest reward items come from QuestieDB itemData.questRewards (item -> rewarding quests).
+describe("Catalog:quest_rewards", function()
+  it("lists the items QuestieDB names as a quest's rewards, sorted", function()
+    local c = catalog.load(fixture_cfg())
+    assert.same({ 5004 }, c:quest_rewards(179))
+    assert.same({}, c:quest_rewards(9999))
+  end)
+end)

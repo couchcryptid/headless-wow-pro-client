@@ -26,8 +26,10 @@ render.GAPS = {
   "Camping 101 quests are recognised only by name from the local supplement (no catalog source names them); without it, profession variants equal baselines",
   -- Ruling AC: kill vs talk-to is a heuristic (kills.objective_kills).
   "talk-to NPC objectives may be credited as kills",
-  -- No catalog source lists quest rewards: a reward item another quest needs never reaches the bags.
-  "quest reward items are not modelled",
+  -- Catalog:quest_rewards: QuestieDB has no reward counts and no choice/fixed split.
+  "quest rewards give one of each item QuestieDB lists, choice rewards included",
+  -- Subzones (Anvilmar, Kharanos, ...) come only from R steps; IZ-gated class-training notes may stay hidden.
+  "subzones are known only from R steps; steps gated on a subzone by IZ may stay hidden",
 }
 
 local SEVERITY_ORDER = { "high", "medium-high", "medium", "low" }

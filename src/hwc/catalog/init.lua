@@ -398,6 +398,28 @@ function Catalog:item(id)
   return self._items[id] or nil
 end
 
+-- Quest id -> the items QuestieDB lists as its rewards (itemData.questRewards:
+-- "table or nil, quest IDs", item -> rewarding quests), sorted. QuestieDB gives no
+-- counts and doesn't separate a choice of rewards from fixed ones.
+function Catalog:quest_rewards(qid)
+  if not self._rewards then
+    local by_quest = {}
+    local qd = self.questie
+    local idx = qd and qd.keys.item.questRewards
+    if idx then
+      for id, row in pairs(qd.rows.item) do
+        for _, q in ipairs(type(row[idx]) == "table" and row[idx] or {}) do
+          by_quest[q] = by_quest[q] or {}
+          table.insert(by_quest[q], id)
+        end
+      end
+      for _, list in pairs(by_quest) do table.sort(list) end
+    end
+    self._rewards = by_quest
+  end
+  return self._rewards[tonumber(qid)] or {}
+end
+
 -- Item name -> id for the player's item_count; the lowest id wins a shared name.
 function Catalog:item_id(name)
   if not self._item_ids then
