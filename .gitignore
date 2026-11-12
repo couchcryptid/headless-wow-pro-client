@@ -2,4 +2,5 @@
 local/
 out/
 findings/*.json
+findings/**/*.json
 evidence/

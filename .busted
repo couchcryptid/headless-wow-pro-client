@@ -1,8 +1,17 @@
+-- `busted` skips specs tagged #slow (cross-process determinism, full guide runs);
+-- `busted --tags=slow` runs them. busted refuses a tag that is both included and
+-- excluded, so the default exclusion is dropped when the command line names tags.
+local names_tags = false
+for _, a in ipairs(arg or {}) do
+  if a == "-t" or a:match("^%-%-tags") then names_tags = true end
+end
+
 return {
   _all = {
     lpath = "./src/?.lua;./src/?/init.lua",
   },
   default = {
     ROOT = { "spec" },
+    ["exclude-tags"] = (not names_tags) and { "slow" } or nil,
   },
 }

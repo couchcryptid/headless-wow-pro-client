@@ -191,8 +191,10 @@ function Engine:num_steps()
   return n
 end
 
-function Engine:completed(i)
-  local gid = self:gid()
+-- gid defaults to the current guide; the driver passes the guide it is closing
+-- (WoWProCharDB.Guide[gid].completion outlives the switch to the next guide).
+function Engine:completed(i, gid)
+  gid = gid or self:gid()
   local char = rawget(self.env, "WoWProCharDB")
   local saved = char and char.Guide and char.Guide[gid]
   return saved and saved.completion and saved.completion[i] and true or false
