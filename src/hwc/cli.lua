@@ -4,12 +4,17 @@ local USAGE = [[
 Usage: hwc [-h|--help]
        hwc boot [--race RACE] [--class CLASS] [--addon PATH] [--json]
        hwc quest <id> [--addon PATH]
+       hwc run --class CLASS [--race RACE] [--variant V] [--addon PATH] [--stop-level N]
+               [--date D] [--out DIR]
+       hwc matrix [--races Dwarf,Gnome] [--addon PATH] [--date D] [--out DIR]
 
 Headless WoW-Pro client: loads the real WoW-Pro addon under LuaJIT.
 
 Commands:
   boot          Boot the addon to the first shown steps and print them
   quest         Print a quest from the catalog, with its sources, as JSON
+  run           Play one character through the 1-25 chain; write findings and a run log
+  matrix        Play every race x class (and profession variant); write findings and run logs
 
 Options:
   -h, --help    Show this help
@@ -17,6 +22,12 @@ Options:
   --class CLASS Player class token, e.g. WARRIOR (default WARRIOR)
   --addon PATH  WoW-Pro checkout (default ~/Projects/WoW-Pro-Guides)
   --json        Print the boot result as JSON
+  --variant V   Profession variant: baseline, secondary, alch-herb, bs-mining, lw-skin,
+                eng-ench, tailoring (default baseline)
+  --races LIST  Comma list of races for matrix (default Dwarf,Gnome)
+  --stop-level N  Level at which a run stops (default 25)
+  --date D      Findings date (default today, host clock)
+  --out DIR     Findings directory (default findings/)
 ]]
 
 local M = {}
@@ -113,6 +124,120 @@ local function run_quest(id, addon, out, err)
   return 0
 end
 
+-- Options for run/matrix: name -> value, every option takes a value.
+local function parse_values(args, allowed)
+  local opts = {}
+  local i = 2
+  while i <= #args do
+    local name = args[i]:match("^%-%-(.+)$")
+    if not (name and allowed[name] and args[i + 1]) then
+      return nil, "unknown or incomplete option: " .. args[i]
+    end
+    opts[name] = args[i + 1]
+    i = i + 2
+  end
+  return opts
+end
+
+local function mkdirs(path)
+  local lfs = require("lfs")
+  local cur = path:sub(1, 1) == "/" and "" or nil
+  for part in path:gmatch("[^/]+") do
+    cur = cur and (cur .. "/" .. part) or part
+    if lfs.attributes(cur, "mode") == nil then assert(lfs.mkdir(cur)) end
+  end
+end
+
+local function write_file(path, text)
+  local f = assert(io.open(path, "wb"))
+  f:write(text)
+  f:close()
+end
+
+-- Plays every combo, then writes DIR/<date>-<scope>.md and one run log per
+-- character under DIR/<date>-<scope>/.
+local function play(combos, scope, opts, out)
+  local config = require("hwc.config")
+  local runner = require("hwc.driver.run")
+  local matrix = require("hwc.driver.matrix")
+  local group = require("hwc.findings.group")
+  local render = require("hwc.findings.render")
+  local json = require("hwc.json")
+  local addon_info = require("hwc.addon_info")
+  local date = opts.date or os.date("%Y-%m-%d")
+  local outdir = opts.out or "findings"
+  local logdir = outdir .. "/" .. date .. "-" .. scope
+  mkdirs(logdir)
+  local logs, labels = {}, {}
+  for _, c in ipairs(combos) do
+    local cfg = config.load({
+      addon_path = opts.addon, race = c.race, class = c.class,
+      professions = matrix.professions(c.variant),
+    })
+    cfg.variant = c.variant
+    local log = runner.character(cfg, { stop_level = opts.stop_level })
+    log.variant = c.variant
+    logs[#logs + 1] = log
+    labels[#labels + 1] = string.format("%s %s %s", c.race, c.class, c.variant)
+    write_file(string.format("%s/%s-%s-%s.json", logdir, c.race, c.class, c.variant),
+      json.encode(log, { indent = true }) .. "\n")
+  end
+  local first = logs[1] or {}
+  local header = {
+    scope = scope, date = date, addon = first.addon, catalog = (first.catalog or {}).sources,
+    client = { commit = addon_info.read(config.repo_root()).commit },
+    matrix = { combos = labels }, rank = first.rank,
+  }
+  local path = outdir .. "/" .. date .. "-" .. scope .. ".md"
+  write_file(path, render.markdown(group.findings(logs), header))
+  out:write("hwc: wrote ", path, " (", #logs, " characters)\n")
+  return 0
+end
+
+-- Usage-level validation shared by run and matrix: nil, or a message for exit 2.
+local function check_race(race)
+  if not require("hwc.world.player").RACES[race] then return "race not in scope: " .. tostring(race) end
+end
+
+local function run_run(opts, out)
+  local combo = { race = opts.race or "Dwarf", class = opts.class:upper(), variant = opts.variant or "baseline" }
+  return play({ combo }, string.format("%s-%s-%s", combo.race, combo.class, combo.variant), opts, out)
+end
+
+local function run_matrix(races, opts, out)
+  local combos = require("hwc.driver.matrix").combos(
+    opts.addon or (os.getenv("HOME") .. "/Projects/WoW-Pro-Guides"), races)
+  local names = {}
+  for i, r in ipairs(races) do names[i] = r:lower() end
+  return play(combos, "forever-alliance-" .. table.concat(names, "-") .. "-1-25", opts, out)
+end
+
+local function command(args, out, err, allowed, prepare, fn)
+  local opts, perr = parse_values(args, allowed)
+  if opts and opts["stop-level"] then
+    opts.stop_level = tonumber(opts["stop-level"])
+    if not opts.stop_level then opts, perr = nil, "--stop-level needs a number" end
+  end
+  local arg
+  if opts then opts, arg, perr = prepare(opts) end
+  if not opts then
+    err:write("hwc: ", perr, "\n", USAGE)
+    return 2
+  end
+  local ok, res = pcall(fn, arg, opts, out)
+  if not ok then
+    local msg = tostring(res)
+    -- config.load's scope errors are usage errors
+    if msg:match("race not in scope") then
+      err:write(msg, "\n", USAGE)
+      return 2
+    end
+    err:write(msg, "\n")
+    return 1
+  end
+  return res
+end
+
 function M.main(args, out, err)
   out, err = out or io.stdout, err or io.stderr
   args = args or {}
@@ -157,6 +282,34 @@ function M.main(args, out, err)
       return 1
     end
     return res
+  end
+  if args[1] == "run" then
+    return command(args, out, err,
+      { race = true, class = true, variant = true, addon = true, ["stop-level"] = true, date = true, out = true },
+      function(o)
+        if not o.class then return nil, nil, "run needs --class" end
+        if not require("hwc.driver.matrix").professions(o.variant or "baseline") then
+          return nil, nil, "unknown variant: " .. o.variant
+        end
+        local bad = check_race(o.race or "Dwarf")
+        if bad then return nil, nil, bad end
+        return o
+      end,
+      function(_, o, w) return run_run(o, w) end)
+  end
+  if args[1] == "matrix" then
+    return command(args, out, err, { races = true, addon = true, date = true, out = true },
+      function(o)
+        local races = {}
+        for r in (o.races or "Dwarf,Gnome"):gmatch("[^,]+") do
+          local bad = check_race(r)
+          if bad then return nil, nil, bad end
+          races[#races + 1] = r
+        end
+        if #races == 0 then return nil, nil, "--races is empty" end
+        return o, races
+      end,
+      function(races, o, w) return run_matrix(races, o, w) end)
   end
   err:write(USAGE)
   return 2

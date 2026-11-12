@@ -53,7 +53,16 @@ local function catalog_lines(sources, out)
     local s = sources[name]
     local parts = { "present=" .. tostring(s.present) }
     if s.commit then parts[#parts + 1] = "commit=" .. s.commit end
-    if s.sha256 then parts[#parts + 1] = "sha256=" .. s.sha256 end
+    if type(s.sha256) == "table" then
+      -- the questie source hashes several files: name:hash, sorted by name
+      local files = {}
+      for file in pairs(s.sha256) do files[#files + 1] = file end
+      table.sort(files)
+      for i, file in ipairs(files) do files[i] = file .. ":" .. s.sha256[file] end
+      parts[#parts + 1] = "sha256=" .. table.concat(files, ",")
+    elseif s.sha256 then
+      parts[#parts + 1] = "sha256=" .. s.sha256
+    end
     if s.path then parts[#parts + 1] = "path=" .. s.path end
     out[#out + 1] = string.format("  - %s: %s", name, table.concat(parts, " "))
   end

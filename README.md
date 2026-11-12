@@ -32,6 +32,52 @@ A checkout without a git commit is refused, so an unidentified run can't be
 mistaken for a real one. With the addon's defaults (`autoresize = true`,
 `numsteps = 1`, WoWPro.lua:348-349) the engine shows one row.
 
+## Running characters and findings
+
+```sh
+bin/hwc run --race Dwarf --class PRIEST --out /tmp/findings          # one character
+bin/hwc run --race Dwarf --class WARRIOR --variant alch-herb         # with professions
+bin/hwc run --race Dwarf --class WARRIOR --stop-level 6 --date 2026-11-12
+bin/hwc matrix --races Dwarf,Gnome --date 2026-11-12                 # the whole matrix
+```
+
+`hwc run` plays one character through the guide chain with the real engine
+(stop level 25 unless `--stop-level N` says otherwise); `hwc matrix` plays every
+combo and groups all the signals into one findings file. Both exit 0 once the
+findings are written, whatever they contain, 1 on a harness failure and 2 on a
+usage error (a missing `--class`, a race outside Human/Dwarf/Gnome/NightElf).
+
+Output, under `--out DIR` (default `findings/` in the current directory):
+
+- `DIR/<date>-<scope>.md`: the findings (design spec §7.2). The scope is
+  `forever-alliance-<races lower, joined by '-'>-1-25` for `matrix` and
+  `<race>-<class>-<variant>` for `run`.
+- `DIR/<date>-<scope>/<race>-<class>-<variant>.json`: one run log per character
+  (git-ignored).
+
+`--date` (default: the host date) is an input, so with a fixed `--date` the same
+addon commit, catalog, config and seed give byte-identical markdown. The
+header's `Client` line is this repo's own HEAD commit.
+
+Matrix combos (`src/hwc/driver/matrix.lua`): for each race, every class that
+the race's start guide names in a `C|` tag (on lines with no `R|` tag, or whose
+`R|` includes the race) at the `baseline` variant, plus each other variant on
+the race's first class in sorted order. The start guide is
+`WoWPro.Leveling.ForeverStartGuides[race]`, read from the Leveling source text
+and matched to its guide file by `WoWPro:GuideName` (or GID); the addon is not
+executed. Variants (skills start at rank 1, max 75) cover every
+`A Camping 101: <Profession>` quest in the 1-25 guides:
+
+| Variant | Professions |
+|---|---|
+| `baseline` | none |
+| `secondary` | Cooking, First Aid, Fishing |
+| `alch-herb` | Alchemy, Herbalism |
+| `bs-mining` | Blacksmithing, Mining |
+| `lw-skin` | Leatherworking, Skinning |
+| `eng-ench` | Engineering, Enchanting |
+| `tailoring` | Tailoring |
+
 ## World and catalog
 
 The stubs answer from a simulated world (`src/hwc/world/`): the player, bags,

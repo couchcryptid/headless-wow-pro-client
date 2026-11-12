@@ -36,6 +36,15 @@ local function count(s, pat)
   return n
 end
 
+describe("render.markdown catalog sha256 table", function()
+  it("renders a per-file sha256 table sorted by file name (the questie source)", function()
+    local h = header()
+    h.catalog.questie.sha256 = { ["b.lua"] = "22", ["a.lua"] = "11" }
+    local out = render.markdown(group.findings({ runlog("Dwarf", "WARRIOR", {}) }), h)
+    assert.truthy(out:find("sha256=a.lua:11,b.lua:22", 1, true))
+  end)
+end)
+
 describe("render.markdown", function()
   local out = md({ runlog("Dwarf", "WARRIOR", sigs()) })
 

@@ -25,6 +25,35 @@ describe("cli", function()
     assert.matches("Usage", etext())
   end)
 
+  it("run without --class exits 2 with usage", function()
+    local out, _ = capture()
+    local err, etext = capture()
+    assert.equal(2, cli.main({ "run", "--race", "Dwarf" }, out, err))
+    assert.matches("Usage", etext())
+    assert.matches("%-%-class", etext())
+  end)
+
+  it("run with an unknown variant exits 2", function()
+    local out, _ = capture()
+    local err, etext = capture()
+    assert.equal(2, cli.main({ "run", "--class", "WARRIOR", "--variant", "nope" }, out, err))
+    assert.matches("variant", etext())
+  end)
+
+  it("run with a race outside the scope exits 2", function()
+    local out, _ = capture()
+    local err, etext = capture()
+    assert.equal(2, cli.main({ "run", "--race", "Orc", "--class", "WARRIOR" }, out, err))
+    assert.matches("race not in scope", etext())
+  end)
+
+  it("matrix --races Orc exits 2 (race not in scope)", function()
+    local out, _ = capture()
+    local err, etext = capture()
+    assert.equal(2, cli.main({ "matrix", "--races", "Orc" }, out, err))
+    assert.matches("race not in scope", etext())
+  end)
+
   local PIN_DIR = "local/questie/d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc"
   if present and lfs.attributes(PIN_DIR, "mode") == "directory" then
     it("quest prints the quest and its sources as sorted JSON", function()
