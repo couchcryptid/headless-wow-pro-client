@@ -95,6 +95,46 @@ describe("group.findings", function()
     for _, f in ipairs(by_signal(fs, "never-shown-accept")) do assert.equal(root.id, f.caused_by) end
   end)
 
+  it("links a prereq-hidden accept only to the quest after 'not met:'", function()
+    local function acc(sig, line, qid, why)
+      return { signal = sig, gid = "G1", file = "f.lua", line = line, action = "A", name = "n" .. line, qid = qid, why = why }
+    end
+    local fs = group.findings({ runlog("Dwarf", "WARRIOR", {
+      acc("accept-refused", 1, 1234), acc("accept-refused", 2, 5678),
+      acc("never-shown-accept", 3, 9, "NextStep:PRE&(1234&5678): A mandatory prereq was not met: 5678"),
+      acc("never-shown-accept", 4, 10, "PRE&(1234): other 1234 text but nothing unmet"),
+    }) })
+    local function at(line) for _, f in ipairs(fs) do if f.line == line then return f end end end
+    assert.equal(at(2).id, at(3).caused_by)
+    assert.same({ at(3).id }, at(2).causes)
+    assert.same({}, at(1).causes)
+    assert.is_nil(at(4).caused_by)
+  end)
+
+  it("never creates a longer causal cycle", function()
+    local function nsa(line, qid, why)
+      return { signal = "never-shown-accept", gid = "G", file = "f", line = line, action = "A", name = "n" .. line, qid = qid, why = why }
+    end
+    local fs = group.findings({ runlog("Dwarf", "WARRIOR", {
+      nsa(1, 1, "PRE&(x): A mandatory prereq was not met: 2"),
+      nsa(2, 2, "PRE&(x): A mandatory prereq was not met: 3"),
+      nsa(3, 3, "PRE&(x): A mandatory prereq was not met: 1"),
+    }) })
+    local by = {}
+    for _, f in ipairs(fs) do by[f.id] = f end
+    for _, f in ipairs(fs) do
+      local seen, a = {}, f
+      while a do
+        assert.is_nil(seen[a.id]); seen[a.id] = true
+        a = a.caused_by and by[a.caused_by]
+      end
+    end
+  end)
+
+  it("raises on an unknown signal", function()
+    assert.has_error(function() group.findings({ runlog("Dwarf", "WARRIOR", { { signal = "bogus" } }) }) end)
+  end)
+
   it("makes no root without dungeon skips", function()
     assert.equal(0, #by_signal(group.findings({ runlog("Dwarf", "WARRIOR", { dna() }) }), "engine-dungeon-skip"))
   end)

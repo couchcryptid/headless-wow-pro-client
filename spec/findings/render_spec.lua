@@ -80,4 +80,22 @@ describe("render.markdown", function()
     for i = #rev, 1, -1 do shuffled[#shuffled + 1] = rev[i] end
     assert.equal(base, md({ runlog("Gnome", "MAGE", shuffled), runlog("Dwarf", "WARRIOR", sigs()) }))
   end)
+
+  it("renders the dungeon root, its links, unknown dirty and de-duplicated matrix", function()
+    local dsig = {}
+    for i = 1, 2 do
+      dsig[i] = { signal = "never-shown-accept", gid = "G" .. i, file = "d.lua", line = i, action = "A",
+        name = "D" .. i, qid = 900 + i, reason = "engine-dungeon-skip" }
+    end
+    local h = header()
+    h.addon.dirty = nil
+    h.matrix.combos = { "Gnome MAGE baseline", "Gnome MAGE baseline" }
+    local o = render.markdown(group.findings({ runlog("Dwarf", "WARRIOR", dsig) }), h)
+    assert.truthy(o:find("EnableDungeons auto-completes DUNGEON accepts", 1, true))
+    assert.truthy(o:find("WoWPro/WoWPro_Broker.lua:2588", 1, true))
+    assert.truthy(o:find("| engine-dungeon-skip | 1 |", 1, true))
+    assert.equal(3, count(o, "\nTriage:\n"))
+    assert.truthy(o:find("unknown)", 1, true))
+    assert.truthy(o:find("- Matrix: Gnome MAGE baseline\n", 1, true))
+  end)
 end)

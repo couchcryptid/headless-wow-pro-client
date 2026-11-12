@@ -35,7 +35,10 @@ local function join(list)
   return table.concat(list, ", ")
 end
 
-local function yes_no(b) return b and "dirty" or "clean" end
+local function yes_no(b)
+  if b == nil then return "unknown" end
+  return b and "dirty" or "clean"
+end
 
 local function catalog_lines(sources, out)
   local names = {}
@@ -125,7 +128,10 @@ function render.markdown(findings, header)
   catalog_lines(header.catalog, out)
   out[#out + 1] = "- Client: " .. tostring((header.client or {}).commit or "unknown")
   local combos = {}
-  for i, c in ipairs((header.matrix or {}).combos or {}) do combos[i] = c end
+  local seen = {}
+  for _, c in ipairs((header.matrix or {}).combos or {}) do
+    if not seen[c] then seen[c] = true; combos[#combos + 1] = c end
+  end
   table.sort(combos)
   out[#out + 1] = "- Matrix: " .. join(combos)
   out[#out + 1] = "- Rank: " .. tostring(header.rank or 2)

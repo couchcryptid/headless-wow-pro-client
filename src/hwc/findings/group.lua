@@ -27,8 +27,11 @@ group.DUNGEON_ROOT = {
   file = "WoWPro/WoWPro_Broker.lua", line = 2588,
 }
 
--- Severities (spec §7.2); anything not listed is high (hidden or unreachable quests).
+-- Severities (spec §7.2): every §7.1 signal plus engine-dungeon-skip is named; an
+-- unknown signal raises instead of silently defaulting.
 local SEVERITY = {
+  ["never-shown-accept"] = "high", ["orphan-turnin"] = "high", ["accept-refused"] = "high",
+  ["wrong-race-class"] = "high", ["log-full"] = "high", ["engine-dungeon-skip"] = "high",
   ["lua-error"] = "high", ["below-level"] = "medium-high",
   ["did-not-advance"] = "medium", stuck = "medium", ["manual-completion"] = "medium",
   ["leftover-quests"] = "low", ["missing-global"] = "low",
@@ -39,6 +42,11 @@ local FOLLOWS_REFUSAL = { ["orphan-turnin"] = true, ["did-not-advance"] = true, 
 local function combo(log)
   local c = log.character or {}
   return string.format("%s %s %s", tostring(c.race), tostring(c.class), log.variant or "baseline")
+end
+
+-- Second sort key when two RunLogs share a combo: their professions, joined.
+local function profs(log)
+  return table.concat((log.character or {}).professions or {}, ",")
 end
 
 local function key_of(s)
@@ -67,7 +75,9 @@ local function new_finding(s, key)
   elseif s.signal == "manual-completion" and s.expected then
     f.expected = true
   end
-  if not f.expected then f.severity = SEVERITY[s.signal] or "high" end
+  if not f.expected then
+    f.severity = SEVERITY[s.signal] or error("findings: unknown signal " .. tostring(s.signal))
+  end
   return f
 end
 
@@ -87,13 +97,21 @@ local function pick(list)
   return best
 end
 
-local function link(child, parent)
-  if child.caused_by or child == parent or parent.caused_by == child.id then return end
+local function link(child, parent, by_id)
+  if child.caused_by or child == parent then return end
+  -- Refuse a cycle: child must not already be an ancestor of parent.
+  local a = parent
+  while a do
+    if a == child then return end
+    a = a.caused_by and by_id[a.caused_by]
+  end
   child.caused_by = parent.id
   parent.causes[#parent.causes + 1] = child.id
 end
 
 local function link_roots(findings)
+  local by_id = {}
+  for _, f in ipairs(findings) do by_id[f.id] = f end
   local refusals, hidden = {}, {}
   for _, f in ipairs(findings) do
     if f.qid and REFUSALS[f.signal] then refusals[f.qid] = refusals[f.qid] or {}; table.insert(refusals[f.qid], f) end
@@ -110,7 +128,8 @@ local function link_roots(findings)
             root.id = "F-" .. group.fnv1a32("engine-dungeon-skip")
             root.combos, root.causes, root.reasons = {}, {}, {}
           end
-          link(f, root)
+          by_id[root.id] = root
+          link(f, root, by_id)
           break
         end
       end
@@ -119,12 +138,14 @@ local function link_roots(findings)
   for _, f in ipairs(findings) do
     if f.qid and FOLLOWS_REFUSAL[f.signal] then
       local r = pick(refusals[f.qid])
-      if r then link(f, r) end
-    elseif f.signal == "never-shown-accept" and f.why and (f.why:find("PRE", 1, true) or f.why:find("prereq", 1, true)) then
-      for n in f.why:gmatch("%d+") do
-        local target = pick(refusals[tonumber(n)]) or pick(hidden[tonumber(n)])
-        if target and target ~= f then link(f, target); break end
-      end
+      if r then link(f, r, by_id) end
+    elseif f.signal == "never-shown-accept" and f.why then
+      -- The engine's only format (WoWPro_Broker.lua:2292):
+      -- "NextStep:PRE&(%s): A mandatory prereq was not met: %s". Only the id after
+      -- "not met:" counts; a why without that phrase links nothing.
+      local n = tonumber(f.why:match("not met:%s*(%d+)"))
+      local target = n and (pick(refusals[n]) or pick(hidden[n]))
+      if target and target ~= f then link(f, target, by_id) end
     end
   end
   if root then
@@ -151,13 +172,14 @@ function group.findings(runlogs)
         groups[key] = g
         order[#order + 1] = g
       end
-      g.entries[#g.entries + 1] = { combo = c, idx = i, sig = s }
+      g.entries[#g.entries + 1] = { combo = c, profs = profs(log), idx = i, sig = s }
     end
   end
   local findings = {}
   for _, g in ipairs(order) do
     table.sort(g.entries, function(a, b)
       if a.combo ~= b.combo then return a.combo < b.combo end
+      if a.profs ~= b.profs then return a.profs < b.profs end
       if a.idx ~= b.idx then return a.idx < b.idx end
       return tostring(a.sig.why) < tostring(b.sig.why)
     end)
