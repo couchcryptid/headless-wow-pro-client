@@ -1,0 +1,83 @@
+-- Canonical findings markdown (design spec §7.2).
+local group = require("hwc.findings.group")
+local render = require("hwc.findings.render")
+
+local function runlog(race, class, signals)
+  return { character = { race = race, class = class, professions = {} }, rank = 2, steps = {},
+    signals = signals, guides = {} }
+end
+
+local function sigs()
+  return {
+    { signal = "did-not-advance", gid = "G1", file = "a.lua", line = 40, action = "T", name = "Report", qid = 314,
+      why = "w", level = 3, log = { 314, 5 }, before = { name = "b" }, after = { name = "c" }, confidence = "verified" },
+    { signal = "accept-refused", gid = "G1", file = "a.lua", line = 10, action = "A", name = "Pre", qid = 96629,
+      reason = "prerequisite", confidence = "unverified" },
+    { signal = "never-shown-accept", gid = "G1", file = "a.lua", line = 20, action = "A", name = "Next", qid = 5,
+      why = "PRE&(x): A mandatory prereq was not met: 96629" },
+    { signal = "manual-completion", gid = "G1", file = "a.lua", line = 50, action = "H", name = "Hearth", expected = true },
+    { signal = "lua-error", message = "boom\nsecond line", stack = "x.lua:1" },
+  }
+end
+
+local function header()
+  return { scope = "dwarf-gnome-1-25", date = "2026-11-12",
+    addon = { path = "/addon", branch = "main", commit = "abc123", dirty = false },
+    catalog = { questie = { path = "/q", present = true, sha256 = "deadbeef", commit = "d57637f" } },
+    client = { commit = "c0ffee" }, matrix = { combos = { "Gnome MAGE baseline", "Dwarf WARRIOR baseline" } },
+    rank = 2 }
+end
+
+local function md(logs) return render.markdown(group.findings(logs), header()) end
+
+local function count(s, pat)
+  local n = 0
+  for _ in s:gmatch(pat) do n = n + 1 end
+  return n
+end
+
+describe("render.markdown", function()
+  local out = md({ runlog("Dwarf", "WARRIOR", sigs()) })
+
+  it("has the header lines and the gaps", function()
+    assert.truthy(out:find("Rank: 2", 1, true))
+    assert.truthy(out:find("Date: 2026-11-12", 1, true))
+    assert.truthy(out:find("rested XP", 1, true))
+    assert.truthy(out:find("instance XP", 1, true))
+    assert.truthy(out:find("Gnome MAGE baseline", 1, true))
+  end)
+
+  it("has one Triage: block per non-expected finding", function()
+    local fs = group.findings({ runlog("Dwarf", "WARRIOR", sigs()) })
+    local n = 0
+    for _, f in ipairs(fs) do if not f.expected then n = n + 1 end end
+    assert.equal(n, count(out, "\nTriage:\n"))
+    assert.equal(n, count(out, "\n### F%-%x%x%x%x%x%x%x%x\n"))
+  end)
+
+  it("lists every field, links and the expected manual completions", function()
+    assert.truthy(out:find("- Severity: high", 1, true))
+    assert.truthy(out:find("- Caused by: F-", 1, true))
+    assert.truthy(out:find("- Causes: F-", 1, true))
+    assert.truthy(out:find("- Confidence: unverified quest data", 1, true))
+    assert.truthy(out:find("## Expected manual completions", 1, true))
+    assert.truthy(out:find("Hearth", 1, true))
+    assert.falsy(out:find("boom\nsecond", 1, true)) -- one line per field
+  end)
+
+  it("ends with exactly one trailing newline and no carriage returns", function()
+    assert.truthy(out:match("[^\n]\n$"))
+    assert.falsy(out:find("\r", 1, true))
+  end)
+
+  it("is identical when the RunLog arrays are shuffled or reversed", function()
+    local a = runlog("Dwarf", "WARRIOR", sigs())
+    local b = runlog("Gnome", "MAGE", sigs())
+    local base = md({ a, b })
+    assert.equal(base, md({ b, a }))
+    local rev = sigs()
+    local shuffled = {}
+    for i = #rev, 1, -1 do shuffled[#shuffled + 1] = rev[i] end
+    assert.equal(base, md({ runlog("Gnome", "MAGE", shuffled), runlog("Dwarf", "WARRIOR", sigs()) }))
+  end)
+end)
