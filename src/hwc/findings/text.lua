@@ -1,6 +1,8 @@
 -- Every human-facing word in the findings report (design spec §4.7, §4.8).
 -- Pure: no I/O. render, JSON and markdown all take their titles, sentences and
 -- labels from here so the wording lives in one place.
+local RACES = require("hwc.world.player").RACES
+
 local text = {}
 
 text.SEVERITY = {
@@ -15,7 +17,9 @@ text.SEVERITY = {
 -- is the spec's (§4.8), not the addon's tooltip text, except where noted.
 text.VERBS = {
   A = "Accept",           -- WoWPro_Parser.lua:64  (label "Accept")
+  a = "Accept repeatable", -- WoWPro_Parser.lua:66  ("Accept (repeatable)")
   T = "Turn in",          -- WoWPro_Parser.lua:68  ("Turn in")
+  t = "Turn in when complete", -- WoWPro_Parser.lua:69  ("Turn in when complete")
   C = "Complete",         -- WoWPro_Parser.lua:67  ("Complete")
   K = "Kill",             -- WoWPro_Parser.lua:70  ("Kill")
   R = "Run to",           -- WoWPro_Parser.lua:71  ("Run to")
@@ -23,6 +27,7 @@ text.VERBS = {
   h = "Set hearth at",    -- WoWPro_Parser.lua:73  ("Set hearth to")
   F = "Fly to",           -- WoWPro_Parser.lua:74  ("Fly to")
   f = "Get flight path at", -- WoWPro_Parser.lua:75  ("Get flight path for")
+  M = "Make",             -- WoWPro_Parser.lua:76  ("Make")
   N = "Note:",            -- WoWPro_Parser.lua:77  ("Note")
   U = "Use",              -- WoWPro_Parser.lua:80  ("Use")
   B = "Buy",              -- WoWPro_Parser.lua:78  ("Buy")
@@ -34,6 +39,8 @@ text.VERBS = {
   r = "Repair or restock at",
   L = "Reach level",       -- WoWPro_Parser.lua:81  ("Level")
   D = "Guide done:",       -- WoWPro_Parser.lua:84  ("Done")
+  P = "Take portal to",    -- WoWPro_Parser.lua:86  ("Take portal"); P step names are destinations
+  ["*"] = "Trash",         -- WoWPro_Parser.lua:96  ("Trash")
 }
 
 function text.anchor(id)
@@ -41,7 +48,38 @@ function text.anchor(id)
   return "f-" .. hex:lower()
 end
 
-local function link(title, id) return "[" .. title .. "](#" .. text.anchor(id) .. ")" end
+-- Escapes text placed in a markdown heading or link text, so a title such as
+-- "Lua error: '<eof>' expected near ']'" can't open a link, emphasis or HTML
+-- tag. JSON titles stay plain; only the markdown forms go through this.
+function text.md_text(s)
+  s = tostring(s):gsub("[\\%[%]%*_]", "\\%0")
+  return (s:gsub("<", "&lt;"):gsub(">", "&gt;"))
+end
+
+local function link(title, id) return "[" .. text.md_text(title) .. "](#" .. text.anchor(id) .. ")" end
+
+-- Markdown links to several findings shown together (one list or sentence).
+-- Links whose titles collide get " (quest N, line L)" so they can be told
+-- apart; a missing part is left out. Returns the links in input order.
+function text.links(findings)
+  local seen = {}
+  for _, f in ipairs(findings) do
+    local t = text.title(f)
+    seen[t] = (seen[t] or 0) + 1
+  end
+  local out = {}
+  for i, f in ipairs(findings) do
+    local t = text.title(f)
+    if seen[t] > 1 then
+      local parts = {}
+      if f.qid then parts[#parts + 1] = "quest " .. tostring(f.qid) end
+      if f.line then parts[#parts + 1] = "line " .. tostring(f.line) end
+      if #parts > 0 then t = t .. " (" .. table.concat(parts, ", ") .. ")" end
+    end
+    out[i] = link(t, f.id)
+  end
+  return out
+end
 
 local function lower_first(s) return (s:gsub("^%u", string.lower)) end
 
@@ -63,9 +101,16 @@ local function split_combo(combo)
   return race or combo, class or "", variant or "baseline"
 end
 
+-- A race token as the game shows it: "NightElf" -> "Night Elf". Unknown
+-- tokens (and labels that already hold the display name) pass through.
+local function race_name(token)
+  local r = RACES[token]
+  return r and r.name or token
+end
+
 function text.character(combo)
   local race, class, variant = split_combo(combo)
-  local out = race .. " " .. titlecase(class)
+  local out = race_name(race) .. " " .. titlecase(class)
   if variant ~= "baseline" then out = out .. " (" .. variant .. ")" end
   return out
 end
@@ -116,7 +161,7 @@ function text.combos(affected, matrix)
         if g.total <= 1 then
           label = text.character(g.race .. " " .. g.class .. " " .. g.hit[1])
         else
-          local name = g.race .. " " .. titlecase(g.class)
+          local name = race_name(g.race) .. " " .. titlecase(g.class)
           if #g.hit >= g.total then
             label = name .. " (all " .. g.total .. " variants)"
             dropped = true
@@ -164,7 +209,7 @@ local function label_for(f, ctx, kind)
       race, class = base:match("^(.*) (%S+)$")
     else
       race, class = split_combo(combo_or_label)
-      class = titlecase(class)
+      race, class = race_name(race), titlecase(class)
     end
     return kind == "class" and class or race
   end
@@ -237,9 +282,21 @@ function text.title(f)
 end
 
 -- Returns the sentence as (first sentence, remainder or nil).
-local function clauses(f, ctx)
+-- prereq_of: the finding the never-shown sentence links as its prerequisite.
+-- A follow-on already links its parent in "Follows from"; don't link it twice.
+local function prereq_of(f, ctx)
+  if f.signal ~= "never-shown-accept" or has_reason(f, "engine-dungeon-skip") then return nil end
+  local pre = f.why and f.why:match("not met: (%d+)")
+  local hit = pre and ctx and ctx.by_qid and ctx.by_qid[tonumber(pre)]
+  if hit and hit.id ~= f.caused_by then return hit end
+  return nil
+end
+
+-- linked: id -> markdown link for findings this sentence links (text.links).
+local function clauses(f, ctx, linked)
   local s, q = f.signal, tostring(f.qid)
   ctx = ctx or {}
+  linked = linked or {}
   if s == "never-shown-accept" then
     if has_reason(f, "engine-dungeon-skip") then
       return "WoWPro marks this dungeon quest done without showing it, because dungeon quests are switched off."
@@ -247,9 +304,8 @@ local function clauses(f, ctx)
     local pre = f.why and f.why:match("not met: (%d+)")
     if pre then
       local ref = "quest " .. pre
-      local hit = ctx.by_qid and ctx.by_qid[tonumber(pre)]
-      -- A follow-on already links its parent in "Follows from"; don't link it twice.
-      if hit and hit.id ~= f.caused_by then ref = "quest " .. link(text.title(hit), hit.id) end
+      local hit = prereq_of(f, ctx)
+      if hit then ref = "quest " .. (linked[hit.id] or link(text.title(hit), hit.id)) end
       return "The guide tells you to accept this quest, but WoWPro hides the step because its prerequisite, "
         .. ref .. ", is never completed."
     elseif f.why and f.why ~= "" then
@@ -278,7 +334,14 @@ local function clauses(f, ctx)
     return "WoWPro shows this step to " .. article(label) .. label .. ", but quest " .. q .. " is for other "
       .. (kind == "class" and "classes" or kind == "race" and "races" or "characters") .. "."
   elseif s == "below-level" then
-    return "The guide reaches this accept at level " .. tostring(f.level) .. ", below the level the quest requires."
+    -- The signal fires after the grind, so f.level is the level the client
+    -- ground up to, not the level the guide reached the accept at.
+    local g = f.grind
+    if g and g.to and g.kills then
+      return "The guide reaches this accept below level " .. tostring(g.to) .. ", the level the quest requires; "
+        .. "the client ground " .. tostring(g.kills) .. " kills to get there."
+    end
+    return "The guide reaches this accept below the level the quest requires."
   elseif s == "did-not-advance" then
     return "The simulated action didn't move WoWPro to the next step, so the client clicked it off."
   elseif s == "manual-completion" then
@@ -287,7 +350,9 @@ local function clauses(f, ctx)
     local t = STUCK[(f.reasons or {})[1]]
     if t then return t[2] end
   elseif s == "leftover-quests" then
-    return "Quest " .. q .. " was still in the log when this guide ended; nothing in it turns the quest in."
+    local which = q
+    if f.qname and f.qname ~= "" then which = quoted(f.qname) .. " (" .. q .. ")" end
+    return "Quest " .. which .. " was still in the log when this guide ended; the run never turned it in."
   elseif s == "lua-error" then
     return "WoWPro raised an error during the run.", "The message and stack are in the detail below."
   elseif s == "engine-dungeon-skip" then
@@ -298,10 +363,16 @@ local function clauses(f, ctx)
 end
 
 function text.sentence(f, ctx)
-  local first, rest = clauses(f, ctx)
   local parent = f.caused_by and ctx and ctx.by_id and ctx.by_id[f.caused_by]
+  local related = {}
+  if parent then related[#related + 1] = parent end
+  local pre = prereq_of(f, ctx)
+  if pre then related[#related + 1] = pre end
+  local linked = {}
+  for i, l in ipairs(text.links(related)) do linked[related[i].id] = l end
+  local first, rest = clauses(f, ctx, linked)
   if parent then
-    return "Follows from " .. link(text.title(parent), parent.id) .. ". " .. first
+    return "Follows from " .. linked[parent.id] .. ". " .. first
   end
   if rest then return first .. " " .. rest end
   return first
