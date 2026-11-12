@@ -38,10 +38,11 @@
 -- Multi-QID steps (QID|179^180): the engine treats a step as satisfied when
 -- any listed id is involved: the A test is QIDsInTable(QID, QuestLog), any of
 -- "^&" (WoWPro_Events.lua:709; Broker.lua:266-275), and AutoCompleteQuestUpdate
--- walks every listed id for the T/C branches (AutoComplete.lua:329-336). So A
--- accepts the first listed id the world allows (alternatives such as
--- 5926^5927^5928 are race/class variants); C/K/T act on the first listed id in
--- the log (qids[1] when none is).
+-- walks every listed id for the T/C branches (AutoComplete.lua:329-336). So A is
+-- a noop (already-in-log / already-completed, Ruling J) when ANY listed id is in
+-- the log or completed, and otherwise accepts the first listed id the world allows
+-- (alternatives such as 5926^5927^5928 are race/class variants); C/K/T act on the
+-- first listed id in the log (qids[1] when none is).
 local kills = require("hwc.world.kills")
 local stubs_core = require("hwc.stubs.core")
 
@@ -416,7 +417,7 @@ local function perform_use(ctx, step, out)
   local use = tonumber(first_part(step.tags and step.tags.use and tostring(step.tags.use):gsub("[%^&].*", "")))
   out.kind = "acted"
   local is_loot = false
-  for _, it in ipairs(parse_loot(step.tags.lootitem)) do
+  for _, it in ipairs(parse_loot(step.tags and step.tags.lootitem)) do
     if it.id == use then is_loot = true end
   end
   -- The L tag supplies a use item that is also looted (see apply_item_tag).
@@ -448,8 +449,22 @@ end
 local function apply_item_tag(ctx, step, out)
   local items = parse_loot(step.tags and step.tags.lootitem)
   if #items == 0 then return end
-  for _, it in ipairs(items) do ctx.world.player:add_item(it.id, it.n) end
+  -- Ruling L: top up to the tag's quantity (the step's own rule, e.g. an item
+  -- objective, may already have added some); BAG_UPDATE only when something was
+  -- added and the step has not already fired it.
+  local added = false
+  for _, it in ipairs(items) do
+    local need = it.n - ctx.world.player:item_count(it.id)
+    if need > 0 then
+      ctx.world.player:add_item(it.id, need)
+      added = true
+    end
+  end
+  if not added then return end
   out.kind = "acted"
+  for _, e in ipairs(out.events) do
+    if e == "BAG_UPDATE" then return end
+  end
   fire(ctx, out, "BAG_UPDATE", 0)
 end
 

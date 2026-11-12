@@ -130,8 +130,9 @@ function M.install(sb, cfg)
     local link = "|cffffffff|Hitem:" .. id .. "::::::::1:::::::|h[" .. it.name .. "]|h|r"
     return it.name, link, 1, 1, 0, "", "", 1, "", QUESTION_MARK_ICON, 0
   end
-  -- WoWPro_Broker.lua:3341 (IsPlayerSpell)
-  env.IsPlayerSpell = function(id) return player().spells[id] == true end
+  -- WoWPro_Broker.lua:3341 (IsPlayerSpell): spellID comes from a (";"):split of the SPELL tag
+  -- (:3332), so it is a string; the client API coerces numeric strings.
+  env.IsPlayerSpell = function(id) return player().spells[tonumber(id)] == true end
   env.ERR_NEWTAXIPATH = M.ERR_NEWTAXIPATH
   -- WoW client GetBindLocation: the hearth location text, nil when unbound
   env.GetBindLocation = function() local b = player().bind; return b and b.name or nil end

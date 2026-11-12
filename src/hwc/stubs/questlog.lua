@@ -72,8 +72,9 @@ function M.install(sb)
     IsComplete = function(qid) return log():is_complete(qid) end,
     -- CompatUtil:184 (QuestLog_IsComplete)
     IsFailed = function() return false end,
-    -- CompatUtil:194 (QuestLog_IsQuestFlaggedCompleted)
-    IsQuestFlaggedCompleted = function(qid) return log().history[qid] == true end,
+    -- CompatUtil:194 (QuestLog_IsQuestFlaggedCompleted); callers pass raw WoWPro.QID[qidx]
+    -- strings (AutoComplete.lua:522) and split prereq ids (Broker.lua:2275), so coerce.
+    IsQuestFlaggedCompleted = function(qid) return log().history[tonumber(qid)] == true end,
     -- CompatUtil:201 (QuestLog_IsQuestFlaggedCompletedOnAccount)
     IsQuestFlaggedCompletedOnAccount = function() return false end,
     -- CompatUtil:204 (ForAccount fallback)

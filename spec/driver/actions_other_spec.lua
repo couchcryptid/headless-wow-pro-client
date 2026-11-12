@@ -112,8 +112,7 @@ describe("actions.perform: items", function()
     assert.is_true(w.log:is_complete(92005))
     assert.are.equal(0, w.player:item_count(9999))
     assert.are.same({ "BAG_UPDATE", 0 }, E.fired[1])
-    assert.is_true(#o.events >= 2)
-    assert.are.equal("QUEST_LOG_UPDATE", E.fired[2][1])
+    assert.are.same({ "BAG_UPDATE", "QUEST_LOG_UPDATE", "BAG_UPDATE" }, o.events)
   end)
 
   it("U keeps the use item when it is also the L item", function()
@@ -129,6 +128,30 @@ describe("actions.perform: items", function()
     assert.are.equal("acted", o.kind)
     assert.are.equal(1, w.player:item_count(9999))
     assert.are.same({ { "BAG_UPDATE", 0 } }, E.fired)
+  end)
+end)
+
+describe("actions.perform: L tag top-up (Ruling L)", function()
+  it("a C step on an item-objective quest with the same L item gives exactly the count, one BAG_UPDATE", function()
+    local ctx, E, w = setup()
+    actions.perform(ctx, step("A", { 179 }))
+    E.fired = {}
+    local o = actions.perform(ctx, step("C", { 179 }, { lootitem = { [5001] = 2 } }))
+    assert.are.equal(2, w.player:item_count(5001))
+    local bags = 0
+    for _, e in ipairs(names(E)) do if e == "BAG_UPDATE" then bags = bags + 1 end end
+    assert.are.equal(1, bags)
+    assert.are.equal("acted", o.kind)
+  end)
+
+  it("a repeated l step with the item already held adds nothing and fires nothing", function()
+    local ctx, E, w = setup()
+    actions.perform(ctx, step("l", {}, { lootitem = { [2894] = 2 } }))
+    E.fired = {}
+    local o = actions.perform(ctx, step("l", {}, { lootitem = { [2894] = 2 } }))
+    assert.are.equal(2, w.player:item_count(2894))
+    assert.are.same({}, E.fired)
+    assert.are.equal("noop", o.kind)
   end)
 end)
 
@@ -163,10 +186,16 @@ describe("actions.perform: level and training", function()
 
   it("a SPELL tag learns the spell id; a known one is a noop", function()
     local ctx, E, w = setup()
-    local t = { spell = "First Aid; 3273; Flip" }
+    -- Flip (third field) only picks the engine's skip direction (Broker.lua:3332); the driver ignores it.
+    local t = { spell = "First Aid; 3273" }
     local o = actions.perform(ctx, step("A", {}, t))
     assert.are.equal("acted", o.kind)
     assert.is_true(w.player.spells[3273])
+    local cfg = require("hwc.config").load({ race = "Dwarf", class = "WARRIOR" })
+    local sb = require("hwc.sandbox").new(cfg)
+    core.install(sb, cfg)
+    sb.world = w
+    assert.is_true(sb.env.IsPlayerSpell("3273"))
     assert.are.same({ "SKILL_LINES_CHANGED", "SPELLS_CHANGED" }, names(E))
     E.fired = {}
     assert.are.equal("noop", actions.perform(ctx, step("=", {}, t)).kind)

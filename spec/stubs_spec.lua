@@ -23,6 +23,13 @@ describe("stubs", function()
     assert.equal("New flight path discovered!", env.ERR_NEWTAXIPATH)
   end)
 
+  it("IsPlayerSpell coerces the string spell id the engine passes (Broker.lua:3332-3340)", function()
+    sb.world.player:learn_spell(3273)
+    assert.is_true(env.IsPlayerSpell("3273"))
+    assert.is_true(env.IsPlayerSpell(3273))
+    assert.is_false(env.IsPlayerSpell("1"))
+  end)
+
   it("reads the addon version from its TOC", function()
     assert.is_string(env.GetAddOnMetadata("WoWPro", "Version"))
     assert.equal(env.GetAddOnMetadata("WoWPro", "Version"), env.C_AddOns.GetAddOnMetadata("WoWPro", "Version"))
