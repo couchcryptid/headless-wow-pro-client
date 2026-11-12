@@ -117,7 +117,7 @@ Its job is to let the addon load and run as if it were in the game, with the WoW
   - *Amended 2026-11-11 during Plan 1:* Widgets and CurrentGuide were taken off the skip list. `WoWPro_Frames.lua:1767` builds every row from Widgets constructors, and `WoWPro_Broker.lua:1880` reads `CurrentGuideFrame:IsVisible()` on every update. The skip list is configuration, and each entry records why it's skipped.
 - **Stand-ins for what skipped files define and the engine calls:** `WoWPro.RefreshConfig` and `WoWPro.SetDefaults`, which `OnInitialize`'s AceDB callbacks require. Without them CallbackHandler errors (`CallbackHandler-1.0.lua:101–102`). Also `WoWPro:InitializeTutorial` and `QueueTutorial`, `CreateConfig`, and minimap and binding calls. Each is a no-op that logs, kept in one file so they're easy to review.
 - **Guides:** load all Forever `Alliance` and `Neutral` `Guides.xml` files as the TOC does. Faction filtering is the engine's (`WoWPro_GuideRegistry.lua:266`).
-- **Saved variables:** start each run with a fresh character: `WoWProCharDB = { QID2Guide = {} }` before the guide files load, and AceDB creating the rest. Pin `WoWProCharDB.DebugLevel = 0`, because the default of 1 turns `;` comment lines into steps (`WoWPro_Parser.lua:691`) and changes step indices. Seed `math.random` (`SelectHearthstone`).
+- **Saved variables:** start each run with a fresh character and no pre-seeded saved variables (per §4.3, `OnInitialize` creates the sub-tables such as `QID2Guide`). Pin `WoWProCharDB.DebugLevel = 0`, because the default of 1 turns `;` comment lines into steps (`WoWPro_Parser.lua:691`) and changes step indices. Seed `math.random` (`SelectHearthstone`).
 
 ### 4.3 Boot sequence
 
