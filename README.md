@@ -115,11 +115,19 @@ usage error (a missing `--class`, a race outside Human/Dwarf/Gnome/NightElf).
 
 Output, under `--out DIR` (default `findings/` in the current directory):
 
-- `DIR/<date>-<scope>.md`: the findings (design spec §7.2). The scope is
+- `DIR/<date>-<scope>.md`: the findings report (layout in
+  `docs/superpowers/specs/2026-11-12-findings-report-design.md`). The scope is
   `forever-alliance-<races lower, joined by '-'>-1-25` for `matrix` and
   `<race>-<class>-<variant>` for `run`.
+- `DIR/<date>-<scope>.json`: the same findings as a machine-readable document
+  (the JSON contract in the same spec), which `/triage` reads.
 - `DIR/<date>-<scope>/<race>-<class>-<variant>.json`: one run log per character
   (git-ignored).
+
+`--relative-to DIR` (default: the current directory) sets the base for every
+path in the output: the markdown, the findings JSON and the run logs name the
+addon checkout, the catalog sources and anything under DIR relative to it, so no
+absolute path of the machine survives and the files are portable.
 
 `--date` (default: the host date) is an input, so with a fixed `--date` the same
 addon commit, catalog, config and seed give byte-identical markdown. The
