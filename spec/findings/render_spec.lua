@@ -56,6 +56,13 @@ describe("render.markdown", function()
     assert.truthy(out:find("Gnome MAGE baseline", 1, true))
   end)
 
+  -- Rulings AB and AC: the known false-finding sources are named in the header.
+  it("names the nameless Camping 101 and talk-to NPC gaps", function()
+    assert.truthy(out:find("  - Camping 101 quests without catalog names are not recognised; profession variants " ..
+      "equal baselines until the supplement names them\n", 1, true))
+    assert.truthy(out:find("  - talk-to NPC objectives may be credited as kills\n", 1, true))
+  end)
+
   it("has one Triage: block per non-expected finding", function()
     local fs = group.findings({ runlog("Dwarf", "WARRIOR", sigs()) })
     local n = 0

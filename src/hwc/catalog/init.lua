@@ -323,7 +323,13 @@ local function build_quest(self, id)
     if o.count_assumed then assumed = true end
   end
 
-  quest.confidence = (xp_known and quest.level ~= nil and not assumed) and "verified" or "unverified"
+  -- Ruling AB: rules keyed on the name (Camping 101's requires_skill and
+  -- completed_by_training above) cannot apply to a quest no source names, so its
+  -- data cannot be called verified.
+  local named = type(quest.name) == "string" and quest.name ~= ""
+  if not named then note("no name in any source; name-based rules (Camping 101) cannot apply") end
+
+  quest.confidence = (xp_known and quest.level ~= nil and not assumed and named) and "verified" or "unverified"
   quest.notes = notes
   return quest
 end
@@ -359,6 +365,9 @@ function Catalog:npc(id)
     self._npcs[id] = n and {
       id = id, name = n.name, level_min = n.minLevel, level_max = n.maxLevel, rank = n.rank,
       spawns = n.spawns or {}, zone_id = n.zoneID,
+      -- npcFlags (foreverNpcDB.lua npcKeys :21-22): service bits, e.g. gossip 1,
+      -- questgiver 2, vendor 4, trainer 16 (kills.objective_kills, Ruling AC).
+      flags = n.npcFlags,
     } or false
   end
   return self._npcs[id] or nil

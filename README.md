@@ -70,8 +70,13 @@ the race's first class in sorted order. The start guide is
 and matched to its guide file by `WoWPro:GuideName` (or GID); the addon is not
 executed. On Dun Morogh that gives Dwarf HUNTER, PALADIN, PRIEST, ROGUE,
 SHAMAN, WARRIOR and Gnome MAGE, PRIEST, ROGUE, WARLOCK, WARRIOR: 11 classes,
-23 runs for `--races Dwarf,Gnome`. Variants (skills start at rank 1, max 75) cover every
-`A Camping 101: <Profession>` quest in the 1-25 guides:
+23 runs for `--races Dwarf,Gnome`. Variants (skills start at rank 1, max 75) are
+meant to cover every `A Camping 101: <Profession>` quest in the 1-25 guides, but
+the Camping 101 rules key on the quest's name, and the Forever-added Camping 101
+quests (96044, 96047, 96629, ...) have no name in any catalog source yet. Until
+hand-checked supplement entries name them, those quests are marked `unverified`,
+the rules never fire and every profession variant plays exactly like its
+baseline; the findings header lists this under Gaps. The variants:
 
 | Variant | Professions |
 |---|---|

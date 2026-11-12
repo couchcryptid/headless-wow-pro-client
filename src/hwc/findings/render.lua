@@ -22,6 +22,12 @@ render.GAPS = {
   "Forever Boosted Rest from campfires",
   "party XP for non-elites (spec §5.5)",
   "dungeon runs and instance XP (spec §3)",
+  -- Ruling AB: the Forever-added Camping 101 quests have no name in any catalog source.
+  "Camping 101 quests without catalog names are not recognised; profession variants equal baselines until the supplement names them",
+  -- Ruling AC: kill vs talk-to is a heuristic (kills.objective_kills).
+  "talk-to NPC objectives may be credited as kills",
+  -- No catalog source lists quest rewards: a reward item another quest needs never reaches the bags.
+  "quest reward items are not modelled",
 }
 
 local SEVERITY_ORDER = { "high", "medium-high", "medium", "low" }

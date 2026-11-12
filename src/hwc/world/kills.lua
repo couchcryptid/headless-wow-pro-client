@@ -68,11 +68,32 @@ local function item_kills(catalog, objective)
   return result(npc, kills.for_drop(rate, count))
 end
 
--- { npc_id, level, elite, count } for a kill/drop objective, or nil when it yields no kill XP.
-function kills.objective_kills(catalog, objective)
+-- Ruling AC: is an npc objective's NPC someone the player talks to rather than
+-- kills? QuestieDB's objective groups cannot tell: its creatureObjective is a kill
+-- ("If text is nil the default '<Name> slain x/y' is used", foreverQuestDB.lua:22),
+-- but Forever's talk-to objectives (e.g. 96044 -> Tognus Flintfire, 96629 ->
+-- Gremlock Pilsnor) come from the Wowhead objectives file as kind "npc", and those
+-- quests have no QuestieDB row at all. So a heuristic decides, flagged in the
+-- findings gaps: the quest's starter or ender NPC; an NPC with no level range; or,
+-- beyond the ruling's two tests (which miss both examples above: neither quest has a
+-- starter/ender on record and both NPCs have levels), a service NPC, one with any
+-- QuestieDB npcFlags bit set (gossip, questgiver, vendor, trainer, ...).
+local function talk_to(npc, quest)
+  if not (npc.level_min and npc.level_max) then return true end
+  if (npc.flags or 0) ~= 0 then return true end
+  if quest then
+    if quest.starter == npc.id and (quest.starter_kind == nil or quest.starter_kind == "npc") then return true end
+    if quest.ender == npc.id and (quest.ender_kind == nil or quest.ender_kind == "npc") then return true end
+  end
+  return false
+end
+
+-- { npc_id, level, elite, count } for a kill/drop objective, or nil when it yields no
+-- kill XP (quest, optional, lets a talk-to NPC objective be told from a kill).
+function kills.objective_kills(catalog, objective, quest)
   if objective.kind == "npc" then
     local npc = catalog:npc(objective.ids and objective.ids[1])
-    if not npc then return nil end
+    if not npc or talk_to(npc, quest) then return nil end
     return result(npc, objective.count or 1)
   elseif objective.kind == "item" then
     return item_kills(catalog, objective)

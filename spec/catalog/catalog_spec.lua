@@ -117,6 +117,15 @@ describe("catalog (fixtures)", function()
     assert.are.equal("unverified", u.confidence)
   end)
 
+  -- Ruling AB: name-based rules (Camping 101) cannot apply to a quest no source names.
+  it("marks a quest with no name in any source unverified, with a note", function()
+    local q = cat:quest(90002)
+    assert.is_nil(q.name)
+    assert.are.equal("unverified", q.confidence)
+    assert.is_true(has_note(q, "no name in any source; name-based rules (Camping 101) cannot apply"))
+    assert.are.equal("verified", cat:quest(90001).confidence) -- named by the supplement
+  end)
+
   it("treats the 'any race' masks as no restriction", function()
     assert.is_nil(cat:quest(1001).races)
     assert.is_nil(cat:quest(1003).races)
@@ -291,6 +300,11 @@ describe("catalog (pinned data)", function()
     local n = cat:npc(1388)
     assert.are.equal(1, n.rank)
     assert.are.equal(11, n.level_min)
+    assert.are.equal(0, n.flags or 0)
+  end)
+
+  it("carries QuestieDB npcFlags: Tognus Flintfire (1241) is a gossip/questgiver/trainer NPC", function()
+    assert.are.equal(19, cat:npc(1241).flags)
   end)
 
   it("gives item 750 at least one drop with a numeric rate", function()

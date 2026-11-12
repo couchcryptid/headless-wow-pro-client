@@ -25,6 +25,8 @@ local npcs = {
   [10] = { id = 10, level_min = 5, level_max = 7, rank = 0, spawns = { [1] = { { 1, 1 }, { 2, 2 }, { 3, 3 }, { 4, 4 } } } },
   [11] = { id = 11, level_min = 8, level_max = 8, rank = 1, spawns = { [1] = { { 1, 1 } } } },
   [12] = { id = 12, level_min = 8, level_max = 8, rank = 1, spawns = { [1] = { { 1, 1 }, { 2, 2 }, { 3, 3 } } } },
+  [13] = { id = 13, level_min = 30, level_max = 30, rank = 0, flags = 19, spawns = {} }, -- trainer: gossip+questgiver+trainer
+  [14] = { id = 14, rank = 0, spawns = {} },                                              -- no level range
 }
 local items = {
   [100] = { drops = { { npc = 10, rate = 0.5 } } },
@@ -92,6 +94,28 @@ describe("kills.objective_kills", function()
     assert.is_nil(kills.objective_kills(catalog, { kind = "item", ids = { 104 }, count = 1 }))
     assert.is_nil(kills.objective_kills(catalog, { kind = "item", ids = { 999 }, count = 1 }))
     assert.is_nil(kills.objective_kills(catalog, { kind = "npc", ids = { 999 }, count = 1 }))
+  end)
+end)
+
+-- Ruling AC: a talk-to NPC objective earns no kill XP. QuestieDB's objective groups
+-- do not tell a talk-to from a kill for these quests (Forever's talk-to objectives
+-- come from the Wowhead objectives file), so the heuristic applies.
+describe("kills.objective_kills: talk-to NPCs", function()
+  local quest = { starter = 15, ender = 16, starter_kind = "npc", ender_kind = "npc" }
+  it("credits no kills for the quest's starter or ender NPC", function()
+    local q = { starter = 10, starter_kind = "npc", ender = 11, ender_kind = "npc" }
+    assert.is_nil(kills.objective_kills(catalog, { kind = "npc", ids = { 10 }, count = 1 }, q))
+    assert.is_nil(kills.objective_kills(catalog, { kind = "npc", ids = { 11 }, count = 1 }, q))
+  end)
+  it("credits no kills for an NPC with no level range", function()
+    assert.is_nil(kills.objective_kills(catalog, { kind = "npc", ids = { 14 }, count = 1 }, quest))
+  end)
+  it("credits no kills for a service NPC (QuestieDB npcFlags set: trainer, vendor, questgiver)", function()
+    assert.is_nil(kills.objective_kills(catalog, { kind = "npc", ids = { 13 }, count = 1 }, quest))
+  end)
+  it("still credits an ordinary mob", function()
+    assert.same({ npc_id = 10, level = 6, elite = false, count = 2 },
+      kills.objective_kills(catalog, { kind = "npc", ids = { 10 }, count = 2 }, quest))
   end)
 end)
 

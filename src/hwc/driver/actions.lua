@@ -297,11 +297,11 @@ local function perform_accept(ctx, step, out)
 end
 
 -- Credits one objective's progress delta: kill XP (drop kills for items) and the items.
-local function credit_objective(ctx, out, obj, delta)
+local function credit_objective(ctx, out, quest, obj, delta)
   local w = ctx.world
   local party = (ctx.cfg and ctx.cfg.party_size) or 1
   local partial = { kind = obj.kind, ids = obj.ids, count = delta }
-  local k = kills.objective_kills(w.catalog, partial)
+  local k = w.catalog and kills.objective_kills(w.catalog, partial, quest)
   local levels, elite = 0, false
   if k then
     local _, l = kills.credit(w.player, k, party)
@@ -393,7 +393,7 @@ local function perform_objectives(ctx, step, out)
         add_item(ctx, out, obj.ids[1], delta)
         items_changed = true
       elseif delta > 0 then
-        local levels, elite, items = credit_objective(ctx, out, obj, delta)
+        local levels, elite, items = credit_objective(ctx, out, quest, obj, delta)
         -- An item objective's progress is the bag count credit_objective just changed.
         if not items then w.log:progress(qid, t.index, delta) end
         out.levels = out.levels + levels
