@@ -152,8 +152,6 @@ local function name_of(f)
   return "this step"
 end
 
-local function qname_of(f) return name_of(f) end
-
 local function kind_of(f)
   local r = f.reasons or {}
   if #r == 1 and (r[1] == "race" or r[1] == "class") then return r[1] end
