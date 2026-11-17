@@ -48,8 +48,9 @@ last line of the last guide, and up to level 25 its findings match today's
 - Filters that can unload the addon's engine files. They only select guides.
 - An installed `hwc` that quietly depends on one machine's layout (the hidden
   `~/Projects/WoW-Pro-Guides` default, the hard-coded
-  `/opt/homebrew/bin/luajit`, quest data read from
-  `~/Projects/wow-pro-leveling`). LuaRocks packages under `~/.luarocks` are
+  `/opt/homebrew/bin/luajit`). Quest data read from
+  `~/Projects/wow-pro-leveling` is the known exception until §8's separate
+  plan lands. LuaRocks packages under `~/.luarocks` are
   the one accepted exception: that is LuaRocks' default install location.
 - A no-filter run whose findings up to level 25 differ from today's for the
   same folder.
@@ -227,7 +228,14 @@ hwc matrix [--race RACE]... [--races LIST]
   the README changes from `bin/hwc … --addon PATH` to `cd` into the WoW-Pro
   folder and `hwc …`.
 
-## 8. Bundled quest data
+## 8. Bundled quest data (deferred: separate plan)
+
+Decided by the user: every catalog source the client reads (quest XP, item
+rewards, levels, …) is to be bundled with the client, and how that data is
+sourced and updated gets its own plan. **Nothing in this section is built by
+this design's plan;** catalog paths and `tools/fetch-questie.sh` stay as they
+are. Notes carried forward for that plan:
+
 
 Every catalog source the client reads ships in this repo (decided by the
 user), so a fresh clone plus LuaRocks packages is a complete install:
