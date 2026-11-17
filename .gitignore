@@ -4,3 +4,5 @@ out/
 findings/*.json
 findings/**/*.json
 evidence/
+/local
+.claude/worktrees/
