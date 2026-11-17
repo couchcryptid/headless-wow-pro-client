@@ -1,6 +1,24 @@
 #!/bin/sh
-REPO="$(cd "$(dirname "$0")/.." && pwd)"
+# Resolve this script's path through symlinks (macOS readlink has no -f), so a
+# symlink on PATH finds the repo.
+f="$0"
+while [ -L "$f" ]; do
+  l=$(readlink "$f")
+  case $l in
+    /*) f=$l ;;
+    *) f=$(dirname "$f")/$l ;;
+  esac
+done
+REPO="$(cd "$(dirname "$f")/.." && pwd)"
 ROCKS="$HOME/.luarocks"
 export LUA_PATH="$REPO/src/?.lua;$REPO/src/?/init.lua;$ROCKS/share/lua/5.1/?.lua;$ROCKS/share/lua/5.1/?/init.lua;;"
 export LUA_CPATH="$ROCKS/lib/lua/5.1/?.so;;"
-exec /opt/homebrew/bin/luajit "$REPO/bin/hwc.lua" "$@"
+LUAJIT=$(command -v luajit)
+[ -n "$LUAJIT" ] || for c in /opt/homebrew/bin/luajit /usr/local/bin/luajit; do
+  if [ -x "$c" ]; then LUAJIT=$c; break; fi
+done
+if [ -z "$LUAJIT" ]; then
+  echo "hwc: luajit not found (looked on PATH, /opt/homebrew/bin, /usr/local/bin)" >&2
+  exit 127
+fi
+exec "$LUAJIT" "$REPO/bin/hwc.lua" "$@"

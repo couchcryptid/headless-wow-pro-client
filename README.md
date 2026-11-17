@@ -7,8 +7,8 @@ character never sees, turn-ins for quests it never had, steps that don't
 advance, quests it can't take, and Lua errors.
 
 The point is to check guide fixes without levelling an alt in the game.
-- **Bug finding:** play the Forever Alliance guides from level 1 to 25 for each
-  race, class and profession combination, then read the findings.
+- **Bug finding:** play the Forever Alliance guides, the race's chain to its last
+  guide, for each race, class and profession combination, then read the findings.
 - **Red/Green:** run the same characters against `main` and against a fix
   branch, and compare the findings.
 
@@ -19,8 +19,9 @@ come from a catalog built from QuestieDB and a Wowhead extract, never from the
 guide lines.
 
 **Status:**
-- **Scope:** Forever Alliance, levels 1 to 25 (guides that start at 25 or
-  later are outside the chain). Races: Human, Dwarf, Gnome and Night Elf
+- **Scope:** Forever Alliance, the race's chain to its last guide. The XP
+  table caps at level 26, so play past 25 currently runs at level 26 (quest
+  data to level 60 is a separate future plan). Races: Human, Dwarf, Gnome and Night Elf
   (`NightElf`), each starting from its guide in the addon's
   `ForeverStartGuides` table: Elwynn Forest, Dun Morogh, Dun Morogh and
   Teldrassil. Dwarf and Gnome are the most tested, so `matrix` defaults to
@@ -40,21 +41,41 @@ guide lines.
   luarocks --lua-version 5.1 install luafilesystem
   luarocks --lua-version 5.1 install dkjson
   ```
-- **A WoW-Pro-Guides checkout**, default `~/Projects/WoW-Pro-Guides`. Other
-  checkouts are selectable with `--addon`.
+- **A WoW-Pro folder:** a git checkout of WoW-Pro-Guides, or the game's
+  `Interface/AddOns` folder. `hwc` must be run from inside it (see
+  [Choosing guides](#choosing-guides)).
 - **Optional:** `curl` and `shasum` for `tools/fetch-questie.sh`, and `python3`.
+
+## Install
+
+```sh
+make install                                                  # links bin/hwc into ~/.local/bin
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc       # zsh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc      # bash (~/.bash_profile on macOS)
+hwc --help                                                    # check
+```
+
+`PREFIX` sets another location (`make install PREFIX=/usr/local`);
+`make uninstall` removes the link only if it points at this repo. `hwc` finds
+LuaJIT on `$PATH`, then `/opt/homebrew/bin`, then `/usr/local/bin`, and reads
+LuaRocks modules from `~/.luarocks`.
 
 ## Quick start
 
+Run `hwc` from inside a WoW-Pro folder (a git checkout or `Interface/AddOns`):
+
 ```sh
-tools/fetch-questie.sh d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc   # local catalog data
-bin/hwc boot --race Dwarf --class WARRIOR                         # load the addon, show the first step
-bin/hwc run --race Dwarf --class WARRIOR                          # play one character 1-25
-bin/hwc matrix --races Dwarf,Gnome                                # every combination (also Human, NightElf); writes findings/
-~/.luarocks/bin/busted                                            # specs (slow ones: --tags=slow)
+tools/fetch-questie.sh d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc   # local catalog data (from this repo)
+cd ~/Projects/WoW-Pro-Guides
+hwc boot --race Dwarf --class WARRIOR                          # load the addon, show the first step
+hwc run --race Dwarf --class WARRIOR                           # play one character along the chain
+hwc matrix --races Dwarf,Gnome                                 # every combination (also Human, NightElf)
 ```
 
-- Run: `bin/hwc --help`.
+Findings go to `~/.hwc/findings` unless `--out DIR` says otherwise. Specs, from
+this repo: `~/.luarocks/bin/busted` (slow ones: `--tags=slow`).
+
+- Run: `hwc --help`.
 - Test: `~/.luarocks/bin/busted`.
   - The integration specs are pending when the addon checkout or the local
     catalog is absent.
@@ -82,9 +103,8 @@ Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Booting the addon
 
 ```sh
-bin/hwc boot --race Dwarf --class WARRIOR            # text summary
-bin/hwc boot --race Gnome --class MAGE --json        # full result as JSON
-bin/hwc boot --addon /path/to/WoW-Pro-Guides         # another checkout
+cd ~/Projects/WoW-Pro-Guides && hwc boot --race Dwarf --class WARRIOR       # text summary
+cd ~/Projects/WoW-Pro-Guides && hwc boot --race Gnome --class MAGE --json   # full result as JSON
 ```
 
 `hwc boot` loads `WoWPro/WoWPro.toc`, then `WoWPro_Leveling/WoWPro_Leveling.toc`,
@@ -99,31 +119,35 @@ lockdown releases and the timers drain. It prints:
 - the number of missing globals;
 - the stand-ins that were called.
 
-A checkout without a git commit is refused, so an unidentified run can't be
-mistaken for a real one. With the addon's defaults (`autoresize = true`,
+A git checkout without a commit is refused, so an unidentified run can't be
+mistaken for a real one. A folder that isn't in git (`Interface/AddOns`) is
+identified by the `## Version:` in `WoWPro/WoWPro.toc`; the report header says
+"not a git folder" and `branch` and `commit` are `null` in the JSON. With the addon's defaults (`autoresize = true`,
 `numsteps = 1`, WoWPro.lua:348-349) the engine shows one row.
 
 ## Running characters and findings
 
 ```sh
-bin/hwc run --race Dwarf --class PRIEST --out /tmp/findings          # one character
-bin/hwc run --race Dwarf --class WARRIOR --variant alch-herb         # with professions
-bin/hwc run --race Dwarf --class WARRIOR --stop-level 6 --date 2026-11-12
-bin/hwc matrix --races Dwarf,Gnome --date 2026-11-12                 # the whole matrix
+cd ~/Projects/WoW-Pro-Guides
+hwc run --race Dwarf --class PRIEST --out /tmp/findings          # one character
+hwc run --race Dwarf --class WARRIOR --variant alch-herb         # with professions
+hwc run --race Dwarf --class WARRIOR --exclude "*" --include "*Dun_Morogh*" --date 2026-11-12
+hwc matrix --races Dwarf,Gnome --date 2026-11-12                 # the whole matrix
 ```
 
 `hwc run` plays one character through the guide chain with the real engine
-(stop level 25 unless `--stop-level N` says otherwise); `hwc matrix` plays every
+(to the chain's last line, or to the last included guide when filters are given); `hwc matrix` plays every
 combo and groups all the signals into one findings file. Both exit 0 once the
 findings are written, whatever they contain, 1 on a harness failure and 2 on a
 usage error (a missing `--class`, a race outside Human/Dwarf/Gnome/NightElf).
 
-Output, under `--out DIR` (default `findings/` in the current directory):
+Output, under `--out DIR` (default `~/.hwc/findings`, created if missing, so runs never write into the WoW-Pro folder):
 
 - `DIR/<date>-<scope>.md`: the findings report (layout in
   `docs/superpowers/specs/2026-11-12-findings-report-design.md`). The scope is
-  `forever-alliance-<races lower, joined by '-'>-1-25` for `matrix` and
-  `<race>-<class>-<variant>` for `run`.
+  `forever-alliance-<races lower, joined by '-'>` for `matrix` and
+  `<race>-<class>-<variant>` for `run`. With any filter given, the scope gains
+  `-filtered`.
 - `DIR/<date>-<scope>.json`: the same findings as a machine-readable document
   (the JSON contract in the same spec), which `/triage` reads.
 - `DIR/<date>-<scope>/<race>-<class>-<variant>.json`: one run log per character
@@ -171,6 +195,55 @@ doesn't know is by design (spec §3) and is not reported. The variants:
 | `lw-skin` | Leatherworking, Skinning |
 | `eng-ench` | Engineering, Enchanting |
 | `tailoring` | Tailoring |
+
+## Choosing guides
+
+By default a run plays the race's whole chain. `--include PATTERN` and
+`--exclude PATTERN` (each repeatable, on `run` and `matrix`) pick which guides
+are played, following the AWS S3 CLI:
+
+- Every guide starts included.
+- Filters apply in the order given; for each guide file the **last** filter whose
+  pattern matches decides. If none matches, the guide stays included.
+- Patterns are globs matched against the guide file's path relative to the
+  WoW-Pro folder, with `/` separators. `*` matches any run of characters
+  including `/`, `?` matches one character, `[abc]` and `[!abc]` are character
+  classes. Matching is case-sensitive.
+- Filters apply only to guide files (files that register a guide). Every file
+  still loads; filters decide which guides are played.
+
+```sh
+cd ~/Projects/WoW-Pro-Guides
+hwc run --class PRIEST --exclude "*" --include "*Dun_Morogh*"   # only Dun Morogh
+hwc run --class PRIEST --exclude "*/19_25_*"                    # everything but the 19-25 guide
+```
+
+Additions to S3:
+
+- A pattern starting with `./` or `../`, or an absolute path, is resolved from the
+  current directory and made relative to the WoW-Pro folder, so tab completion
+  works:
+  `cd WoWPro_Leveling/Forever/Alliance && hwc run --class PRIEST --exclude "*" --include ./01_12_Dun_Morogh.lua`.
+  A pattern that resolves outside the WoW-Pro folder is a usage error.
+- A pattern naming a folder matches every file under it.
+- The WoW-Pro folder is the nearest folder at or above the current directory that
+  holds `WoWPro/WoWPro.toc`, found along the logical path (`$PWD`), so a symlinked
+  `Interface/AddOns` works. None found is a usage error (exit 2).
+
+Usage errors (exit 2): filters that leave no guide included, or an `--include`
+that matches no guide file. An `--exclude` that matches nothing is allowed.
+
+When the chain reaches an excluded guide, the run walks forward to the next
+included guide, raises the character's level to its `startlevel` through the
+simulated XP path, and loads it the way a click in the guide list does. The
+run log records each jump. The run ends at the last line of the last included
+guide on the chain. Included guides the run never reaches are listed in the run
+log and the report header (only when an `--include` was given).
+
+**Known limit:** quests from jumped guides were never done. Prerequisite
+gates, `orphan-turnin` and `leftover-quests` (`not-turned-in`) findings near a
+jump can be noise from the jump, not guide bugs. The report header says how
+many guides were jumped, so weigh those findings accordingly.
 
 ## Addon worktrees and Red/Green anchors
 
@@ -254,7 +327,7 @@ Every source is optional. A missing source is recorded in `sources` with
 the world.
 
 ```sh
-bin/hwc quest 179      # the merged quest as JSON, with each source's path, presence and sha256
+hwc quest 179      # the merged quest as JSON, with each source's path, presence and sha256
 ```
 
 The integration spec `spec/integration/world_engine_spec.lua` drives the real

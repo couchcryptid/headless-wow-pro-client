@@ -16,7 +16,7 @@ Today the only way to check a WoW-Pro guide fix is to level an alt in the game c
 ## 2. Goals, non-goals, anti-goals
 
 **Goals**
-- Load the addon's own Lua from a configurable path to any WoW-Pro-Guides checkout or worktree, so any branch can be tested. Never modify, vendor or patch it.
+- Load the addon's own Lua from the WoW-Pro folder `hwc` runs in (any checkout or worktree; see `2026-11-17-guide-filters-design.md` §3), so any branch can be tested. Never modify, vendor or patch it.
 - Simulate a player's state well enough for the engine to make its real decisions:
   - race, class, faction, sex;
   - level and an XP bar;
@@ -49,7 +49,7 @@ Today the only way to check a WoW-Pro guide fix is to level an alt in the game c
 - **Flavor:** Forever only. `GetBuildInfo` returns TOC 16001, so `WoWPro.FOREVER` is true.
 - **Characters:** Dwarf and Gnome, every class each race can play in Forever, as the 80/20 slice: they share the Dun Morogh start, and #3535 and the issue-01–16 work cover it best. The race and class matrix is configuration. The **class list per race must come from Forever data** (Wowhead Forever or the guides' own `C|` tags), not from Classic assumptions or memory.
 - **Then:** all Alliance races: Human (Elwynn), Night Elf (Teldrassil, then Darkshore). Each race starts on its `WoWPro.Leveling.ForeverStartGuides` entry (`WoWPro_Leveling/WoWPro_Leveling.lua:49–59`). Skyborne (Zephras Isle) is listed there too but is out of scope until the user says otherwise.
-- **Guide chain:** start guide, then the next guide by the engine's own `GuideNextGuide` autoload (Dun Morogh → `ClassicEasternKingdom1220` → `ClassicAlliance1925` → …). A run stops when the character reaches **level 25**, or when the engine's chain loads a guide whose range starts at or above 25, whichever comes first.
+- **Guide chain:** start guide, then the next guide by the engine's own `GuideNextGuide` autoload (Dun Morogh → `ClassicEasternKingdom1220` → `ClassicAlliance1925` → …). A run plays the chain to its last line (revised by `2026-11-17-guide-filters-design.md` §5: the level-25 and chain-range stops are gone).
 - **Professions and Camping 101 (user's decision, 2026-11-11):** all Camping 101 profession quests are in scope. The quests that require the profession to be trained first are gated on the character having that skill.
   - **In the world model:** each Camping 101 quest object carries a "requires skill" condition, for example First Aid, Fishing or Leatherworking. Per Wowhead, those end at the profession trainer, whose progress text gates on the skill. The quest can't be completed or turned in until the simulated character knows that skill.
   - **Camping 101: Cooking is the exception.** Its turn-in is completed by training Cooking at Gremlock (confirmed in game 2026-11-11), so training is the step's action.
@@ -151,7 +151,7 @@ loop until stop condition:
 ```
 
 - The **shown step** is whatever the real engine shows: `ActiveStep` plus the row state. The driver never chooses steps itself.
-- **Stop conditions:** level 25 reached; the guide chain passes the 1–25 range; the engine reports no next guide; or a watchdog fires. Any watchdog stop is a finding.
+- **Stop conditions:** the engine reports no next guide (the last line of the last included guide); or a watchdog fires. Any watchdog stop is a finding. (Revised by `2026-11-17-guide-filters-design.md` §5: the level-25 and chain-range stops, and `--stop-level`, are removed.)
 - **Skipped steps** are recorded with the engine's own reason (`WoWPro.why[i]`), so "hidden because a PRE wasn't met" is visible.
 
 ## 5. Layer 2: the simulated world and player
@@ -263,7 +263,7 @@ A quest is an object: id, name, quest level, required level, races, classes, pre
 
 Superseded in part by `2026-11-12-findings-report-design.md` (report layout, JSON contract, relative paths).
 
-One markdown file per invocation: `findings/YYYY-MM-DD-<scope>.md`, for example `findings/2026-11-12-forever-alliance-dwarf-gnome-1-25.md`.
+One markdown file per invocation: `findings/YYYY-MM-DD-<scope>.md`, for example `findings/2026-11-12-forever-alliance-dwarf-gnome.md` (the directory defaults to `~/.hwc/findings`; scope names lost `-1-25`, see `2026-11-17-guide-filters-design.md` §6).
 - **Header:**
   - the addon repo path, branch and commit;
   - the catalog sources, with commit or date and hash;
@@ -313,7 +313,7 @@ A Claude Code skill in this repo (`.claude/skills/triage/SKILL.md`), run on dema
 
 - **Runtime:** LuaJIT 2.x (Lua 5.1) at `/opt/homebrew/bin/luajit`. Tests use `busted` 2.3.0, which is already installed for 5.1 at `~/.luarocks/bin/busted` (penlight, luafilesystem, dkjson available). Homebrew's `lua` is 5.5 and must not be used.
 - **Language:** Lua for the stub layer, the world, the driver and the specs, since they share the state with the addon. Small offline tools (the catalog exporter, the findings renderer) may be Python 3 stdlib, run with `python3 -I`. No third-party installs without asking.
-- **Addon path:** configuration, defaulting to `~/Projects/WoW-Pro-Guides`. The client reads the checkout's current branch and commit for the findings header. **Use a git worktree** for branch comparisons: the game's Forever AddOns folder is symlinked to that checkout, so switching its branch changes what the game loads.
+- **Addon path:** the WoW-Pro folder `hwc` is run from (the `--addon` flag and the `~/Projects/WoW-Pro-Guides` default are gone; see `2026-11-17-guide-filters-design.md` §3). The client reads the checkout's current branch and commit for the findings header. **Use a git worktree** for branch comparisons: the game's Forever AddOns folder is symlinked to that checkout, so switching its branch changes what the game loads.
 - **Licence of this repo:** the user's choice, still to be decided. Don't copy code from GPL projects (for example Mechanic) unless the user picks a compatible licence. Reading them for ideas is fine. Ketho's vscode-wow-api (MIT) may be used to generate stub signatures and enums.
 - **Determinism:** the same inputs (addon commit, catalog hashes, config, seed) give byte-identical findings.
 
@@ -343,7 +343,7 @@ A Claude Code skill in this repo (`.claude/skills/triage/SKILL.md`), run on dema
 ## 12. Calls made by the author (not decided by the user; check these)
 
 - The no-profession baseline trains only when a step says so. Profession variants start with their skill already known. (The user decided that all Camping 101 quests are in scope and that skill-requiring ones are gated on the skill; how the variants start is my call.)
-- A run stops at level 25 or when the guide chain passes the 1–25 range.
+- A run plays the chain to its last line; the level-25 stop was removed (`2026-11-17-guide-filters-design.md` §5).
 - Skyborne/Zephras Isle is out of scope until the user says otherwise.
 - Elite kills always succeed solo (party size 1), flagged in the log.
 - Finding severities (§7.2).
