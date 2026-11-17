@@ -70,8 +70,13 @@ local function json_result(r, boot)
   local skipped = {}
   for rel, reason in pairs(r.skipped) do skipped[#skipped + 1] = { rel = rel, reason = reason } end
   table.sort(skipped, function(a, b) return a.rel < b.rel end)
+  local addon = {}
+  for k, v in pairs(r.addon) do addon[k] = v end
+  for _, k in ipairs({ "branch", "commit", "version" }) do
+    if addon[k] == nil then addon[k] = require("hwc.json").null end
+  end
   return {
-    addon = r.addon, files_loaded = r.files_loaded, files_failed = r.files_failed,
+    addon = addon, files_loaded = r.files_loaded, files_failed = r.files_failed,
     skipped = skipped, errors = errors, missing_order = r.missing_order,
     standin_calls = r.standin_calls, guide = r.guide, steps = r.steps, settle = r.settle,
   }
@@ -80,7 +85,11 @@ end
 local function print_text(out, r, boot)
   local a = r.addon
   out:write("addon: ", a.path, "\n")
-  out:write("branch: ", a.branch, "  commit: ", a.commit, a.dirty and "  (dirty)" or "", "\n")
+  if a.git == false then
+    out:write("version: ", a.version or "unknown", "  (not a git folder)\n")
+  else
+    out:write("branch: ", a.branch, "  commit: ", a.commit, a.dirty and "  (dirty)" or "", "\n")
+  end
   out:write("files: ", r.files_loaded, " loaded, ", #r.files_failed, " failed\n")
   out:write(string.format("settle: %d timers run, now %.3f%s\n", r.settle.ran, r.settle.now,
     r.settle.hit_limit and ", HIT LIMIT" or ""))
@@ -158,6 +167,22 @@ local function write_file(path, text)
   local f = assert(io.open(path, "wb"))
   f:write(text)
   f:close()
+end
+
+-- A folder without git has no branch or commit: the report JSON states that as
+-- null rather than dropping the keys. In-memory values stay nil.
+local function report_json(rep)
+  local null = require("hwc.json").null
+  local a = rep.header and rep.header.addon
+  if a and a.git == false then
+    local copy = {}
+    for k, v in pairs(a) do copy[k] = v end
+    for _, k in ipairs({ "branch", "commit", "version" }) do
+      if copy[k] == nil then copy[k] = null end
+    end
+    rep.header.addon = copy
+  end
+  return rep
 end
 
 -- Plays every combo, then writes DIR/<date>-<scope>.md and .json and one run
@@ -242,7 +267,7 @@ local function play(combos, scope, opts, out)
   local stem = outdir .. "/" .. date .. "-" .. scope
   local md = render.markdown(findings, header)
   write_file(stem .. ".md", md)
-  write_file(stem .. ".json", json.encode(report.build(findings, header), { indent = true }) .. "\n")
+  write_file(stem .. ".json", json.encode(report_json(report.build(findings, header)), { indent = true }) .. "\n")
   out:write(M.wrote_line(stem, #logs))
   return 0
 end

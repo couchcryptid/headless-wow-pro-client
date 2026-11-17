@@ -103,7 +103,7 @@ end
 
 function M.run(cfg)
   local info = addon_info.read(cfg.addon_path)
-  if info.commit == "" then
+  if info.git and info.commit == "" then
     error("hwc: no git commit for addon path " .. cfg.addon_path
       .. "; refusing to boot an unidentified checkout", 0)
   end
@@ -121,7 +121,8 @@ function M.run(cfg)
   phase("after_stubs")
 
   local result = {
-    addon = { path = cfg.addon_path, branch = info.branch, commit = info.commit, dirty = info.dirty },
+    addon = { path = cfg.addon_path, git = info.git, branch = info.branch, commit = info.commit,
+      dirty = info.dirty, version = info.version },
     files_loaded = 0, files_failed = {}, skipped = {},
     errors = sb.errors, missing_order = sb.missing_order, standin_calls = sb.standin_calls,
     sb = sb, world = sb.world,

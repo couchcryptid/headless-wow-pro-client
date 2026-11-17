@@ -188,7 +188,9 @@ local function title_lines(out, header, combos, n_findings, n_follow)
   local parts = {}
   if header.date then parts[#parts + 1] = one_line(header.date) end
   local a = header.addon or {}
-  if a.branch or a.commit then
+  if a.git == false then
+    parts[#parts + 1] = "WoW-Pro " .. (a.version and code(a.version) .. " " or "") .. "(not a git folder)"
+  elseif a.branch or a.commit then
     local s = "WoW-Pro"
     if a.branch then s = s .. " " .. (a.branch == "HEAD" and "detached" or code(a.branch)) end
     if a.commit then s = s .. " @ " .. code(tostring(a.commit):sub(1, 7)) end
@@ -204,7 +206,7 @@ end
 
 local function warning_lines(out, header, main)
   local warn = {}
-  if (header.addon or {}).dirty == true then warn[#warn + 1] = "The WoW-Pro checkout had " .. NOT_REPRODUCIBLE end
+  if (header.addon or {}).git ~= false and (header.addon or {}).dirty == true then warn[#warn + 1] = "The WoW-Pro checkout had " .. NOT_REPRODUCIBLE end
   if (header.client or {}).dirty == true then warn[#warn + 1] = "The client checkout had " .. NOT_REPRODUCIBLE end
   local catalog = header.catalog or {}
   for _, name in ipairs(sorted_keys(catalog)) do
@@ -536,9 +538,14 @@ local function about_lines(out, header, combos)
   if a then
     local parts = {}
     if a.path then parts[#parts + 1] = code(a.path) end
-    if a.branch then parts[#parts + 1] = branch_label(a.branch) end
-    if a.commit then parts[#parts + 1] = "commit " .. code(a.commit) end
-    parts[#parts + 1] = state(a.dirty)
+    if a.git == false then
+      if a.version then parts[#parts + 1] = "version " .. code(a.version) end
+      parts[#parts + 1] = "not a git folder"
+    else
+      if a.branch then parts[#parts + 1] = branch_label(a.branch) end
+      if a.commit then parts[#parts + 1] = "commit " .. code(a.commit) end
+      parts[#parts + 1] = state(a.dirty)
+    end
     if #parts > 0 then out[#out + 1] = "- WoW-Pro: " .. table.concat(parts, " · ") end
   end
   local c = header.client

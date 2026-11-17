@@ -37,6 +37,19 @@ end
 
 local function md(logs, h) return render.markdown(group.findings(logs), h or header()) end
 
+describe("non-git addon header", function()
+  it("names the TOC version and says it is not a git folder, with no commit", function()
+    local h = header()
+    h.addon = { git = false, version = "9.9.9", path = "AddOns", dirty = false }
+    local out = md({}, h)
+    assert.truthy(out:find("not a git folder", 1, true))
+    assert.truthy(out:find("9.9.9", 1, true))
+    local line = assert(out:match("[^\n]*WoW%-Pro[^\n]*not a git folder[^\n]*"))
+    assert.is_nil(line:find("commit", 1, true))
+    assert.is_nil(line:find("@", 1, true))
+  end)
+end)
+
 local function count(s, pat)
   local n = 0
   for _ in s:gmatch(pat) do n = n + 1 end
