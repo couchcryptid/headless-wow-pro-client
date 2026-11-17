@@ -72,6 +72,31 @@ describe("home store", function()
     assert.is_nil(lfs.attributes(r .. "/active.tmp"))
   end)
 
+  it("set_active raises a hwc error on an unwritable root", function()
+    local ok, err = pcall(home.set_active, "/nonexistent/zz", "v1.1.2")
+    assert.is_false(ok)
+    assert.is_truthy(err:match("^hwc: cannot write /nonexistent/zz/active: "))
+  end)
+
+  it("set_active removes active.tmp when the rename fails", function()
+    mkdirs(r .. "/active") -- renaming a file over a directory fails
+    local ok, err = pcall(home.set_active, r, "v1.1.2")
+    assert.is_false(ok)
+    assert.is_truthy(err:match("^hwc: cannot write " .. r:gsub("%p", "%%%0") .. "/active: "))
+    assert.is_nil(lfs.attributes(r .. "/active.tmp"))
+  end)
+
+  it("active is nil and active_dir none installed when active is a directory", function()
+    mkdirs(r .. "/active")
+    assert.is_nil(home.active(r))
+    assert.are.same({ nil, "none installed" }, { home.active_dir(r) })
+  end)
+
+  it("a nil root is treated as nothing installed", function()
+    assert.is_nil(home.active(nil))
+    assert.are.same({ nil, "none installed" }, { home.active_dir(nil) })
+  end)
+
   it("active is nil for an empty file", function()
     touch(r .. "/active", "\n")
     assert.is_nil(home.active(r))

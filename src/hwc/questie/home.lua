@@ -37,9 +37,10 @@ end
 local function exists(path) return lfs.attributes(path, "mode") ~= nil end
 
 function M.active(root)
+  if not root then return nil end
   local f = io.open(root .. "/active", "rb")
   if not f then return nil end
-  local text = f:read("*a")
+  local text = f:read("*a") or ""
   f:close()
   return set(text:match("^%s*(.-)%s*$"))
 end
@@ -55,11 +56,22 @@ end
 function M.set_active(root, tag)
   check_tag(tag)
   mkdirs(root)
+  local target = root .. "/active"
   local tmp = root .. "/active.tmp"
-  local f = assert(io.open(tmp, "wb"))
-  f:write(tag, "\n")
+  local function fail(err) error("hwc: cannot write " .. target .. ": " .. tostring(err), 0) end
+  local f, err = io.open(tmp, "wb")
+  if not f then fail(err) end
+  local ok, werr = f:write(tag, "\n")
   f:close()
-  assert(os.rename(tmp, root .. "/active"))
+  if not ok then
+    os.remove(tmp)
+    fail(werr)
+  end
+  local renamed, rerr = os.rename(tmp, target)
+  if not renamed then
+    os.remove(tmp)
+    fail(rerr)
+  end
 end
 
 function M.active_dir(root)
