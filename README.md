@@ -25,7 +25,7 @@ guide lines.
   (`NightElf`), each starting from its guide in the addon's
   `ForeverStartGuides` table: Elwynn Forest, Dun Morogh, Dun Morogh and
   Teldrassil. Dwarf and Gnome are the most tested, so `matrix` defaults to
-  `--races Dwarf,Gnome`; Human and Night Elf Warrior runs complete to level 6.
+  `--races Dwarf,Gnome`.
 - **Next:** the `/triage` skill.
 - **Data gaps:** listed in every findings file's header.
 - **Design:** the design spec, the plans and the per-plan rulings are in
@@ -237,8 +237,13 @@ When the chain reaches an excluded guide, the run walks forward to the next
 included guide, raises the character's level to its `startlevel` through the
 simulated XP path, and loads it the way a click in the guide list does. The
 run log records each jump. The run ends at the last line of the last included
-guide on the chain. Included guides the run never reaches are listed in the run
-log and the report header (only when an `--include` was given).
+guide on the chain. Included guides the run never reaches are listed in the
+report header (only when an `--include` was given). With filters, the header
+also lists the guides played.
+
+A race whose chain reaches no included guide plays nothing. `matrix` skips its
+combos and names the race in the report header, and exits 2 (writing nothing)
+only if no race reaches one; a single `run` exits 2 and writes nothing.
 
 **Known limit:** quests from jumped guides were never done. Prerequisite
 gates, `orphan-turnin` and `leftover-quests` (`not-turned-in`) findings near a

@@ -3,7 +3,7 @@
 -- this module writes env.WoWPro.* or SavedVariables.
 --
 -- Engine functions it calls:
---   mutating, the two player equivalents only:
+--   mutating, the three player equivalents only:
 --     WoWPro.CompleteStep(i, "Right-Click")   complete_manual (WoWPro_Broker.lua:3857)
 --     WoWPro:UpdateGuide("sim:level")         update_guide (after a ding; no level-up handler)
 --     WoWPro:LoadGuide(gid)                   load_guide (the guide-list click over an excluded guide)
