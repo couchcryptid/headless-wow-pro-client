@@ -46,8 +46,10 @@ end
 
 function M.load(tbl)
   tbl = tbl or {}
-  local addon_path = tbl.addon_path or (os.getenv("HOME") .. "/Projects/WoW-Pro-Guides")
-  if not file_exists(addon_path .. "/WoWPro/WoWPro.toc") then
+  -- No default: the CLI finds the WoW-Pro folder (hwc.source). Without one the
+  -- config still serves world and catalog code; boot.run refuses it.
+  local addon_path = tbl.addon_path
+  if addon_path and not file_exists(addon_path .. "/WoWPro/WoWPro.toc") then
     error("hwc: addon path not found: " .. addon_path, 0)
   end
   local race = tbl.race or "Human"

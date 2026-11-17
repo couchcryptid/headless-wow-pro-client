@@ -12,6 +12,12 @@ local function shell(cmd)
   return out, (ok == true or ok == 0) and 0 or code
 end
 
+-- hwc runs from the WoW-Pro folder; one guide keeps the run short (no level stop).
+local REPO = lfs.currentdir()
+local RUN = "cd '%s' && '" .. REPO .. "/bin/hwc' run --race Dwarf --class WARRIOR"
+  .. " --exclude '*' --include '*01_12_Dun_Morogh*' --date 2026-11-12"
+local STEM = "2026-11-12-Dwarf-WARRIOR-baseline-filtered"
+
 local function slurp(path)
   local f = assert(io.open(path, "rb"))
   local s = f:read("*a")
@@ -34,17 +40,17 @@ describe("findings determinism across processes #slow", function()
       local dir = base .. "-" .. i
       local errfile = dir .. ".err"
       local _, code = shell(string.format(
-        "bin/hwc run --race Dwarf --class WARRIOR --stop-level 6 --date 2026-11-12 --addon '%s' --out '%s' 2>'%s'",
+        RUN .. " --out '%s' 2>'%s'",
         flow.ADDON, dir, errfile))
       local stderr = slurp(errfile)
       os.remove(errfile)
       assert.equal(0, code, stderr)
       assert.is_nil(stderr:match("harness"), stderr)
       assert.is_nil(stderr:match("hwc:"), stderr)
-      local path = dir .. "/2026-11-12-Dwarf-WARRIOR-baseline.md"
+      local path = dir .. "/" .. STEM .. ".md"
       assert.equal("file", lfs.attributes(path, "mode"), "missing " .. path)
       md[i] = slurp(path)
-      local jpath = dir .. "/2026-11-12-Dwarf-WARRIOR-baseline.json"
+      local jpath = dir .. "/" .. STEM .. ".json"
       assert.equal("file", lfs.attributes(jpath, "mode"), "missing " .. jpath)
       js[i] = slurp(jpath)
     end
@@ -58,7 +64,7 @@ describe("findings determinism across processes #slow", function()
     local dir = os.tmpname()
     os.remove(dir)
     local _, code = shell(string.format(
-      "bin/hwc run --race Dwarf --class WARRIOR --stop-level 6 --date 2026-11-12 --addon '%s' --out '%s' 2>/dev/null",
+      RUN .. " --out '%s' 2>/dev/null",
       flow.ADDON, dir))
     assert.equal(0, code)
     local cwd = lfs.currentdir()
@@ -82,7 +88,7 @@ describe("findings determinism across processes #slow", function()
     assert.is_true(files >= 3)
   end)
 
-  it("rewrites a relative --addon against a --relative-to that is not the cwd", function()
+  it("rewrites the WoW-Pro folder against a --relative-to that is not the cwd", function()
     local cwd = lfs.currentdir()
     local rel = "local/addon/main"
     if lfs.attributes(cwd .. "/" .. rel .. "/WoWPro/WoWPro.toc", "mode") == nil then
@@ -94,10 +100,10 @@ describe("findings determinism across processes #slow", function()
     local dir = os.tmpname()
     os.remove(dir)
     local _, code = shell(string.format(
-      "bin/hwc run --race Dwarf --class WARRIOR --stop-level 6 --date 2026-11-12 --addon '%s' --relative-to '%s' --out '%s' 2>/dev/null",
-      rel, base, dir))
+      RUN .. " --relative-to '%s' --out '%s' 2>/dev/null",
+      abs, base, dir))
     assert.equal(0, code)
-    local doc = require("dkjson").decode(slurp(dir .. "/2026-11-12-Dwarf-WARRIOR-baseline.json"))
+    local doc = require("dkjson").decode(slurp(dir .. "/" .. STEM .. ".json"))
     local hdr = doc.header or doc
     assert.equal("main", hdr.addon.path)
     assert.equal("addon", hdr.paths_relative_to)

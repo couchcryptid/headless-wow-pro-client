@@ -221,6 +221,31 @@ describe("render.markdown", function()
     assert.falsy(plain(render.markdown({}, h), "Paths relative to"))
   end)
 
+  it("About this run lists the filters in order and the jumped guides", function()
+    local h = header()
+    h.filters = { { kind = "exclude", pattern = "*" }, { kind = "include", pattern = "*Dun_Morogh*" } }
+    h.jumped = { "GB", "GA" }
+    local o = render.markdown({}, h)
+    assert.truthy(plain(o, '\n- Filters: --exclude "*", --include "*Dun_Morogh*"\n'))
+    assert.truthy(plain(o, "\n- Jumped guides: 2 (`GB`, `GA`)."))
+    assert.falsy(plain(o, "Included but never reached"))
+    local plain_h = header()
+    local p = render.markdown({}, plain_h)
+    assert.falsy(plain(p, "Filters:"))
+    assert.falsy(plain(p, "Jumped guides"))
+  end)
+
+  it("About this run lists included guides never reached and skipped races", function()
+    local h = header()
+    h.unreached = { "GX", "GY" }
+    h.skipped_races = { "Gnome" }
+    local o = render.markdown({}, h)
+    assert.truthy(plain(o, "\n- Included but never reached: `GX`, `GY`\n"))
+    assert.truthy(plain(o, "\n- Races that reached no included guide: Gnome\n"))
+    h.unreached = {}
+    assert.falsy(plain(render.markdown({}, h), "Included but never reached"))
+  end)
+
   it("zero findings renders Nothing found.", function()
     local o = render.markdown({}, header())
     assert.truthy(plain(o, "## Start here\n\nNothing found.\n"))

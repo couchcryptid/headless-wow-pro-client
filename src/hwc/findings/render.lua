@@ -531,6 +531,34 @@ local function carried_lines(out, carried)
   end
 end
 
+-- The guide filters in command-line order, then what they did to the chain. Quests
+-- from jumped guides were never done, so findings next to a jump can be its noise.
+local function filter_lines(out, header)
+  local filters = header.filters
+  if filters and #filters > 0 then
+    local parts = {}
+    for i, f in ipairs(filters) do parts[i] = "--" .. f.kind .. ' "' .. one_line(f.pattern) .. '"' end
+    out[#out + 1] = "- Filters: " .. table.concat(parts, ", ")
+  end
+  local jumped = header.jumped
+  if jumped and #jumped > 0 then
+    local gids = {}
+    for i, g in ipairs(jumped) do gids[i] = code(g) end
+    out[#out + 1] = "- Jumped guides: " .. #jumped .. " (" .. table.concat(gids, ", ") .. "). Their quests "
+      .. "were never done, so prerequisite, turn-in and leftover-quest findings after a jump may come from it."
+  end
+  local unreached = header.unreached
+  if unreached and #unreached > 0 then
+    local gids = {}
+    for i, g in ipairs(unreached) do gids[i] = code(g) end
+    out[#out + 1] = "- Included but never reached: " .. table.concat(gids, ", ")
+  end
+  local skipped = header.skipped_races
+  if skipped and #skipped > 0 then
+    out[#out + 1] = "- Races that reached no included guide: " .. table.concat(skipped, ", ")
+  end
+end
+
 local function about_lines(out, header, combos)
   out[#out + 1] = "## About this run"
   out[#out + 1] = ""
@@ -557,6 +585,7 @@ local function about_lines(out, header, combos)
     if #parts > 0 then out[#out + 1] = "- Client: " .. table.concat(parts, " · ") end
   end
   if #combos > 0 then out[#out + 1] = "- Characters: " .. table.concat(characters(combos), ", ") end
+  filter_lines(out, header)
   if header.rank then
     out[#out + 1] = "- Guide rank: " .. code(header.rank) .. " (WoWPro's setting for which optional steps are shown)"
   end

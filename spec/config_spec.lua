@@ -79,4 +79,17 @@ describe("config.load", function()
       config.load { addon_path = "/nonexistent" }
     end, "hwc: addon path not found: /nonexistent")
   end)
+
+  -- The CLI finds the WoW-Pro folder (hwc.source); config has no default path.
+  it("has no default addon path and skips the TOC check without one", function()
+    local c = config.load({})
+    assert.is_nil(c.addon_path)
+  end)
+end)
+
+describe("boot.run", function()
+  it("errors when the config names no WoW-Pro folder", function()
+    local cfg = config.load({})
+    assert.has_error(function() require("hwc.boot").run(cfg) end, "hwc: no WoW-Pro folder")
+  end)
 end)

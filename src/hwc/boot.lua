@@ -102,6 +102,7 @@ function M.harness_errors(result)
 end
 
 function M.run(cfg)
+  if not cfg.addon_path then error("hwc: no WoW-Pro folder", 0) end
   local info = addon_info.read(cfg.addon_path)
   if info.git and info.commit == "" then
     error("hwc: no git commit for addon path " .. cfg.addon_path

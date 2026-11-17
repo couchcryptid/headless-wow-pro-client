@@ -2,32 +2,36 @@
 -- status; bin/hwc performs the exit.
 local USAGE = [[
 Usage: hwc [-h|--help]
-       hwc boot [--race RACE] [--class CLASS] [--addon PATH] [--json]
-       hwc quest <id> [--addon PATH]
-       hwc run --class CLASS [--race RACE] [--variant V] [--addon PATH] [--stop-level N]
-               [--date D] [--out DIR] [--relative-to DIR]
-       hwc matrix [--races Dwarf,Gnome] [--addon PATH] [--date D] [--out DIR] [--relative-to DIR]
+       hwc boot   [--race RACE] [--class CLASS] [--json]
+       hwc quest  <id>
+       hwc run    --class CLASS [--race RACE] [--variant V]
+                  [--include PATTERN]... [--exclude PATTERN]...
+                  [--date D] [--out DIR] [--relative-to DIR]
+       hwc matrix [--race RACE]... [--races LIST]
+                  [--include PATTERN]... [--exclude PATTERN]...
+                  [--date D] [--out DIR] [--relative-to DIR]
 
-Headless WoW-Pro client: loads the real WoW-Pro addon under LuaJIT.
+Headless WoW-Pro client: loads the real WoW-Pro addon under LuaJIT. Run it from
+the WoW-Pro folder (the one holding WoWPro/WoWPro.toc) or any folder below it.
 
 Commands:
   boot          Boot the addon to the first shown steps and print them
   quest         Print a quest from the catalog, with its sources, as JSON
-  run           Play one character through the 1-25 chain; write findings and a run log
+  run           Play one character along the guide chain; write findings and a run log
   matrix        Play every race x class (and profession variant); write findings and run logs
 
 Options:
   -h, --help    Show this help
-  --race RACE   Player race (boot default Human; run default Dwarf)
+  --race RACE   Player race (boot default Human; run default Dwarf; repeatable for matrix)
   --class CLASS Player class token, e.g. WARRIOR (default WARRIOR)
-  --addon PATH  WoW-Pro checkout (default ~/Projects/WoW-Pro-Guides)
   --json        Print the boot result as JSON
   --variant V   Profession variant: baseline, secondary, alch-herb, bs-mining, lw-skin,
                 eng-ench, tailoring (default baseline)
-  --races LIST  Comma list of races for matrix (default Dwarf,Gnome)
-  --stop-level N  Level at which a run stops (default 25)
+  --races LIST  Comma list of races for matrix, merged with --race (default Dwarf,Gnome)
+  --include P / --exclude P  Glob filters on guide paths (repeatable; last match wins; default: all guides)
+                See README "Choosing guides" for the rules.
   --date D      Findings date, YYYY-MM-DD (default today, host clock)
-  --out DIR     Findings directory (default findings/)
+  --out DIR     Findings directory (default ~/.hwc/findings)
   --relative-to DIR  Every path in the output is written relative to DIR (default: current directory)
 ]]
 
@@ -40,7 +44,7 @@ local function parse_boot(args, i)
     if a == "--json" then
       opts.json = true
       i = i + 1
-    elseif (a == "--race" or a == "--class" or a == "--addon") and args[i + 1] then
+    elseif (a == "--race" or a == "--class") and args[i + 1] then
       opts[a:sub(3)] = args[i + 1]
       i = i + 2
     else
@@ -103,10 +107,10 @@ local function print_text(out, r, boot)
   out:write("stand-ins called: ", #r.standin_calls > 0 and tally(r.standin_calls) or "none", "\n")
 end
 
-local function run_boot(opts, out)
+local function run_boot(opts, root, out)
   local config = require("hwc.config")
   local boot = require("hwc.boot")
-  local cfg = config.load({ addon_path = opts.addon, race = opts.race, class = opts.class })
+  local cfg = config.load({ addon_path = root, race = opts.race, class = opts.class })
   local r = boot.run(cfg)
   if opts.json then
     out:write(require("hwc.json").encode(json_result(r, boot), { indent = true }), "\n")
@@ -116,10 +120,10 @@ local function run_boot(opts, out)
   return 0
 end
 
-local function run_quest(id, addon, out, err)
+local function run_quest(id, out, err)
   local config = require("hwc.config")
   local catalog = require("hwc.catalog")
-  local cfg = config.load({ addon_path = addon })
+  local cfg = config.load({})
   local cat = catalog.load(cfg)
   local quest = cat:quest(id)
   if not quest then
@@ -130,16 +134,28 @@ local function run_quest(id, addon, out, err)
   return 0
 end
 
--- Options for run/matrix: name -> value, every option takes a value.
+-- Options for run/matrix: every option takes a value. allowed[name] is true for
+-- a single value (the last one wins) or "list" for a repeatable option, kept as an
+-- array in order. --include and --exclude also go into opts.filters, one ordered
+-- list of { kind, raw }, since their relative order decides (last match wins).
 local function parse_values(args, allowed)
-  local opts = {}
+  local opts = { filters = {} }
   local i = 2
   while i <= #args do
     local name = args[i]:match("^%-%-(.+)$")
     if not (name and allowed[name] and args[i + 1]) then
       return nil, "unknown or incomplete option: " .. args[i]
     end
-    opts[name] = args[i + 1]
+    local value = args[i + 1]
+    if allowed[name] == "list" then
+      opts[name] = opts[name] or {}
+      table.insert(opts[name], value)
+    else
+      opts[name] = value
+    end
+    if name == "include" or name == "exclude" then
+      opts.filters[#opts.filters + 1] = { kind = name, raw = value }
+    end
     i = i + 2
   end
   return opts
@@ -172,10 +188,48 @@ local function report_json(rep)
   return rep
 end
 
+-- Distinct passed gids across the logs' jumps, first-seen order; nil when none.
+local function jumped_gids(logs)
+  local seen, out = {}, {}
+  for _, l in ipairs(logs) do
+    for _, j in ipairs(l.jumps or {}) do
+      for _, gid in ipairs(j.passed or {}) do
+        if not seen[gid] then seen[gid] = true; out[#out + 1] = gid end
+      end
+    end
+  end
+  return #out > 0 and out or nil
+end
+
+-- Included guides an --include matched that no log played, in TOC order
+-- (controller Ruling 1). nil when no --include was given.
+local function unreached_gids(opts, logs)
+  local includes = {}
+  for _, f in ipairs(opts.filters) do
+    if f.kind == "include" then includes[#includes + 1] = require("hwc.filters").compile(f.pattern) end
+  end
+  if #includes == 0 then return nil end
+  local played = {}
+  for _, l in ipairs(logs) do
+    for _, gid in ipairs(l.guides or {}) do played[gid] = true end
+  end
+  local seen, out = {}, {}
+  for _, g in ipairs(opts.guides) do
+    if opts.included[g.gid] and not played[g.gid] and not seen[g.gid] then
+      for _, match in ipairs(includes) do
+        if match(g.rel) then seen[g.gid] = true; out[#out + 1] = g.gid; break end
+      end
+    end
+  end
+  return out
+end
+
 -- Plays every combo, then writes DIR/<date>-<scope>.md and .json and one run
 -- log per character under DIR/<date>-<scope>/. Every path in the output is
 -- rewritten relative to --relative-to (default: the current directory).
-local function play(combos, scope, opts, out)
+-- With filters, a matrix combo whose log played no guide is skipped and its
+-- race named in the header; nothing is written when every combo is skipped.
+local function play(combos, scope, opts, out, err)
   local config = require("hwc.config")
   local runner = require("hwc.driver.run")
   local matrix = require("hwc.driver.matrix")
@@ -184,28 +238,35 @@ local function play(combos, scope, opts, out)
   local json = require("hwc.json")
   local addon_info = require("hwc.addon_info")
   local date = opts.date or os.date("%Y-%m-%d")
-  local outdir = opts.out or "findings"
+  local outdir = opts.out or (opts.home .. "/.hwc/findings")
   local logdir = outdir .. "/" .. date .. "-" .. scope
-  mkdirs(logdir)
   local paths = require("hwc.paths")
   local report = require("hwc.findings.report")
   local cwd = paths.cwd()
   local base = paths.resolve(opts["relative-to"] or cwd, cwd)
-  -- Absolute, so addon paths and chunk names enter the logs in a form
-  -- paths.rewrite can match.
-  if opts.addon then opts.addon = paths.resolve(opts.addon, cwd) end
-  local raw, labels = {}, {}
+  local played, raw, labels = {}, {}, {}
+  local skipped_races, skipped_seen = {}, {}
   for _, c in ipairs(combos) do
     local cfg = config.load({
-      addon_path = opts.addon, race = c.race, class = c.class,
+      addon_path = opts.root, race = c.race, class = c.class,
       professions = matrix.professions(c.variant),
     })
     cfg.variant = c.variant
-    local log = runner.character(cfg, { stop_level = opts.stop_level })
+    local log = runner.character(cfg, { included = opts.included })
     log.variant = c.variant
-    raw[#raw + 1] = log
-    labels[#labels + 1] = string.format("%s %s %s", c.race, c.class, c.variant)
+    if opts.matrix and opts.included and #(log.guides or {}) == 0 then
+      if not skipped_seen[c.race] then skipped_seen[c.race] = true; skipped_races[#skipped_races + 1] = c.race end
+    else
+      played[#played + 1] = c
+      raw[#raw + 1] = log
+      labels[#labels + 1] = string.format("%s %s %s", c.race, c.class, c.variant)
+    end
   end
+  if #played == 0 and #combos > 0 and opts.matrix then
+    err:write("hwc: matrix: no race reaches an included guide\n")
+    return 2
+  end
+  mkdirs(logdir)
   local first = raw[1] or {}
   -- Roots come from the first log: every combo shares one config.
   local roots = { base }
@@ -218,7 +279,7 @@ local function play(combos, scope, opts, out)
     if sources[name].path then roots[#roots + 1] = sources[name].path end
   end
   local logs = {}
-  for i, c in ipairs(combos) do
+  for i, c in ipairs(played) do
     logs[i] = paths.rewrite(raw[i], roots, base, cwd)
     write_file(string.format("%s/%s-%s-%s.json", logdir, c.race, c.class, c.variant),
       json.encode(logs[i], { indent = true }) .. "\n")
@@ -241,12 +302,21 @@ local function play(combos, scope, opts, out)
   end
   table.sort(carried, function(a, b) return a.qid < b.qid end)
   local client = addon_info.read(config.repo_root(), { tracked_only = true })
+  local filters
+  if #opts.filters > 0 then
+    filters = {}
+    for i, f in ipairs(opts.filters) do filters[i] = { kind = f.kind, pattern = f.pattern } end
+  end
   local header = {
     scope = scope, date = date, addon = rfirst.addon, catalog = (rfirst.catalog or {}).sources,
     client = { commit = client.commit, dirty = client.dirty },
     matrix = { combos = labels }, rank = rfirst.rank,
     carried = #carried > 0 and carried or nil,
     dungeons = rfirst.skip_dungeons ~= nil and { skip = rfirst.skip_dungeons, skipped = nskipped } or nil,
+    filters = filters,
+    jumped = jumped_gids(logs),
+    unreached = opts.included and unreached_gids(opts, logs) or nil,
+    skipped_races = #skipped_races > 0 and skipped_races or nil,
   }
   header = paths.rewrite(header, roots, base, cwd)
   header.paths_relative_to = base:match("([^/]+)$") or "/"
@@ -264,14 +334,19 @@ local function check_race(race)
   if not require("hwc.world.player").RACES[race] then return "race not in scope: " .. tostring(race) end
 end
 
-local function run_run(opts, out)
+-- "-filtered" marks output that played only part of the chain.
+local function scoped(name, opts)
+  return #opts.filters > 0 and (name .. "-filtered") or name
+end
+
+local function run_run(opts, out, err)
   local combo = { race = opts.race or "Dwarf", class = opts.class:upper(), variant = opts.variant or "baseline" }
-  return play({ combo }, string.format("%s-%s-%s", combo.race, combo.class, combo.variant), opts, out)
+  return play({ combo }, scoped(string.format("%s-%s-%s", combo.race, combo.class, combo.variant), opts),
+    opts, out, err)
 end
 
 local function run_matrix(races, opts, out, err)
-  local combos = require("hwc.driver.matrix").combos(
-    opts.addon or (os.getenv("HOME") .. "/Projects/WoW-Pro-Guides"), races)
+  local combos = require("hwc.driver.matrix").combos(opts.root, races)
   -- Nothing to play: no findings file (it would carry an "Addon: nil" header).
   if #combos == 0 then
     err:write("hwc: matrix: no combos for ", table.concat(races, ","),
@@ -280,15 +355,58 @@ local function run_matrix(races, opts, out, err)
   end
   local names = {}
   for i, r in ipairs(races) do names[i] = r:lower() end
-  return play(combos, "forever-alliance-" .. table.concat(names, "-") .. "-1-25", opts, out)
+  opts.matrix = true
+  return play(combos, scoped("forever-alliance-" .. table.concat(names, "-"), opts), opts, out, err)
 end
 
-local function command(args, out, err, allowed, prepare, fn)
-  local opts, perr = parse_values(args, allowed)
-  if opts and opts["stop-level"] then
-    opts.stop_level = tonumber(opts["stop-level"])
-    if not opts.stop_level then opts, perr = nil, "--stop-level needs a number" end
+local function strip(msg) return (tostring(msg):gsub("^hwc: ", "")) end
+
+-- The WoW-Pro folder hwc runs in: root and start, or nil and a usage message.
+local function locate(env)
+  local source = require("hwc.source")
+  local start = source.start_dir({ pwd = env.pwd, cwd = env.cwd })
+  local root, ferr = source.find(start)
+  if not root then return nil, nil, strip(ferr) end
+  return root, start
+end
+
+-- Resolves opts.filters against the WoW-Pro folder and selects the guides they
+-- keep: sets f.pattern on each filter, and opts.guides (the TOC's guides) and
+-- opts.included ({ [gid] = true }) when any filter is given. Returns nil and a
+-- usage message for a bad pattern, an --include matching no guide, or no guide left.
+-- Raises (exit 1) when the Leveling TOC cannot be read.
+local function select_guides(opts)
+  if #opts.filters == 0 then return true end
+  local filters = require("hwc.filters")
+  local list = {}
+  for i, f in ipairs(opts.filters) do
+    local pattern, rerr = filters.resolve(f.raw, opts.root, opts.start)
+    if not pattern then return nil, strip(rerr) end
+    f.pattern = pattern
+    list[i] = { kind = f.kind, pattern = pattern, raw = f.raw }
   end
+  local guides = require("hwc.driver.guide_source").toc_guides(opts.root)
+  local files, seen = {}, {}
+  for _, g in ipairs(guides) do
+    if not seen[g.rel] then seen[g.rel] = true; files[#files + 1] = g.rel end
+  end
+  local set, unmatched = filters.select(files, list)
+  if #unmatched > 0 then
+    local msgs = {}
+    for i, raw in ipairs(unmatched) do msgs[i] = '--include "' .. raw .. '" matches no guide' end
+    return nil, table.concat(msgs, "; ")
+  end
+  local included, any = {}, false
+  for _, g in ipairs(guides) do
+    if set[g.rel] then included[g.gid] = true; any = true end
+  end
+  if not any then return nil, "no guide left after filters" end
+  opts.guides, opts.included = guides, included
+  return true
+end
+
+local function command(args, out, err, env, allowed, prepare, fn)
+  local opts, perr = parse_values(args, allowed)
   -- The date names the output files: anything but YYYY-MM-DD (e.g. ../x) would
   -- change the write path.
   if opts and opts.date and not opts.date:match("^%d%d%d%d%-%d%d%-%d%d$") then
@@ -296,6 +414,19 @@ local function command(args, out, err, allowed, prepare, fn)
   end
   local arg
   if opts then opts, arg, perr = prepare(opts) end
+  if opts then
+    opts.home = env.home
+    opts.root, opts.start, perr = locate(env)
+    if not opts.root then opts = nil end
+  end
+  if opts then
+    local ok, sel, serr = pcall(select_guides, opts)
+    if not ok then
+      err:write(tostring(sel), "\n")
+      return 1
+    end
+    if not sel then opts, perr = nil, serr end
+  end
   if not opts then
     err:write("hwc: ", perr, "\n", USAGE)
     return 2
@@ -314,9 +445,17 @@ local function command(args, out, err, allowed, prepare, fn)
   return res
 end
 
-function M.main(args, out, err)
+-- env = { pwd, cwd, home }: where hwc runs and the user's home, each defaulting
+-- to the process's own (specs pass their own).
+function M.main(args, out, err, env)
   out, err = out or io.stdout, err or io.stderr
   args = args or {}
+  env = env or {}
+  env = {
+    pwd = env.pwd or os.getenv("PWD"),
+    cwd = env.cwd or require("lfs").currentdir(),
+    home = env.home or os.getenv("HOME"),
+  }
   for _, a in ipairs(args) do
     if a == "-h" or a == "--help" then
       out:write(USAGE)
@@ -325,11 +464,16 @@ function M.main(args, out, err)
   end
   if args[1] == "boot" then
     local opts, perr = parse_boot(args, 2)
+    local root
+    if opts then
+      root, _, perr = locate(env)
+      if not root then opts = nil end
+    end
     if not opts then
       err:write("hwc: ", perr, "\n", USAGE)
       return 2
     end
-    local ok, res = pcall(run_boot, opts, out)
+    local ok, res = pcall(run_boot, opts, root, out)
     if not ok then
       err:write(tostring(res), "\n")
       return 1
@@ -338,21 +482,11 @@ function M.main(args, out, err)
   end
   if args[1] == "quest" then
     local id = tonumber(args[2] or "")
-    local addon
-    local i = 3
-    while id and i <= #args do
-      if args[i] == "--addon" and args[i + 1] then
-        addon = args[i + 1]
-        i = i + 2
-      else
-        id = nil
-      end
-    end
-    if not id then
-      err:write("hwc: quest needs a numeric id\n", USAGE)
+    if not id or #args > 2 then
+      err:write("hwc: quest needs a numeric id and takes no options\n", USAGE)
       return 2
     end
-    local ok, res = pcall(run_quest, id, addon, out, err)
+    local ok, res = pcall(run_quest, id, out, err)
     if not ok then
       err:write(tostring(res), "\n")
       return 1
@@ -360,8 +494,9 @@ function M.main(args, out, err)
     return res
   end
   if args[1] == "run" then
-    return command(args, out, err,
-      { race = true, class = true, variant = true, addon = true, ["stop-level"] = true, date = true, out = true, ["relative-to"] = true },
+    return command(args, out, err, env,
+      { race = true, class = true, variant = true, include = "list", exclude = "list",
+        date = true, out = true, ["relative-to"] = true },
       function(o)
         if not o.class then return nil, nil, "run needs --class" end
         if not require("hwc.driver.matrix").professions(o.variant or "baseline") then
@@ -371,18 +506,27 @@ function M.main(args, out, err)
         if bad then return nil, nil, bad end
         return o
       end,
-      function(_, o, w) return run_run(o, w) end)
+      function(_, o, w) return run_run(o, w, err) end)
   end
   if args[1] == "matrix" then
-    return command(args, out, err, { races = true, addon = true, date = true, out = true, ["relative-to"] = true },
+    return command(args, out, err, env,
+      { race = "list", races = true, include = "list", exclude = "list",
+        date = true, out = true, ["relative-to"] = true },
       function(o)
-        local races = {}
-        for r in (o.races or "Dwarf,Gnome"):gmatch("[^,]+") do
+        -- --race (repeatable) and --races (comma list) merge, first-seen order.
+        local given = {}
+        for _, r in ipairs(o.race or {}) do given[#given + 1] = r end
+        if o.races then
+          for r in o.races:gmatch("[^,]+") do given[#given + 1] = r end
+          if #given == #(o.race or {}) then return nil, nil, "--races is empty" end
+        end
+        if #given == 0 then given = { "Dwarf", "Gnome" } end
+        local races, seen = {}, {}
+        for _, r in ipairs(given) do
           local bad = check_race(r)
           if bad then return nil, nil, bad end
-          races[#races + 1] = r
+          if not seen[r] then seen[r] = true; races[#races + 1] = r end
         end
-        if #races == 0 then return nil, nil, "--races is empty" end
         return o, races
       end,
       function(races, o, w) return run_matrix(races, o, w, err) end)
