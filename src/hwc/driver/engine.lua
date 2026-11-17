@@ -291,4 +291,13 @@ function Engine:rank()
   return rank
 end
 
+-- WoWPro's "Skip Dungeon Quests" option (WoWPro_Config.lua:1179). Its saved name is
+-- WoWProCharDB.EnableDungeons, defaulted to true (WoWPro.lua:543); while it's on the
+-- engine completes DUNGEON accepts without showing them (WoWPro_Broker.lua:2589).
+function Engine:skip_dungeons()
+  local db = rawget(self.env, "WoWProCharDB")
+  if type(db) ~= "table" then return nil end
+  return db.EnableDungeons
+end
+
 return Engine

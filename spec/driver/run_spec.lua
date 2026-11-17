@@ -79,8 +79,10 @@ describe("driver.run", function()
     assert.equal(101, d[1].line)
     assert.equal("g1.lua", d[1].file)
     assert.equal("Done", d[1].after.name)
+    -- one click, one signal: the C's click is the did-not-advance, not also a manual-completion
     local m = signals(log, "manual-completion")
-    assert.is_false(m[1].expected)
+    assert.equal(1, #m)
+    assert.equal("D", m[1].action)
     assert.same({ "G1:1", "G1:2" }, E.manual)
   end)
 
@@ -165,11 +167,86 @@ describe("driver.run", function()
     assert.equal("Hidden", hidden[1].name)
     assert.equal("PRE not met", hidden[1].why)
     assert.equal("g1.lua", hidden[1].file)
-    local left = signals(log, "leftover-quests")
-    assert.equal("G1", left[1].gid)
-    assert.equal(77, left[1].qid)
+    -- 77 has no turn-in step in any guide played: carried past the run, not a signal
+    assert.same({}, signals(log, "leftover-quests"))
+    assert.same({ { qid = 77 } }, log.carried)
     assert.same({ "G1:1", "G1:3", "G2:1", "G2:2" }, E.acted)
     assert.equal("no-next-guide", log.stop.reason)
+  end)
+
+  -- A quest in the log is a finding only once, at the end of the run, and only when the
+  -- run reached a turn-in step for it. Carrying a quest into the next guide is normal;
+  -- one with no turn-in in the guides played is carried past the run (RunLog.carried).
+  it("records one leftover-quests at the reached turn-in step, not one per guide", function()
+    local world = fx.fake_world({ [77] = { name = "Wolves" } }, { 77 })
+    local guides = {
+      G1 = { startlevel = 1, next_gid = "G2", file = "g1.lua", steps = {
+        { action = "T", name = "Wolves", qids = { 77 } },
+        { action = "R", name = "a" },
+      } },
+      G2 = { startlevel = 5, file = "g2.lua", steps = { { action = "R", name = "b" } } },
+    }
+    local script = { G1 = { nil, { complete = { 2 }, done = true, switch = "G2" } }, G2 = completes(1) }
+    local log = drive(guides, script, {}, world)
+    local left = signals(log, "leftover-quests")
+    assert.equal(1, #left)
+    assert.same({ "G1", "g1.lua", 101, "T", "Wolves", 77, "Wolves" },
+      { left[1].gid, left[1].file, left[1].line, left[1].action, left[1].name, left[1].qid, left[1].qname })
+    assert.is_nil(left[1].before)
+    assert.is_nil(left[1].after)
+    assert.same({}, log.carried)
+  end)
+
+  it("carries a quest whose turn-in step the run never reached", function()
+    local world = fx.fake_world({ [77] = { name = "Wolves" } }, { 77 })
+    local guides = {
+      G1 = { startlevel = 1, next_gid = "G2", file = "g1.lua", steps = { { action = "R", name = "a" } } },
+      G2 = { startlevel = 25, file = "g2.lua", steps = { { action = "T", name = "Wolves", qids = { 77 } } } },
+    }
+    local log = drive(guides, { G1 = { { complete = { 1 }, done = true, switch = "G2" } } }, {}, world)
+    assert.equal("chain-range", log.stop.reason)
+    assert.same({}, signals(log, "leftover-quests"))
+    assert.same({ { qid = 77, qname = "Wolves" } }, log.carried)
+  end)
+
+  -- A quest accepted in an earlier guide that no guide played turns in is a finding:
+  -- only the guide the run stopped in can still turn its quests in after the run.
+  it("flags a quest accepted in an earlier guide with no turn-in in scope", function()
+    local world = fx.fake_world({ [77] = { name = "Wolves" }, [88] = { name = "Bears" } }, { 77, 88 })
+    local guides = {
+      G1 = { startlevel = 1, next_gid = "G2", file = "g1.lua", steps = {
+        { action = "A", name = "Wolves", qids = { 77 } },
+        { action = "R", name = "a" },
+      } },
+      G2 = { startlevel = 5, file = "g2.lua", steps = {
+        { action = "A", name = "Bears", qids = { 88 } },
+        { action = "R", name = "b" },
+      } },
+    }
+    local script = { G1 = { { complete = { 1 } }, { complete = { 2 }, done = true, switch = "G2" } },
+      G2 = completes(2) }
+    local log = drive(guides, script, {}, world)
+    local left = signals(log, "leftover-quests")
+    assert.equal(1, #left)
+    assert.same({ "G1", "g1.lua", 101, "A", 77, "not-turned-in" },
+      { left[1].gid, left[1].file, left[1].line, left[1].action, left[1].qid, left[1].reason })
+    assert.same({ { qid = 88, qname = "Bears" } }, log.carried) -- G2 is where the run stopped
+  end)
+
+  -- 01_12_Dun_Morogh.lua:273: Forever quest 95213 has no catalog entry, so its
+  -- leftover-quests finding read "Quest 95213 is left in the log" with no name.
+  it("names a quest the catalog lacks from the guide's own A step for it", function()
+    local world = fx.fake_world({ [96] = { name = "Catalog Name" } }, { 95213, 96 })
+    local steps = {
+      { action = "A", name = "Stolen Blasting Powder", qids = { 95213 } },
+      { action = "T", name = "Stolen Blasting Powder", qids = { 95213 } },
+      { action = "T", name = "Guide Name", qids = { 96 } },
+    }
+    local log = drive(one_guide(steps), { G1 = completes(1) }, {}, world)
+    local names = {}
+    for _, l in ipairs(signals(log, "leftover-quests")) do names[l.qid] = l.qname end
+    assert.equal("Stolen Blasting Powder", names[95213])
+    assert.equal("Catalog Name", names[96]) -- the catalog wins when it has a name
   end)
 
   -- Ruling X: an accept the engine skipped because its quest is already done
@@ -243,19 +320,33 @@ describe("driver.run", function()
     local hidden = signals(log, "never-shown-accept")
     assert.equal(1, #hidden)
     assert.equal("Hidden", hidden[1].name)
-    assert.equal("G1", signals(log, "leftover-quests")[1].gid)
+    assert.same({}, signals(log, "leftover-quests"))
+    assert.same({ { qid = 77 } }, log.carried)
     assert.equal("Onwards", signals(log, "manual-completion")[1].name)
   end)
 
-  it("tags an engine-completed unshown DUNGEON accept engine-dungeon-skip", function()
+  -- WoWPro's "Skip Dungeon Quests" (WoWProCharDB.EnableDungeons, on by default) completes
+  -- DUNGEON accepts unshown (WoWPro_Broker.lua:2589). This client doesn't run dungeons, so
+  -- that's expected: the RunLog records the setting and the skipped accepts, not signals.
+  it("records an engine-completed unshown DUNGEON accept as a dungeon skip, not a signal", function()
     local steps = {
       { action = "R", name = "a" },
       { action = "A", name = "Deadmines", qids = { 3 }, tags = { dungeon = "1581" }, hidden = true },
     }
     local log = drive(one_guide(steps), { G1 = { { complete = { 1, 2 } } } })
-    local hidden = signals(log, "never-shown-accept")
-    assert.equal(1, #hidden)
-    assert.equal("engine-dungeon-skip", hidden[1].reason)
+    assert.same({}, signals(log, "never-shown-accept"))
+    assert.is_true(log.skip_dungeons)
+    assert.same({ { gid = "G1", file = "g1.lua", line = 102, qid = 3, name = "Deadmines" } }, log.dungeon_skips)
+  end)
+
+  it("still flags a hidden DUNGEON accept the engine did not complete", function()
+    local steps = {
+      { action = "R", name = "a" },
+      { action = "A", name = "Deadmines", qids = { 3 }, tags = { dungeon = "1581" }, hidden = true },
+    }
+    local log = drive(one_guide(steps), { G1 = { { complete = { 1 } } } })
+    assert.equal(1, #signals(log, "never-shown-accept"))
+    assert.same({}, log.dungeon_skips)
   end)
 
   it("stops with chain-range when the next guide starts at level 25", function()
@@ -300,7 +391,7 @@ describe("driver.run", function()
       { action = "A", name = "Low", qids = { 5 }, outcome = { kind = "acted", grind = { kills = 9, to = 4 } } },
     }
     local script = { G1 = { nil, nil, nil, { complete = { 4 } } } }
-    local log = drive(one_guide(steps), script, {}, fx.fake_world({ [5] = { name = "Low Quest" } }))
+    local log, E = drive(one_guide(steps), script, {}, fx.fake_world({ [5] = { name = "Low Quest" } }))
     assert.equal(1, #signals(log, "log-full"))
     local ar = signals(log, "accept-refused")
     assert.equal(1, #ar)
@@ -315,7 +406,10 @@ describe("driver.run", function()
     assert.equal("T", b[1].before.action)
     assert.equal("Low Quest", b[1].qname)
     assert.same({ kills = 9, to = 4 }, b[1].grind)
-    assert.equal(3, #signals(log, "did-not-advance"))
+    -- One click, one finding: a refused step's own signal already says why it didn't
+    -- advance, so the client clicks it off without a did-not-advance as well.
+    assert.same({}, signals(log, "did-not-advance"))
+    assert.same({ "G1:1", "G1:2", "G1:3", "G1:5" }, E.manual)
   end)
 
   it("flags a shown step whose quest the catalog keeps from this race or class, once", function()
@@ -342,6 +436,20 @@ describe("driver.run", function()
     assert.equal("race", w[1].reason)
   end)
 
+  it("does not flag a non-quest step that borrows a race/class quest's QID", function()
+    -- 01_12_Dun_Morogh.lua:301-302: `f Thelsamar` and `h Stoutlager Inn` carry the
+    -- Shaman-only QID 94466. On a non-quest step the QID only skips the step once that
+    -- quest is complete (WoWPro_Broker.lua:2037); it gates nothing by race or class.
+    local world = fx.fake_world({ [8] = { classes = { "SHAMAN" } } })
+    local steps = {
+      { action = "f", name = "Thelsamar", qids = { 8 } },
+      { action = "h", name = "Stoutlager Inn", qids = { 8 } },
+      { action = "R", name = "Run", qids = { 8 } },
+    }
+    local log = drive(one_guide(steps), {}, {}, world)
+    assert.same({}, signals(log, "wrong-race-class"))
+  end)
+
   it("reads why from the acted step's guide when a signal follows a guide switch", function()
     local guides = {
       G1 = { startlevel = 1, next_gid = "G2", steps = {
@@ -366,6 +474,23 @@ describe("driver.run", function()
     end
     local log = run.drive({ engine = E, world = world, cfg = {}, errors = {}, missing_order = {} }, { perform = E.perform })
     assert.equal("Broker.lua:1: boom", signals(log, "manual-completion")[1].reason)
+  end)
+
+  it("records the right-click error as the did-not-advance reason for an unexpected click", function()
+    local world = fx.fake_world()
+    local E = fx.scripted_engine(one_guide({ { action = "C", name = "Kill", qids = { 7 },
+      outcome = { kind = "refused", reason = "incomplete" } } }), {}, "G1", world)
+    local real = E.complete_manual
+    function E:complete_manual(i)
+      real(self, i)
+      if i == 1 then return false, "Broker.lua:1: boom" end
+      return true
+    end
+    local ctx = { engine = E, world = world, cfg = {}, errors = {}, missing_order = {} }
+    local log = run.drive(ctx, { perform = E.perform })
+    assert.equal("Broker.lua:1: boom", signals(log, "did-not-advance")[1].reason)
+    assert.equal("D", signals(log, "manual-completion")[1].action)
+    assert.equal(1, #signals(log, "manual-completion"))
   end)
 
   it("records stuck with settle-limit when a settle hits its limit", function()

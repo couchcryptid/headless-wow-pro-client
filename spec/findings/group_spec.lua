@@ -109,22 +109,35 @@ describe("group.findings", function()
     assert.equal(2, #r.causes)
   end)
 
-  it("links three dungeon skips under one engine-dungeon-skip root", function()
-    local sigs = {}
-    for i = 1, 3 do
-      sigs[i] = { signal = "never-shown-accept", gid = "G" .. i, file = "d.lua", line = i, action = "A",
-        name = "Dungeon " .. i, qid = 900 + i, reason = "engine-dungeon-skip" }
-    end
-    local fs = group.findings({ runlog("Dwarf", "WARRIOR", sigs) })
-    local roots = by_signal(fs, "engine-dungeon-skip")
-    assert.equal(1, #roots)
-    local root = roots[1]
-    assert.equal("high", root.severity)
-    assert.equal("EnableDungeons auto-completes DUNGEON accepts", root.name)
-    assert.equal("WoWPro/WoWPro_Broker.lua", root.file)
-    assert.equal(2588, root.line)
-    assert.equal(3, #root.causes)
-    for _, f in ipairs(by_signal(fs, "never-shown-accept")) do assert.equal(root.id, f.caused_by) end
+  it("links a follow-on to the refusal on its own line before one elsewhere on the quest", function()
+    local r1 = { signal = "accept-refused", gid = "G1", file = "f.lua", line = 10, action = "A", name = "x", qid = 7,
+      ordinal = 1 }
+    local r2 = { signal = "accept-refused", gid = "G1", file = "f.lua", line = 50, action = "A", name = "x", qid = 7,
+      ordinal = 2 }
+    local d2 = dna({ file = "f.lua", line = 50, action = "A", name = "x", qid = 7, ordinal = 2 })
+    local fs = group.findings({ runlog("Dwarf", "WARRIOR", { r1, r2, d2 }) })
+    local on50
+    for _, f in ipairs(by_signal(fs, "accept-refused")) do if f.line == 50 then on50 = f end end
+    assert.equal(on50.id, by_signal(fs, "did-not-advance")[1].caused_by)
+  end)
+
+  -- A leftover-quests signal sits on the turn-in step the run passed (driver.run
+  -- leftovers), so the finding on that step is why the quest is still in the log.
+  it("links a leftover quest to the finding on its turn-in step", function()
+    local d = dna({ file = "f.lua", line = 30, qid = 7 })
+    local left = { signal = "leftover-quests", gid = "G1", file = "f.lua", line = 30, action = "T",
+      name = "Report to Grull", qid = 7 }
+    local fs = group.findings({ runlog("Dwarf", "WARRIOR", { d, left }) })
+    local parent = by_signal(fs, "did-not-advance")[1]
+    assert.equal(parent.id, by_signal(fs, "leftover-quests")[1].caused_by)
+  end)
+
+  -- Skipped dungeon accepts are run info (RunLog.dungeon_skips), never signals, so
+  -- there is no engine-dungeon-skip root and no such signal.
+  it("raises on the retired engine-dungeon-skip signal", function()
+    assert.has_error(function()
+      group.findings({ runlog("Dwarf", "WARRIOR", { { signal = "engine-dungeon-skip" } }) })
+    end)
   end)
 
   it("links a prereq-hidden accept only to the quest after 'not met:'", function()
@@ -167,9 +180,6 @@ describe("group.findings", function()
     assert.has_error(function() group.findings({ runlog("Dwarf", "WARRIOR", { { signal = "bogus" } }) }) end)
   end)
 
-  it("makes no root without dungeon skips", function()
-    assert.equal(0, #by_signal(group.findings({ runlog("Dwarf", "WARRIOR", { dna() }) }), "engine-dungeon-skip"))
-  end)
 
   it("maps severities and keeps expected manual completions out of the severity ladder", function()
     local sigs = {

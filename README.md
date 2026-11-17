@@ -201,12 +201,12 @@ worktree or the pinned catalog is absent.
 |---|---|---|
 | #3535 Camping 101: Cooking prereq gates | `never-shown-accept` for Tools for Steelgrill (400), Flintfire's Shipment (98321), Farsen's Watch (96392) in `01_12_Dun_Morogh.lua` | absent on `fix/forever-prereq-gates` |
 | #3554 U step gated on its `L` result | the `U` step for QID 1016 with `U\|5456` (`19_25_Alliance.lua:447`) is never shown | shown on `fix/u-step-loot-result` |
-| Dungeons | one `engine-dungeon-skip` root whose causes include `19_25_Alliance.lua` `DUNGEON` accepts | n/a |
+| Dungeons | `19_25_Alliance.lua` `DUNGEON` accepts are in the RunLog's `dungeon_skips` and none is a finding | n/a |
 | Harness completeness | zero harness `lua-error` findings in the full run | n/a |
 
 The spec prints what it doesn't assert: each Red why, the `never-shown-accept`
-totals on both #3535 branches, how many of 19_25's 9 `DUNGEON` accepts sit
-under the root, and the `missing-global` list. "Farsen's Watch why names
+totals on both #3535 branches, how many of 19_25's 9 `DUNGEON` accepts were
+skipped, and the `missing-global` list. "Farsen's Watch why names
 96629" stays pending: the engine's why names only the first unmet prereq of
 `PRE|314&96408`, which is 96408.
 

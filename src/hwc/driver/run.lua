@@ -80,10 +80,26 @@ function Driver:confidence(qid)
 end
 
 -- The catalog's name for a quest id; nil without a qid or a catalog entry.
+-- The catalog's name for qid, else the guide's own: an A step that lists qid (a T step
+-- if no A does), in the order the run opened the guides. WoWPro writes a quest step's
+-- name as the quest's name, and custom quests such as Forever's 95213 have no catalog
+-- entry, so without this a leftover-quests finding (which has no step) shows only an id.
 function Driver:quest_name(qid)
-  local catalog = qid ~= nil and self.W.catalog
+  if qid == nil then return nil end
+  local catalog = self.W.catalog
   local quest = catalog and catalog:quest(qid)
-  return quest and quest.name or nil
+  if quest and quest.name then return quest.name end
+  for _, action in ipairs({ "A", "T" }) do
+    for _, gid in ipairs(self.log.guides) do
+      -- In step order (steps may have holes, so not ipairs/pairs) for a deterministic pick.
+      local steps = self.info[gid] and self.info[gid].steps or {}
+      for i = 1, table.maxn(steps) do
+        local s = steps[i]
+        if s and s.action == action and s.name and contains(s.qids, qid) then return s.name end
+      end
+    end
+  end
+  return nil
 end
 
 -- Appends a Signal. step (an Engine:step record) supplies the location fields;
@@ -170,21 +186,69 @@ function Driver:close(gid, full)
     local s = info.steps[i]
     if not info.seen[i] and i < limit and not run.already_done(info.why[i])
         and not self:taken(s.qids) and not self:lacks_profession(s) then
-      local prev, nxt = info.steps[i - 1], info.steps[i + 1]
-      local sig = {
-        signal = "never-shown-accept", gid = gid, file = info.file, line = s.line, ordinal = s.ordinal, action = s.action,
-        name = s.name, qid = s.qids[1], why = info.why[i], level = self.W.player.level, log = self:log_qids(),
-        before = prev and { name = prev.name, action = prev.action } or nil,
-        after = nxt and { name = nxt.name, action = nxt.action } or nil,
-      }
-      if s.dungeon and self.E:completed(i, gid) then sig.reason = "engine-dungeon-skip" end
-      sig.qname = self:quest_name(sig.qid)
-      sig.confidence = self:confidence(sig.qid)
-      self.log.signals[#self.log.signals + 1] = sig
+      if s.dungeon and self.E:completed(i, gid) then
+        -- Skip Dungeon Quests completed it unshown: run info, not a signal.
+        local d = self.log.dungeon_skips
+        d[#d + 1] = { gid = gid, file = info.file, line = s.line, qid = s.qids[1], name = s.name }
+      else
+        local prev, nxt = info.steps[i - 1], info.steps[i + 1]
+        local sig = {
+          signal = "never-shown-accept", gid = gid, file = info.file, line = s.line, ordinal = s.ordinal,
+          action = s.action, name = s.name, qid = s.qids[1], why = info.why[i], level = self.W.player.level,
+          log = self:log_qids(),
+          before = prev and { name = prev.name, action = prev.action } or nil,
+          after = nxt and { name = nxt.name, action = nxt.action } or nil,
+        }
+        sig.qname = self:quest_name(sig.qid)
+        sig.confidence = self:confidence(sig.qid)
+        self.log.signals[#self.log.signals + 1] = sig
+      end
     end
   end
+end
+
+-- The first `action` step for qid the run reached, in guide then step order, as
+-- (gid, info, step); nil when no guide played has one at or before where the run got to.
+function Driver:reached_step(action, qid)
+  for _, gid in ipairs(self.log.guides) do
+    local info = self.info[gid]
+    local steps = info and info.steps or {}
+    for i = 1, math.min(table.maxn(steps), info and info.max_acted or 0) do
+      local s = steps[i]
+      if s and s.action == action and contains(s.qids, qid) then return gid, info, s end
+    end
+  end
+  return nil
+end
+
+-- Quests still in the log when the run ends. A quest carried into the next guide and
+-- turned in there is normal, so nothing is checked at guide ends. At the end:
+--   * the run passed a turn-in step for it: a leftover-quests finding at that step;
+--   * it was accepted in an earlier guide than the one the run stopped in, and no guide
+--     played turns it in: a leftover-quests finding at the accept, reason
+--     "not-turned-in" (not turned in within the run's scope);
+--   * otherwise it was taken in the guide the run stopped in, which may still turn it
+--     in past the run's end: listed in RunLog.carried, not a finding.
+function Driver:leftovers()
   for _, q in ipairs(self:log_qids()) do
-    self:signal("leftover-quests", nil, { gid = gid, file = info.file, qid = q })
+    local gid, info, s = self:reached_step("T", q)
+    local reason
+    if not s then
+      gid, info, s = self:reached_step("A", q)
+      if s and gid ~= self.gid then reason = "not-turned-in" else s = nil end
+    end
+    if s then
+      local sig = {
+        signal = "leftover-quests", gid = gid, file = info.file, line = s.line, ordinal = s.ordinal,
+        action = s.action, name = s.name, qid = q, reason = reason, level = self.W.player.level,
+        log = self:log_qids(),
+      }
+      sig.qname = self:quest_name(q)
+      sig.confidence = self:confidence(q)
+      self.log.signals[#self.log.signals + 1] = sig
+    else
+      self.log.carried[#self.log.carried + 1] = { qid = q, qname = self:quest_name(q) }
+    end
   end
 end
 
@@ -239,13 +303,15 @@ end
 
 -- Ruling P: only when every listed QID excludes the character (a multi-QID step
 -- lists race/class variants; one admitting id is enough). A QID the catalog does
--- not know admits. One signal per (gid, index), with the first id's reason.
+-- not know admits. One signal per (gid, index), with the first id's reason. Only
+-- quest steps (A/C/K/T) are checked: a non-quest step such as `f Thelsamar|QID|94466`
+-- borrows a quest id for its skip-when-complete check, not to gate it by race or class.
 function Driver:wrong_race_class(cur)
   local W = self.W
   local p = W.player
   local key = cur.gid .. ":" .. cur.index
   local qids = cur.qids or {}
-  if #qids == 0 or self.race_class_seen[key] then return end
+  if #qids == 0 or not actions.is_quest_step(cur) or self.race_class_seen[key] then return end
   local first_qid, first_reason
   for _, q in ipairs(qids) do
     local quest = W.catalog and W.catalog:quest(q)
@@ -261,17 +327,21 @@ function Driver:wrong_race_class(cur)
   self:signal("wrong-race-class", cur, { qid = first_qid, reason = first_reason })
 end
 
+-- Sets out.explained when it records a signal that says why the step was refused:
+-- the driver then clicks the step off without a did-not-advance as well.
 function Driver:refusals(cur, out)
   if out.kind == "refused" then
     local r = out.reason
     if REFUSAL_SIGNALS[r] then
       self:signal(REFUSAL_SIGNALS[r], cur, { qid = out.qid, reason = r, outcome = out.kind })
+      out.explained = true
     elseif r == "not-in-log" and (cur.action == "T" or cur.action == "C") then
       -- Every listed id the character never had (Review Focus 5).
       local history = self.W.log.history or {}
       for _, q in ipairs(cur.qids or {}) do
         if not self.W.log:get(q) and not history[q] then
           self:signal("orphan-turnin", cur, { qid = q, reason = r, outcome = out.kind })
+          out.explained = true
         end
       end
     end
@@ -400,16 +470,24 @@ function Driver:iterate()
   end
 
   if not advanced then
+    -- One right-click, one signal. An unexpected click is a did-not-advance; only an
+    -- expected one (N, D, notes, ...) is a manual-completion. Recording both for the
+    -- same click made every did-not-advance show up twice in the report. A step that
+    -- comes back even after the click is the stuck watchdog's job, not a separate signal.
+    -- A refused step whose refusal is already a signal (accept-refused, log-full,
+    -- orphan-turnin) gets no second one for the same click.
     local expected = actions.expects_manual(cur)
-    if not expected then
-      self:signal("did-not-advance", cur, { qid = out.qid, reason = out.reason, outcome = out.kind })
+    local sig
+    if expected then
+      sig = self:signal("manual-completion", cur,
+        { qid = out.qid, reason = out.reason, outcome = out.kind, expected = true })
+    elseif not out.explained then
+      sig = self:signal("did-not-advance", cur, { qid = out.qid, reason = out.reason, outcome = out.kind })
     end
-    local manual = self:signal("manual-completion", cur,
-      { qid = out.qid, reason = out.reason, outcome = out.kind, expected = expected })
     -- An addon error inside the right-click is in sb.errors (a lua-error at the end)
     -- and becomes this signal's reason.
     local ok, merr = E:complete_manual(cur.index)
-    if not ok then manual.reason = merr end
+    if not ok and sig then sig.reason = merr end
     self:check_settle(E:settle(), cur)
   end
 
@@ -432,6 +510,7 @@ end
 function Driver:finish()
   local log, W = self.log, self.W
   self:close(self.gid, self.stopped == "no-next-guide")
+  self:leftovers()
   for _, e in ipairs(self.ctx.errors or {}) do
     local sig = { signal = "lua-error", message = e.msg, stack = first_stack_line(e.stack), level = W.player.level }
     if self.is_harness_error(e) then sig.reason = "harness" end
@@ -466,6 +545,12 @@ function run.drive(ctx, opts)
     addon = { path = addon.path, branch = addon.branch, commit = addon.commit, dirty = addon.dirty },
     catalog = { sources = W.catalog and W.catalog.sources },
     rank = ctx.engine:rank(),
+    -- Expected for this client (no dungeon runs): the setting and what it skipped are
+    -- run info, not signals. A hidden DUNGEON accept the engine didn't complete is
+    -- still a never-shown-accept.
+    skip_dungeons = ctx.engine:skip_dungeons(),
+    dungeon_skips = {},
+    carried = {},
     steps = {}, signals = {}, guides = {},
   }
   local d = setmetatable({

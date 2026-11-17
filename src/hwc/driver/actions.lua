@@ -674,6 +674,12 @@ local function perform_trainer(ctx, step, out)
 end
 
 local QUEST_HANDLERS = { A = perform_accept, C = perform_objectives, K = perform_objectives, T = perform_turn_in }
+-- The actions that act on their quest. On any other step (f, h, R, ...) a QID only
+-- skips the step once that quest is complete (WoWPro_Broker.lua:2037), so the quest's
+-- race and class say nothing about who the step is for.
+function actions.is_quest_step(step)
+  return QUEST_HANDLERS[step.action] ~= nil
+end
 local OTHER_HANDLERS = {
   R = perform_travel, F = perform_arrival, b = perform_arrival, P = perform_arrival, H = perform_travel,
   f = perform_flight_point, h = perform_bind, U = perform_use, L = perform_level,

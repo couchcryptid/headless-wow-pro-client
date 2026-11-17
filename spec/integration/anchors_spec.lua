@@ -223,7 +223,9 @@ describe("travel arrival on main (F/b with TZ) #slow", function()
     local guide_source = require("hwc.driver.guide_source")
     local manual = {}
     for _, s in ipairs(r.log.signals) do
-      if s.signal == "manual-completion" then manual[tostring(s.gid) .. ":" .. tostring(s.line)] = true end
+      if s.signal == "manual-completion" or s.signal == "did-not-advance" then
+        manual[tostring(s.gid) .. ":" .. tostring(s.line)] = true
+      end
     end
     local checked, clicked = {}, {}
     for _, snap in ipairs(r.log.steps) do
@@ -272,21 +274,26 @@ describe("anchor: dungeon accepts and harness completeness on main #slow", funct
     return
   end
 
-  it("has one engine-dungeon-skip root whose causes include 19_25 DUNGEON accepts", function()
+  -- Skip Dungeon Quests is on by default, and this client doesn't run dungeons: the
+  -- DUNGEON accepts it completes unshown are recorded as run info, never as findings.
+  it("records the 19_25 DUNGEON accepts as dungeon skips, not findings", function()
     local r = run_of("main")
-    local roots = findings_where(r, function(f) return f.signal == "engine-dungeon-skip" end)
-    assert.equal(1, #roots)
-    local by_id = {}
-    for _, f in ipairs(r.findings) do by_id[f.id] = f end
-    local in_guide = {}
-    for _, id in ipairs(roots[1].causes) do
-      local f = by_id[id]
-      if f and f.file == ALLIANCE_19_25 then in_guide[#in_guide + 1] = f.line .. " " .. f.name end
+    assert.is_true(r.log.skip_dungeons)
+    local in_guide, skipped = {}, {}
+    for _, d in ipairs(r.log.dungeon_skips) do
+      skipped[d.file .. ":" .. d.line] = true
+      if d.file == ALLIANCE_19_25 then in_guide[#in_guide + 1] = d.line .. " " .. d.name end
     end
     -- The spec expects 9; a mismatch is noted, not asserted.
-    print(string.format("dungeons: %d of 9 DUNGEON accepts in 19_25_Alliance.lua under the root: %s",
+    print(string.format("dungeons: %d of 9 DUNGEON accepts in 19_25_Alliance.lua skipped: %s",
       #in_guide, table.concat(in_guide, "; ")))
     assert.is_true(#in_guide > 0)
+    for _, f in ipairs(r.findings) do
+      assert.is_true(f.signal ~= "engine-dungeon-skip", "engine-dungeon-skip finding")
+      if f.signal == "never-shown-accept" then
+        assert.is_nil(skipped[f.file .. ":" .. f.line], "skipped dungeon accept is a finding: " .. f.name)
+      end
+    end
   end)
 
   -- Zero addon lua-errors too: a missing client stub raises inside an addon file, so it

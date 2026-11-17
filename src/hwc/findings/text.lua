@@ -227,11 +227,6 @@ local function article(word)
   return word:match("^[AEIOUaeiou]") and "an " or "a "
 end
 
-local function has_reason(f, reason)
-  for _, r in ipairs(f.reasons or {}) do if r == reason then return true end end
-  return false
-end
-
 local STUCK = {
   ["settle-limit"] = { 'Stuck after %s', "WoWPro kept scheduling work after this step and never settled." },
   ["same-step"] = { 'Stuck on %s', "WoWPro stayed on this step past the watchdog limit." },
@@ -244,7 +239,6 @@ function text.title(f)
   local s = f.signal
   local nm = name_of(f)
   if s == "never-shown-accept" then
-    if has_reason(f, "engine-dungeon-skip") then return "Dungeon quest " .. nm .. " is skipped" end
     return nm .. " is never offered"
   elseif s == "accept-refused" then
     local kind = kind_of(f)
@@ -269,14 +263,14 @@ function text.title(f)
     local t = STUCK[(f.reasons or {})[1]]
     if t then return (t[1]:gsub("%%s", function() return nm end)) end
   elseif s == "leftover-quests" then
-    if f.qname and f.qname ~= "" then return "Quest " .. quoted(f.qname) .. " (" .. tostring(f.qid) .. ") is left in the log" end
-    return "Quest " .. tostring(f.qid) .. " is left in the log"
+    local which = "Quest " .. tostring(f.qid)
+    if f.qname and f.qname ~= "" then which = "Quest " .. quoted(f.qname) .. " (" .. tostring(f.qid) .. ")" end
+    if (f.reasons or {})[1] == "not-turned-in" then return which .. " is not turned in within scope" end
+    return which .. " is left in the log"
   elseif s == "lua-error" then
     local first = tostring(f.message or f.name or ""):match("^[^\n]*")
     if #first > 80 then first = first:sub(1, 80) .. "…" end
     return "Lua error: " .. first
-  elseif s == "engine-dungeon-skip" then
-    return "EnableDungeons auto-completes dungeon accepts"
   end
   return tostring(s) .. ": " .. (text.step(f.action, f.name) or f.name or "")
 end
@@ -285,7 +279,7 @@ end
 -- prereq_of: the finding the never-shown sentence links as its prerequisite.
 -- A follow-on already links its parent in "Follows from"; don't link it twice.
 local function prereq_of(f, ctx)
-  if f.signal ~= "never-shown-accept" or has_reason(f, "engine-dungeon-skip") then return nil end
+  if f.signal ~= "never-shown-accept" then return nil end
   local pre = f.why and f.why:match("not met: (%d+)")
   local hit = pre and ctx and ctx.by_qid and ctx.by_qid[tonumber(pre)]
   if hit and hit.id ~= f.caused_by then return hit end
@@ -298,9 +292,6 @@ local function clauses(f, ctx, linked)
   ctx = ctx or {}
   linked = linked or {}
   if s == "never-shown-accept" then
-    if has_reason(f, "engine-dungeon-skip") then
-      return "WoWPro marks this dungeon quest done without showing it, because dungeon quests are switched off."
-    end
     local pre = f.why and f.why:match("not met: (%d+)")
     if pre then
       local ref = "quest " .. pre
@@ -308,9 +299,17 @@ local function clauses(f, ctx, linked)
       if hit then ref = "quest " .. (linked[hit.id] or link(text.title(hit), hit.id)) end
       return "The guide tells you to accept this quest, but WoWPro hides the step because its prerequisite, "
         .. ref .. ", is never completed."
-    elseif f.why and f.why ~= "" then
+    end
+    -- The engine's own whys for a hidden step (WoWPro_Broker.lua), said in words.
+    local why = f.why and f.why:gsub("^NextStep%(%):%s*", "")
+    if why == "Optional steps default to skipped." then
+      return "WoWPro skips this accept because the step is optional, and optional steps are skipped by default."
+    elseif why == "Skipping step because player level not high enough." then
+      local when = f.level and ("; the character was level " .. tostring(f.level) .. " when the guide passed it") or ""
+      return "WoWPro hides this accept until the character's level is high enough" .. when .. "."
+    elseif why and why ~= "" then
       return "The guide tells you to accept this quest, but WoWPro never shows the step.",
-        "The engine's reason is in the detail below."
+        "The engine said: " .. quoted(f.why) .. "."
     end
     return "The guide tells you to accept this quest, but WoWPro never shows the step and gave no reason."
   elseif s == "accept-refused" then
@@ -343,21 +342,36 @@ local function clauses(f, ctx, linked)
     end
     return "The guide reaches this accept below the level the quest requires."
   elseif s == "did-not-advance" then
-    return "The simulated action didn't move WoWPro to the next step, so the client clicked it off."
+    -- The reason is the refusal of the client's action (driver.actions); none means it acted.
+    local r = (f.reasons or {})[1]
+    if r == "incomplete" and f.action == "T" then
+      return "The turn-in was refused because quest " .. q .. " wasn't complete, so the client clicked the step off."
+    elseif r == "incomplete" then
+      return "Quest " .. q .. "'s objectives weren't complete after the client did this step, "
+        .. "so the client clicked it off."
+    elseif r == "not-in-log" then
+      return "Quest " .. q .. " wasn't in the log when the guide reached this step, so the client clicked it off."
+    elseif r == "requires-skill" then
+      return "The turn-in needs a profession skill the character doesn't have, so the client clicked the step off."
+    elseif r then
+      return "The step was refused (" .. r .. "), so the client clicked it off."
+    end
+    return "The client did what this step asks, but WoWPro didn't mark it done, so the client clicked it off."
   elseif s == "manual-completion" then
     return "No game event completed this step, so the client clicked it off."
   elseif s == "stuck" then
     local t = STUCK[(f.reasons or {})[1]]
     if t then return t[2] end
   elseif s == "leftover-quests" then
+    if (f.reasons or {})[1] == "not-turned-in" then
+      return "The guide accepts this quest here, but no guide the run played has a turn-in step for it; "
+        .. "it was still in the log when the run ended."
+    end
     local which = q
     if f.qname and f.qname ~= "" then which = quoted(f.qname) .. " (" .. q .. ")" end
-    return "Quest " .. which .. " was still in the log when this guide ended; the run never turned it in."
+    return "The run passed this turn-in step, but quest " .. which .. " was still in the log when the run ended."
   elseif s == "lua-error" then
     return "WoWPro raised an error during the run.", "The message and stack are in the detail below."
-  elseif s == "engine-dungeon-skip" then
-    return "WoWPro's EnableDungeons setting marks dungeon-quest accepts done without showing them; "
-      .. "every finding it explains is a dungeon quest the guide never offers."
   end
   return ""
 end

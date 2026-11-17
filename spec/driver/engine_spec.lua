@@ -86,6 +86,14 @@ describe("driver.engine", function()
     assert.same({ true, true, false, false }, { rows[1].sticky, rows[2].sticky, rows[3].sticky, rows[4].sticky })
   end)
 
+  it("reads WoWPro's Skip Dungeon Quests setting (WoWProCharDB.EnableDungeons)", function()
+    local r = fake()
+    r.sb.env.WoWProCharDB.EnableDungeons = true
+    assert.is_true(Engine.new(r):skip_dungeons())
+    r.sb.env.WoWProCharDB.EnableDungeons = false
+    assert.is_false(Engine.new(r):skip_dungeons())
+  end)
+
   it("reads completion, why, gid, guide, rank and step count through", function()
     local E = Engine.new((fake()))
     assert.is_true(E:completed(1))
@@ -95,6 +103,7 @@ describe("driver.engine", function()
     assert.equal("G", E:gid())
     assert.equal(4, E:num_steps())
     assert.equal(2, E:rank())
+    assert.is_nil(E:skip_dungeons()) -- WoWProCharDB.EnableDungeons unset in the fake
     local g = E:guide("G")
     assert.same({ 1, 12, "Next:G", false }, { g.startlevel, g.endlevel, g.next_gid, g.done })
   end)

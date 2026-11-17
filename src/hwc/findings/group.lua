@@ -26,16 +26,12 @@ function group.fnv1a32(s)
   return bit.tohex(h, 8)
 end
 
-group.DUNGEON_ROOT = {
-  signal = "engine-dungeon-skip", severity = "high", name = "EnableDungeons auto-completes DUNGEON accepts",
-  file = "WoWPro/WoWPro_Broker.lua", line = 2588,
-}
-
--- Severities (spec §7.2): every §7.1 signal plus engine-dungeon-skip is named; an
--- unknown signal raises instead of silently defaulting.
+-- Severities (spec §7.2): every §7.1 signal is named; an unknown signal raises instead
+-- of silently defaulting. Dungeon accepts WoWPro's Skip Dungeon Quests completes are
+-- run info (RunLog.dungeon_skips), not signals, so they have no entry here.
 local SEVERITY = {
   ["never-shown-accept"] = "high", ["orphan-turnin"] = "high", ["accept-refused"] = "high",
-  ["wrong-race-class"] = "high", ["log-full"] = "high", ["engine-dungeon-skip"] = "high",
+  ["wrong-race-class"] = "high", ["log-full"] = "high",
   ["lua-error"] = "high", ["below-level"] = "medium-high",
   ["did-not-advance"] = "medium", stuck = "medium", ["manual-completion"] = "medium",
   ["leftover-quests"] = "low", ["missing-global"] = "low",
@@ -119,32 +115,25 @@ end
 local function link_roots(findings)
   local by_id = {}
   for _, f in ipairs(findings) do by_id[f.id] = f end
-  local refusals, hidden = {}, {}
+  local refusals, hidden, on_line = {}, {}, {}
+  local function at(f) return tostring(f.file) .. "\0" .. tostring(f.line) .. "\0" .. tostring(f.qid) end
   for _, f in ipairs(findings) do
     if f.qid and REFUSALS[f.signal] then refusals[f.qid] = refusals[f.qid] or {}; table.insert(refusals[f.qid], f) end
     if f.qid and f.signal == "never-shown-accept" then hidden[f.qid] = hidden[f.qid] or {}; table.insert(hidden[f.qid], f) end
-  end
-  local root
-  for _, f in ipairs(findings) do
-    if f.signal == "never-shown-accept" then
-      for _, r in ipairs(f.reasons) do
-        if r == "engine-dungeon-skip" then
-          if not root then
-            root = {}
-            for k, v in pairs(group.DUNGEON_ROOT) do root[k] = v end
-            root.id = "F-" .. group.fnv1a32("engine-dungeon-skip")
-            root.combos, root.causes, root.reasons = {}, {}, {}
-          end
-          by_id[root.id] = root
-          link(f, root, by_id)
-          break
-        end
-      end
+    if f.qid and f.line and f.signal ~= "leftover-quests" then
+      on_line[at(f)] = on_line[at(f)] or {}
+      table.insert(on_line[at(f)], f)
     end
   end
   for _, f in ipairs(findings) do
     if f.qid and FOLLOWS_REFUSAL[f.signal] then
-      local r = pick(refusals[f.qid])
+      -- The parent on the follow-on's own line first: a quest refused on two lines
+      -- has two refusals, and each follow-on belongs to its own.
+      local here, refused_here = on_line[at(f)] or {}, {}
+      for _, g in ipairs(here) do if REFUSALS[g.signal] then refused_here[#refused_here + 1] = g end end
+      -- A leftover quest sits on the turn-in step the run passed (driver.run leftovers):
+      -- whatever went wrong on that step is why the quest is still in the log.
+      local r = pick(refused_here) or (f.signal == "leftover-quests" and pick(here)) or pick(refusals[f.qid])
       if r then link(f, r, by_id) end
     elseif f.signal == "never-shown-accept" and f.why then
       -- The engine's only format (WoWPro_Broker.lua:2292):
@@ -154,16 +143,6 @@ local function link_roots(findings)
       local target = n and (pick(refusals[n]) or pick(hidden[n]))
       if target and target ~= f then link(f, target, by_id) end
     end
-  end
-  if root then
-    local seen = {}
-    for _, f in ipairs(findings) do
-      if f.caused_by == root.id then
-        for _, c in ipairs(f.combos) do seen[c] = true end
-      end
-    end
-    root.combos = sorted_unique(seen)
-    findings[#findings + 1] = root
   end
 end
 

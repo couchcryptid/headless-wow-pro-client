@@ -100,6 +100,7 @@ local function scripted_engine(guides, script, start, world)
   end
   function E:fire() end
   function E:rank() return 2 end
+  E.skip_dungeons = function() return true end
   function E:update_guide() return true end
   function E:complete_manual(i)
     self.manual[#self.manual + 1] = self.cur_gid .. ":" .. i

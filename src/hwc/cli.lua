@@ -212,11 +212,29 @@ local function play(combos, scope, opts, out)
       json.encode(logs[i], { indent = true }) .. "\n")
   end
   local rfirst = logs[1] or {}
+  -- Skip Dungeon Quests is per character; a matrix runs every combo with WoWPro's
+  -- defaults, so the first RunLog's value stands for the run. skipped counts distinct
+  -- guide lines across every RunLog; carried lists each quest carried past the end of
+  -- a run once, by id.
+  local skipped, nskipped = {}, 0
+  local carried, by_qid = {}, {}
+  for _, l in ipairs(logs) do
+    for _, c in ipairs(l.carried or {}) do
+      if not by_qid[c.qid] then by_qid[c.qid] = true; carried[#carried + 1] = c end
+    end
+    for _, d in ipairs(l.dungeon_skips or {}) do
+      local k = tostring(d.file) .. ":" .. tostring(d.line)
+      if not skipped[k] then skipped[k] = true; nskipped = nskipped + 1 end
+    end
+  end
+  table.sort(carried, function(a, b) return a.qid < b.qid end)
   local client = addon_info.read(config.repo_root(), { tracked_only = true })
   local header = {
     scope = scope, date = date, addon = rfirst.addon, catalog = (rfirst.catalog or {}).sources,
     client = { commit = client.commit, dirty = client.dirty },
     matrix = { combos = labels }, rank = rfirst.rank,
+    carried = #carried > 0 and carried or nil,
+    dungeons = rfirst.skip_dungeons ~= nil and { skip = rfirst.skip_dungeons, skipped = nskipped } or nil,
   }
   header = paths.rewrite(header, roots, base, cwd)
   header.paths_relative_to = base:match("([^/]+)$") or "/"

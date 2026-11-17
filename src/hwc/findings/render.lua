@@ -305,17 +305,15 @@ local function engine_fold(out, f, matrix)
   out[#out + 1] = "<details><summary>Engine detail · " .. f.id .. "</summary>"
   out[#out + 1] = ""
   out[#out + 1] = "- Signal: " .. code(f.signal)
-  if f.why and f.why ~= "" then out[#out + 1] = "- Engine said: " .. code(f.why) end
+  -- "Step active." is the engine's why for any step it is showing: it says nothing here.
+  if f.why and f.why ~= "" and f.why ~= "NextStep(): Step active." then
+    out[#out + 1] = "- Engine said: " .. code(f.why)
+  end
   local reasons = distinct_sorted(f.reasons)
   if #reasons > 0 then
     local list = {}
     for i, r in ipairs(reasons) do list[i] = code(r) end
     out[#out + 1] = (#list == 1 and "- Reason: " or "- Reasons: ") .. table.concat(list, ", ")
-  end
-  if f.log and #f.log > 0 then
-    local ids = {}
-    for i, q in ipairs(f.log) do ids[i] = tostring(q) end
-    out[#out + 1] = "- Quest log: " .. table.concat(ids, ", ")
   end
   if #matrix > 1 and f.combos and #f.combos > 0 then
     local _, dropped = text.combos(f.combos, matrix)
@@ -505,6 +503,32 @@ local function catalog_lines(out, catalog)
   end
 end
 
+-- WoWPro's Skip Dungeon Quests option. This client doesn't run dungeons, so the DUNGEON
+-- accepts it completes unshown are expected and stated here instead of as findings.
+local function dungeon_line(out, d)
+  if not d or d.skip == nil then return end
+  local line = "- Skip dungeon quests: " .. (d.skip and "on" or "off") .. " (WoWPro's `EnableDungeons`)"
+  local n = d.skipped or 0
+  if n > 0 then
+    line = line .. ". This client doesn't run dungeons, so the " .. plural(n, "dungeon accept") .. " WoWPro skipped "
+      .. (n == 1 and "isn't listed as a finding." or "aren't listed as findings.")
+  end
+  out[#out + 1] = line
+end
+
+-- Quests taken in the guide the run stopped in and still in the log with no turn-in
+-- step reached (RunLog.carried): the run ended before it could tell whether they're defects.
+local function carried_lines(out, carried)
+  if not carried or #carried == 0 then return end
+  out[#out + 1] = "- Taken in the guide the run stopped in and still in the log, which that guide or the next "
+    .. "may turn in after the run's end, so not findings: " .. plural(#carried, "quest")
+  for _, c in ipairs(carried) do
+    local q = (c.qname and c.qname ~= "") and ('"' .. one_line(c.qname) .. '" (' .. c.qid .. ")")
+      or ("Quest " .. tostring(c.qid))
+    out[#out + 1] = "  - " .. q
+  end
+end
+
 local function about_lines(out, header, combos)
   out[#out + 1] = "## About this run"
   out[#out + 1] = ""
@@ -529,6 +553,8 @@ local function about_lines(out, header, combos)
   if header.rank then
     out[#out + 1] = "- Guide rank: " .. code(header.rank) .. " (WoWPro's setting for which optional steps are shown)"
   end
+  dungeon_line(out, header.dungeons)
+  carried_lines(out, header.carried)
   catalog_lines(out, header.catalog)
   out[#out + 1] = "- What the simulation doesn't model:"
   for _, g in ipairs(header.gaps or render.GAPS) do out[#out + 1] = "  - " .. one_line(g) end

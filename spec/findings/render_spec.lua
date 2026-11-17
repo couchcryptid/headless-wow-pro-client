@@ -32,7 +32,7 @@ local function header()
     catalog = { questie = { path = "local/questie", present = true,
       sha256 = "deadbeef0123456789abcdef0123456789abcdef", commit = "d57637f" } },
     client = { commit = "c0ffee1234567890", dirty = false }, matrix = { combos = { "Dwarf WARRIOR baseline" } },
-    rank = 2, paths_relative_to = "headless-wow-pro-client" }
+    rank = 2, dungeons = { skip = true, skipped = 12 }, paths_relative_to = "headless-wow-pro-client" }
 end
 
 local function md(logs, h) return render.markdown(group.findings(logs), h or header()) end
@@ -122,6 +122,26 @@ describe("render.markdown", function()
     assert.truthy(plain(o, "\n</details>\n\nTriage: _pending_\n"))
   end)
 
+  -- Lines that say nothing to a guide developer stay out of the markdown (the JSON keeps them).
+  it("engine fold leaves out the bare 'Step active.' why and the quest-log ids", function()
+    local f = finding(1, { why = "NextStep(): Step active.", log = { 314, 5 } })
+    local o = render.markdown({ f }, header())
+    assert.falsy(plain(o, "Engine said"))
+    assert.falsy(plain(o, "Quest log"))
+    local g = finding(2, { why = "NextStep(): Other." })
+    assert.truthy(plain(render.markdown({ g }, header()), "- Engine said: `NextStep(): Other.`\n"))
+  end)
+
+  it("About this run lists the quests carried past the end of the run", function()
+    local h = header()
+    h.carried = { { qid = 94, qname = "A Watchful Eye" }, { qid = 1075 } }
+    local o = render.markdown({}, h)
+    assert.truthy(plain(o, "- Taken in the guide the run stopped in and still in the log, which that guide or the "
+      .. "next may turn in after the run's end, so not findings: 2 quests\n  - \"A Watchful Eye\" (94)\n  - Quest 1075\n"))
+    h.carried = nil
+    assert.falsy(plain(render.markdown({}, h), "Still in the log"))
+  end)
+
   it("harness summary omits a zero count", function()
     local g = finding(1, { signal = "missing-global", name = "TomTom" })
     local e = finding(2, { signal = "lua-error", harness = true, message = "stub boom" })
@@ -204,6 +224,8 @@ describe("render.markdown", function()
     assert.truthy(plain(out, "- Client: commit `c0ffee1234567890` · clean\n", s))
     assert.truthy(plain(out, "- Characters: Dwarf Warrior\n", s))
     assert.truthy(plain(out, "- Guide rank: `2`", s))
+    assert.truthy(plain(out, "- Skip dungeon quests: on (WoWPro's `EnableDungeons`). This client doesn't run "
+      .. "dungeons, so the 12 dungeon accepts WoWPro skipped aren't listed as findings.\n", s))
     assert.truthy(plain(out, "  - `questie`: present · commit `d57637f` · sha256 `deadbeef0123` · `local/questie`\n", s))
     assert.falsy(plain(out, "deadbeef01234", s))
     assert.truthy(plain(out, "  - rested XP\n", s))
@@ -212,6 +234,18 @@ describe("render.markdown", function()
     local o = render.markdown({}, h)
     assert.truthy(plain(o, "  - `questie`: present · commit `d57637f` · `local/questie`\n"
       .. "    - `a.lua` `111111111111`\n    - `b.lua` `222222222222`\n"))
+  end)
+
+  it("About this run states the Skip Dungeon Quests setting: one accept, off, unknown", function()
+    local h = header()
+    h.dungeons = { skip = true, skipped = 1 }
+    assert.truthy(plain(render.markdown({}, h), "so the 1 dungeon accept WoWPro skipped isn't listed as a finding.\n"))
+    h.dungeons = { skip = true, skipped = 0 }
+    assert.truthy(plain(render.markdown({}, h), "- Skip dungeon quests: on (WoWPro's `EnableDungeons`)\n"))
+    h.dungeons = { skip = false, skipped = 0 }
+    assert.truthy(plain(render.markdown({}, h), "- Skip dungeon quests: off (WoWPro's `EnableDungeons`)\n"))
+    h.dungeons = nil
+    assert.falsy(plain(render.markdown({}, h), "Skip dungeon quests"))
   end)
 
   it("every F- id appears", function()
@@ -284,22 +318,12 @@ describe("render.markdown", function()
     assert.truthy(plain(out, "| [01_12_Dun_Morogh.lua](#", s))
   end)
 
-  it("renders the dungeon root, its links and the de-duplicated matrix", function()
-    local dsig = {}
-    for i = 1, 2 do
-      dsig[i] = { signal = "never-shown-accept", gid = "G" .. i, file = GUIDE, line = i, action = "A",
-        name = "D" .. i, qid = 900 + i, reason = "engine-dungeon-skip" }
-    end
+  it("renders the de-duplicated matrix", function()
     local h = header()
     h.addon.dirty = nil
     h.matrix.combos = { "Gnome MAGE baseline", "Gnome MAGE baseline" }
-    local o = render.markdown(group.findings({ runlog("Dwarf", "WARRIOR", dsig) }), h)
-    assert.truthy(o:find("^# Gnome Mage: 3 findings, 2 follow from others\n"))
-    assert.truthy(plain(o, "1. 🔴 [EnableDungeons auto-completes dungeon accepts](#f-"))
-    assert.truthy(plain(o, "explains 2 more · `WoWPro/WoWPro_Broker.lua:2588`\n"))
-    assert.truthy(plain(o, "### WoWPro_Broker.lua"))
-    assert.truthy(plain(o, "Dungeon quest \"D1\" is skipped"))
-    assert.equal(3, count(o, "\nTriage: _pending_\n"))
+    local o = render.markdown(group.findings({ runlog("Dwarf", "WARRIOR", { sigs()[1] }) }), h)
+    assert.truthy(o:find("^# Gnome Mage: 1 finding\n"))
     assert.truthy(plain(o, "- WoW-Pro: `../WoW-Pro-Guides` · branch `main` · commit "
       .. "`64fe6b3aabbccddeeff00112233445566778899`\n"))
     assert.truthy(plain(o, "- Characters: Gnome Mage\n"))
