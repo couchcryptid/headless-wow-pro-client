@@ -39,4 +39,18 @@ function M.read(path, opts)
   }
 end
 
+-- Copy of an addon identity for JSON output. A folder without git has no
+-- branch or commit and states that as null instead of dropping the keys; an
+-- unreadable version is null too. In-memory values stay nil.
+function M.json_view(a)
+  local null = require("hwc.json").null
+  local copy = {}
+  for k, v in pairs(a) do copy[k] = v end
+  if a.git == false then
+    copy.branch, copy.commit = null, null
+  end
+  if copy.version == nil then copy.version = null end
+  return copy
+end
+
 return M

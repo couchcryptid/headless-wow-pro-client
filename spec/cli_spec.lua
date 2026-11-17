@@ -184,3 +184,30 @@ describe("cli determinism", function()
     assert.equal(a, b)
   end)
 end)
+
+describe("cli JSON output for a folder without git", function()
+  local json = require("hwc.json")
+  local cli = require("hwc.cli")
+  local addon = { git = false, version = "9.9.9", path = "AddOns", dirty = false }
+
+  it("boot --json encodes branch and commit as null and keeps memory nil", function()
+    local boot = { is_harness_error = function() return false end }
+    local r = { addon = addon, errors = {}, skipped = {}, files_failed = {}, missing_order = {},
+      standin_calls = {}, guide = {}, steps = {}, settle = {} }
+    local text = json.encode(cli._json_result(r, boot))
+    assert.truthy(text:find('"branch":null', 1, true))
+    assert.truthy(text:find('"commit":null', 1, true))
+    assert.truthy(text:find('"version":"9.9.9"', 1, true))
+    assert.is_nil(addon.branch)
+    assert.is_nil(addon.commit)
+  end)
+
+  it("report JSON encodes branch and commit as null and keeps memory nil", function()
+    local rep = { header = { addon = addon }, findings = {} }
+    local text = json.encode(cli._report_json(rep))
+    assert.truthy(text:find('"branch":null', 1, true))
+    assert.truthy(text:find('"commit":null', 1, true))
+    assert.is_nil(addon.branch)
+    assert.is_nil(addon.commit)
+  end)
+end)

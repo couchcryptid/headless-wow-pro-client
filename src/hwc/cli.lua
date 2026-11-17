@@ -70,11 +70,7 @@ local function json_result(r, boot)
   local skipped = {}
   for rel, reason in pairs(r.skipped) do skipped[#skipped + 1] = { rel = rel, reason = reason } end
   table.sort(skipped, function(a, b) return a.rel < b.rel end)
-  local addon = {}
-  for k, v in pairs(r.addon) do addon[k] = v end
-  for _, k in ipairs({ "branch", "commit", "version" }) do
-    if addon[k] == nil then addon[k] = require("hwc.json").null end
-  end
+  local addon = require("hwc.addon_info").json_view(r.addon)
   return {
     addon = addon, files_loaded = r.files_loaded, files_failed = r.files_failed,
     skipped = skipped, errors = errors, missing_order = r.missing_order,
@@ -169,19 +165,10 @@ local function write_file(path, text)
   f:close()
 end
 
--- A folder without git has no branch or commit: the report JSON states that as
--- null rather than dropping the keys. In-memory values stay nil.
+-- The report JSON carries the addon identity through addon_info.json_view.
 local function report_json(rep)
-  local null = require("hwc.json").null
   local a = rep.header and rep.header.addon
-  if a and a.git == false then
-    local copy = {}
-    for k, v in pairs(a) do copy[k] = v end
-    for _, k in ipairs({ "branch", "commit", "version" }) do
-      if copy[k] == nil then copy[k] = null end
-    end
-    rep.header.addon = copy
-  end
+  if a then rep.header.addon = require("hwc.addon_info").json_view(a) end
   return rep
 end
 
@@ -403,5 +390,7 @@ function M.main(args, out, err)
   err:write(USAGE)
   return 2
 end
+
+M._json_result, M._report_json = json_result, report_json
 
 return M
