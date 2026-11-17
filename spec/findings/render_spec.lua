@@ -235,6 +235,17 @@ describe("render.markdown", function()
     assert.falsy(plain(p, "Jumped guides"))
   end)
 
+  -- Guide-filters final review 4: spec §6 lists the guides played.
+  it("About this run lists the guides played when filters were given", function()
+    local h = header()
+    h.filters = { { kind = "exclude", pattern = "*" }, { kind = "include", pattern = "*Dun_Morogh*" } }
+    h.played = { "GB", "GA" }
+    local o = render.markdown({}, h)
+    assert.truthy(plain(o, '\n- Filters: --exclude "*", --include "*Dun_Morogh*"\n- Guides played: `GB`, `GA`\n'))
+    h.filters = nil
+    assert.falsy(plain(render.markdown({}, h), "Guides played"))
+  end)
+
   it("About this run lists included guides never reached and skipped races", function()
     local h = header()
     h.unreached = { "GX", "GY" }

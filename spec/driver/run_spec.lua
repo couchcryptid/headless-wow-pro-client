@@ -53,6 +53,20 @@ describe("driver.run", function()
     assert.equal("acted", log.steps[1].outcome.kind)
   end)
 
+  -- Guide-filters final review 1: a git-less addon's identity (git = false and
+  -- the TOC version) survives into the run log, which the report header reads.
+  it("carries the addon's git flag and version into the log", function()
+    local world = fx.fake_world()
+    local guides = one_guide({ { action = "R", name = "Go" } })
+    local E = fx.scripted_engine(guides, { G1 = completes(1) }, "G1", world)
+    local log = run.drive({ engine = E, world = world, cfg = { race = "Dwarf", class = "WARRIOR" },
+      errors = {}, missing_order = {}, addon = { path = "/x", git = false, version = "x" } },
+      { perform = E.perform })
+    assert.is_false(log.addon.git)
+    assert.equal("x", log.addon.version)
+    assert.equal("/x", log.addon.path)
+  end)
+
   -- Final review minor 2: spec §5.2 "logged as an abstracted-turnin event".
   it("copies an abstracted turn-in into the snapshot outcome", function()
     local log = drive(one_guide({ { action = "A", name = "Camping 101: Cooking", qids = { 96629 },

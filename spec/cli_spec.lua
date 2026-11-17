@@ -50,6 +50,17 @@ local function with_runner(fn, played, jumps)
   return res
 end
 
+-- Replaces matrix.combos for one call of fn.
+local function with_combos(combos, fn)
+  local matrix = require("hwc.driver.matrix")
+  local real = matrix.combos
+  matrix.combos = function() return combos end
+  local ok, res = pcall(fn)
+  matrix.combos = real
+  assert(ok, res)
+  return res
+end
+
 local function read_json(path)
   local f = assert(io.open(path, "r"))
   local s = f:read("*a")
@@ -262,7 +273,7 @@ describe("cli", function()
       { kind = "exclude", pattern = "*/a.lua" }, { kind = "include", pattern = "*b.lua" },
     }, h.filters)
     assert.same({ "GA" }, h.jumped)
-    assert.same({}, h.unreached)
+    assert.is_nil(h.unreached)
   end)
 
   it("jumped leaves out guides passed after the last included guide", function()
@@ -326,6 +337,81 @@ describe("cli", function()
     assert.equal(root, calls[1].cfg.addon_path)
   end)
 
+  -- Guide-filters final review 2: from a symlinked folder, paths are relative to
+  -- the logical $PWD and the header's addon path is rewritten exactly once.
+  it("a symlinked $PWD gives a clean relative WoW-Pro path in the header", function()
+    local root, outdir, links = fixture(), tmpdir(), tmpdir()
+    local link = links .. "/AddOns"
+    assert(os.execute("ln -s '" .. root .. "' '" .. link .. "'"))
+    local env = { pwd = link .. "/WoWPro_Leveling", cwd = root .. "/WoWPro_Leveling", home = tmpdir() }
+    local calls = with_runner(function(calls)
+      local out, _ = capture()
+      local err, etext = capture()
+      assert.equal(0, cli.main({ "run", "--class", "WARRIOR", "--date", "2026-11-17", "--out", outdir },
+        out, err, env), etext())
+      return calls
+    end)
+    assert.equal(link, calls[1].cfg.addon_path)
+    local h = read_json(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline.json").header
+    assert.equal("..", h.addon.path)
+    assert.equal("WoWPro_Leveling", h.paths_relative_to)
+  end)
+
+  it("a relative --relative-to resolves from the logical $PWD", function()
+    local root, outdir, links = fixture(), tmpdir(), tmpdir()
+    local link = links .. "/AddOns"
+    assert(os.execute("ln -s '" .. root .. "' '" .. link .. "'"))
+    local env = { pwd = link .. "/WoWPro_Leveling", cwd = root .. "/WoWPro_Leveling", home = tmpdir() }
+    with_runner(function()
+      local out, _ = capture()
+      local err, etext = capture()
+      assert.equal(0, cli.main({ "run", "--class", "WARRIOR", "--date", "2026-11-17", "--out", outdir,
+        "--relative-to", ".." }, out, err, env), etext())
+    end)
+    local h = read_json(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline.json").header
+    assert.equal(".", h.addon.path)
+    assert.equal("AddOns", h.paths_relative_to)
+  end)
+
+  -- Guide-filters final review 3: a single run that plays no guide is a usage
+  -- error (matrix's rule), not an empty report.
+  it("a filtered run reaching no included guide exits 2 and writes nothing", function()
+    local outdir = tmpdir() .. "/x"
+    with_runner(function()
+      local out, _ = capture()
+      local err, etext = capture()
+      assert.equal(2, cli.main({ "run", "--class", "WARRIOR", "--exclude", "*/a.lua", "--date", "2026-11-17",
+        "--out", outdir }, out, err, env_at(fixture())))
+      assert.matches("hwc: Dwarf reaches no included guide", etext())
+    end, function() return {} end)
+    assert.is_nil(lfs.attributes(outdir, "mode"))
+  end)
+
+  -- Guide-filters final review 4: the header lists the guides played, first-seen order.
+  it("header lists the guides played across logs in first-seen order", function()
+    local outdir = tmpdir()
+    with_combos({ { race = "Dwarf", class = "WARRIOR", variant = "baseline" },
+      { race = "Gnome", class = "MAGE", variant = "baseline" } }, function()
+      with_runner(function()
+        local out, _ = capture()
+        assert.equal(0, cli.main({ "matrix", "--races", "Dwarf,Gnome", "--exclude", "*/zz.lua", "--include",
+          "*", "--date", "2026-11-17", "--out", outdir }, out, nil, env_at(fixture())))
+      end, function(cfg) return cfg.race == "Gnome" and { "GA", "GB" } or { "GB" } end)
+    end)
+    local h = read_json(outdir .. "/2026-11-17-forever-alliance-dwarf-gnome-filtered.json").header
+    assert.same({ "GB", "GA" }, h.played)
+  end)
+
+  it("a run with no filters has no played list", function()
+    local outdir = tmpdir()
+    with_runner(function()
+      local out, _ = capture()
+      assert.equal(0, cli.main({ "run", "--class", "WARRIOR", "--date", "2026-11-17", "--out", outdir },
+        out, nil, env_at(fixture())))
+    end)
+    assert.is_nil(read_json(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline.json").header.played)
+  end)
+
   it("matrix accepts repeated --race and merges --races, first-seen order", function()
     local matrix = require("hwc.driver.matrix")
     local real = matrix.combos
@@ -362,16 +448,6 @@ describe("cli", function()
     end)
     assert.matches("2026%-11%-17%-Dwarf%-WARRIOR%-baseline%-filtered%.md", text)
   end)
-
-  local function with_combos(combos, fn)
-    local matrix = require("hwc.driver.matrix")
-    local real = matrix.combos
-    matrix.combos = function() return combos end
-    local ok, res = pcall(fn)
-    matrix.combos = real
-    assert(ok, res)
-    return res
-  end
 
   it("a filtered matrix scope is forever-alliance-<races>-filtered", function()
     local outdir = tmpdir()

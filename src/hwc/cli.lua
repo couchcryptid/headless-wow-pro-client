@@ -206,7 +206,7 @@ local function jumped_gids(logs)
 end
 
 -- Included guides an --include matched that no log played, in TOC order
--- (controller Ruling 1). nil when no --include was given.
+-- (controller Ruling 1). nil when no --include was given or every one was reached.
 local function unreached_gids(opts, logs)
   local includes = {}
   for _, f in ipairs(opts.filters) do
@@ -225,14 +225,27 @@ local function unreached_gids(opts, logs)
       end
     end
   end
-  return out
+  return #out > 0 and out or nil
+end
+
+-- Distinct gids the logs played, first-seen order; nil when none.
+local function played_gids(logs)
+  local seen, out = {}, {}
+  for _, l in ipairs(logs) do
+    for _, gid in ipairs(l.guides or {}) do
+      if not seen[gid] then seen[gid] = true; out[#out + 1] = gid end
+    end
+  end
+  return #out > 0 and out or nil
 end
 
 -- Plays every combo, then writes DIR/<date>-<scope>.md and .json and one run
 -- log per character under DIR/<date>-<scope>/. Every path in the output is
--- rewritten relative to --relative-to (default: the current directory).
--- With filters, a matrix combo whose log played no guide is skipped and its
--- race named in the header; nothing is written when every combo is skipped.
+-- rewritten relative to --relative-to (default: the logical start folder, so a
+-- symlinked $PWD such as Interface/AddOns stays the base its paths are named from).
+-- With filters, a combo whose log played no guide is skipped: a matrix names its
+-- race in the header and writes nothing when every combo is skipped; a single run
+-- exits 2 and writes nothing.
 local function play(combos, scope, opts, out, err)
   local config = require("hwc.config")
   local runner = require("hwc.driver.run")
@@ -246,7 +259,7 @@ local function play(combos, scope, opts, out, err)
   local logdir = outdir .. "/" .. date .. "-" .. scope
   local paths = require("hwc.paths")
   local report = require("hwc.findings.report")
-  local cwd = paths.cwd()
+  local cwd = opts.start or paths.cwd()
   local base = paths.resolve(opts["relative-to"] or cwd, cwd)
   local played, raw, labels = {}, {}, {}
   local skipped_races, skipped_seen = {}, {}
@@ -258,7 +271,7 @@ local function play(combos, scope, opts, out, err)
     cfg.variant = c.variant
     local log = runner.character(cfg, { included = opts.included })
     log.variant = c.variant
-    if opts.matrix and opts.included and #(log.guides or {}) == 0 then
+    if opts.included and #(log.guides or {}) == 0 then
       if not skipped_seen[c.race] then skipped_seen[c.race] = true; skipped_races[#skipped_races + 1] = c.race end
     else
       played[#played + 1] = c
@@ -268,6 +281,10 @@ local function play(combos, scope, opts, out, err)
   end
   if #played == 0 and #combos > 0 and opts.matrix then
     err:write("hwc: matrix: no race reaches an included guide\n")
+    return 2
+  end
+  if not opts.matrix and opts.included and #skipped_races > 0 then
+    err:write("hwc: ", skipped_races[1], " reaches no included guide\n")
     return 2
   end
   mkdirs(logdir)
@@ -288,14 +305,14 @@ local function play(combos, scope, opts, out, err)
     write_file(string.format("%s/%s-%s-%s.json", logdir, c.race, c.class, c.variant),
       json.encode(logs[i], { indent = true }) .. "\n")
   end
-  local rfirst = logs[1] or {}
+  -- The header reads the raw first log: it is rewritten once, below.
   -- Skip Dungeon Quests is per character; a matrix runs every combo with WoWPro's
   -- defaults, so the first RunLog's value stands for the run. skipped counts distinct
   -- guide lines across every RunLog; carried lists each quest carried past the end of
   -- a run once, by id.
   local skipped, nskipped = {}, 0
   local carried, by_qid = {}, {}
-  for _, l in ipairs(logs) do
+  for _, l in ipairs(raw) do
     for _, c in ipairs(l.carried or {}) do
       if not by_qid[c.qid] then by_qid[c.qid] = true; carried[#carried + 1] = c end
     end
@@ -312,12 +329,13 @@ local function play(combos, scope, opts, out, err)
     for i, f in ipairs(opts.filters) do filters[i] = { kind = f.kind, pattern = f.pattern } end
   end
   local header = {
-    scope = scope, date = date, addon = rfirst.addon, catalog = (rfirst.catalog or {}).sources,
+    scope = scope, date = date, addon = first.addon, catalog = (first.catalog or {}).sources,
     client = { commit = client.commit, dirty = client.dirty },
-    matrix = { combos = labels }, rank = rfirst.rank,
+    matrix = { combos = labels }, rank = first.rank,
     carried = #carried > 0 and carried or nil,
-    dungeons = rfirst.skip_dungeons ~= nil and { skip = rfirst.skip_dungeons, skipped = nskipped } or nil,
+    dungeons = first.skip_dungeons ~= nil and { skip = first.skip_dungeons, skipped = nskipped } or nil,
     filters = filters,
+    played = filters and played_gids(logs) or nil,
     jumped = jumped_gids(logs),
     unreached = opts.included and unreached_gids(opts, logs) or nil,
     skipped_races = #skipped_races > 0 and skipped_races or nil,

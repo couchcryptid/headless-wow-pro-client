@@ -561,7 +561,8 @@ function Driver:finish()
 end
 
 -- ctx = { engine, world, cfg, errors = sb.errors, missing_order = sb.missing_order,
--- addon = {path, branch, commit, dirty} }. opts as run.DEFAULTS, plus opts.perform
+-- addon = {path, git, branch, commit, dirty, version} } (boot.run's addon identity;
+-- git = false marks a folder with no git, named by its TOC version). opts as run.DEFAULTS, plus opts.perform
 -- (default actions.perform; the fake-engine specs pass a scripted one) and
 -- opts.is_harness_error (default boot.is_harness_error).
 function run.drive(ctx, opts)
@@ -576,7 +577,8 @@ function run.drive(ctx, opts)
   local log = {
     character = { race = cfg.race, class = cfg.class, professions = profs },
     variant = cfg.variant or o.variant,
-    addon = { path = addon.path, branch = addon.branch, commit = addon.commit, dirty = addon.dirty },
+    addon = { path = addon.path, git = addon.git, branch = addon.branch, commit = addon.commit,
+      dirty = addon.dirty, version = addon.version },
     catalog = { sources = W.catalog and W.catalog.sources },
     rank = ctx.engine:rank(),
     -- Expected for this client (no dungeon runs): the setting and what it skipped are

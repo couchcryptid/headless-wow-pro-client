@@ -531,7 +531,7 @@ local function carried_lines(out, carried)
   end
 end
 
--- The guide filters in command-line order, then what they did to the chain. Quests
+-- The guide filters in command-line order and the guides played, then what they did to the chain. Quests
 -- from jumped guides were never done, so findings next to a jump can be its noise.
 local function filter_lines(out, header)
   local filters = header.filters
@@ -539,6 +539,12 @@ local function filter_lines(out, header)
     local parts = {}
     for i, f in ipairs(filters) do parts[i] = "--" .. f.kind .. ' "' .. one_line(f.pattern) .. '"' end
     out[#out + 1] = "- Filters: " .. table.concat(parts, ", ")
+    local played = header.played
+    if played and #played > 0 then
+      local gids = {}
+      for i, g in ipairs(played) do gids[i] = code(g) end
+      out[#out + 1] = "- Guides played: " .. table.concat(gids, ", ")
+    end
   end
   local jumped = header.jumped
   if jumped and #jumped > 0 then
