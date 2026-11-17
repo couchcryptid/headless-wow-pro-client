@@ -1,0 +1,30 @@
+describe("tocmeta", function()
+  local toc = require("hwc.questie.tocmeta")
+  local path
+  local body = "## Interface: 16001\r\n# comment\n## X-Flavor: Forever\n\nsrc\\a.lua\n## X-Quest-2-S: pw==\n## Notes: a: b\n"
+
+  before_each(function()
+    path = os.tmpname()
+    local f = assert(io.open(path, "wb"))
+    f:write(body)
+    f:close()
+  end)
+  after_each(function() os.remove(path) end)
+
+  it("parses every ## line, keeps colons in values, strips CR", function()
+    local m = toc.parse(path)
+    assert.are.equal("16001", m["Interface"]); assert.are.equal("Forever", m["X-Flavor"])
+    assert.are.equal("pw==", m["X-Quest-2-S"]); assert.are.equal("a: b", m["Notes"])
+  end)
+  it("returns the cached table for an unchanged file", function()
+    assert.are.equal(toc.parse(path), toc.parse(path))
+  end)
+  it("header stops at the first file line", function()
+    local h = toc.header(path)
+    assert.are.equal("Forever", h["X-Flavor"]); assert.is_nil(h["X-Quest-2-S"])
+  end)
+  it("raises when the file cannot be read", function()
+    assert.has_error(function() toc.parse("/nonexistent/x.toc") end,
+      "hwc: questie: cannot read /nonexistent/x.toc")
+  end)
+end)
