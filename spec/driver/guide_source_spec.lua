@@ -72,6 +72,13 @@ describe("guide_source", function()
     assert.is_nil(gs.line_of(ROOT, "Fix/forever/Missing.lua", { action = "A", name = "Foo", qids = { 5 } }, 1))
   end)
 
+  it("toc_guides lists RegisterGuide gids in TOC order and ignores files the TOC does not load", function()
+    assert.same({
+      { gid = "GB", rel = "WoWPro_Leveling/b.lua" },
+      { gid = "GA", rel = "WoWPro_Leveling/a.lua" },
+    }, gs.toc_guides("spec/fixtures/tocguides"))
+  end)
+
   it("indexes the real addon when present", function()
     local home = os.getenv("HOME") .. "/Projects/WoW-Pro-Guides"
     if not require("lfs").attributes(home .. "/WoWPro_Leveling", "mode") then return pending("addon absent") end

@@ -1,0 +1,1 @@
+WoWPro:RegisterGuide('GB', 'x')
