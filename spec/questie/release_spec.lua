@@ -61,6 +61,29 @@ describe("release.select", function()
       { release.select(get, { tag = "v1.1.3" }) })
   end)
 
+  it("rejects a non-version tag without any request", function()
+    local get, asked = fake_github()
+    assert.are.same({ nil, "hwc: questie: preview is not a version tag (vX.Y.Z)" },
+      { release.select(get, { tag = "preview" }) })
+    assert.are.equal(0, #asked)
+  end)
+
+  it("skips non-version tags in the walk without listing them as skipped", function()
+    local get = fake_github()
+    local list = fixture("releases.json")
+    table.insert(list, 1, {
+      tag_name = "v1.2.0-hotfix", draft = false, prerelease = false, target_commitish = "eeeeeee",
+      assets = list[4].assets,
+    })
+    local get_list = function(url)
+      if url == release.API .. "/releases?per_page=30" then return list end
+      return get(url)
+    end
+    local sel = assert(release.select(get_list, {}))
+    assert.are.equal("v1.1.2", sel.tag)
+    assert.are.same({ "v1.1.3" }, sel.skipped)
+  end)
+
   it("passes a get_json failure through", function()
     local err = "hwc: GET x failed (curl exit 22)"
     local get = function() return nil, err end

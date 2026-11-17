@@ -1,5 +1,5 @@
 -- The hwc store: ~/.hwc (or $HWC_HOME) holds downloaded QuestieDB versions at
--- questie/<tag>/ and an `active` file naming the one in use.
+-- questie/<tag>/ and a questie/active file naming the one in use.
 local lfs = require("lfs")
 local dkjson = require("dkjson")
 
@@ -38,7 +38,7 @@ local function exists(path) return lfs.attributes(path, "mode") ~= nil end
 
 function M.active(root)
   if not root then return nil end
-  local f = io.open(root .. "/active", "rb")
+  local f = io.open(root .. "/questie/active", "rb")
   if not f then return nil end
   local text = f:read("*a") or ""
   f:close()
@@ -55,9 +55,9 @@ end
 
 function M.set_active(root, tag)
   check_tag(tag)
-  mkdirs(root)
-  local target = root .. "/active"
-  local tmp = root .. "/active.tmp"
+  mkdirs(root .. "/questie")
+  local target = root .. "/questie/active"
+  local tmp = root .. "/questie/active.tmp"
   local function fail(err) error("hwc: cannot write " .. target .. ": " .. tostring(err), 0) end
   local f, err = io.open(tmp, "wb")
   if not f then fail(err) end

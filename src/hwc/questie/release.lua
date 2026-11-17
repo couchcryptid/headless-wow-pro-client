@@ -31,6 +31,10 @@ local function forever_entry(manifest)
   return nil
 end
 
+local function is_version_tag(tag)
+  return type(tag) == "string" and tag:match("^v%d+%.%d+%.%d+$") ~= nil
+end
+
 local function find_asset(rel, name)
   for _, asset in ipairs(rel.assets or {}) do
     if asset.name == name then return asset end
@@ -60,6 +64,9 @@ end
 function M.select(get_json, opts)
   opts = opts or {}
   if opts.tag then
+    if not is_version_tag(opts.tag) then
+      return nil, "hwc: questie: " .. tostring(opts.tag) .. " is not a version tag (vX.Y.Z)"
+    end
     local rel, err = get_json(M.API .. "/releases/tags/" .. opts.tag)
     if not rel then return nil, err end
     local found, cerr = candidate(get_json, rel)
@@ -72,7 +79,7 @@ function M.select(get_json, opts)
   if not list then return nil, err end
   local skipped = {}
   for _, rel in ipairs(list) do
-    if not rel.draft and not rel.prerelease then
+    if not rel.draft and not rel.prerelease and is_version_tag(rel.tag_name) then
       local found, cerr = candidate(get_json, rel)
       if cerr then return nil, cerr end
       if found then

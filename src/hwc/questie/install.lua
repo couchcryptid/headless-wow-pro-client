@@ -117,7 +117,8 @@ function M.sync(root, opts, deps)
   if not sel then return nil, err end
 
   local result = { from = home.active(root), to = sel.tag, build = sel.build_commit, skipped = sel.skipped }
-  local target = home.version_dir(root, sel.tag)
+  local has_dir, target = pcall(home.version_dir, root, sel.tag)
+  if not has_dir then return nil, target end
 
   if exists(target) and M.verify(target) then
     local ok, serr = pcall(home.set_active, root, sel.tag)
@@ -129,6 +130,7 @@ function M.sync(root, opts, deps)
   end
 
   mkdirs(root .. "/questie")
+  local existed = exists(target)
   local stage = root .. "/questie/" .. stage_name(sel.tag)
   local ok, installed, ierr = pcall(function()
     local good, e = fill_stage(sel, stage, deps)
@@ -140,13 +142,18 @@ function M.sync(root, opts, deps)
     return nil, ok and ierr or tostring(installed)
   end
   local set_ok, serr = pcall(home.set_active, root, sel.tag)
-  if not set_ok then return nil, serr end
+  if not set_ok then
+    -- This call created the dir, so it is safe to take back out.
+    if not existed then rm_rf(target) end
+    return nil, serr
+  end
   result.already = false
   return result
 end
 
 function M.init(root, deps)
-  if home.active_dir(root) then return { already = true } end
+  local dir = home.active_dir(root)
+  if dir and M.verify(dir) then return { already = true } end
   local res, err = M.sync(root, {}, deps)
   if not res then return nil, err end
   return { already = false, sync_result = res }
