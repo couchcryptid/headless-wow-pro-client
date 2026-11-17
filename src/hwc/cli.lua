@@ -189,12 +189,16 @@ local function report_json(rep)
 end
 
 -- Distinct passed gids across the logs' jumps, first-seen order; nil when none.
+-- Only jumps that land on an included guide count: guides passed after the last
+-- included one (to == nil) end the run, so no finding can follow from skipping them.
 local function jumped_gids(logs)
   local seen, out = {}, {}
   for _, l in ipairs(logs) do
     for _, j in ipairs(l.jumps or {}) do
-      for _, gid in ipairs(j.passed or {}) do
-        if not seen[gid] then seen[gid] = true; out[#out + 1] = gid end
+      if j.to ~= nil then
+        for _, gid in ipairs(j.passed or {}) do
+          if not seen[gid] then seen[gid] = true; out[#out + 1] = gid end
+        end
       end
     end
   end
@@ -414,6 +418,10 @@ local function command(args, out, err, env, allowed, prepare, fn)
   end
   local arg
   if opts then opts, arg, perr = prepare(opts) end
+  -- --out defaults under $HOME: without one, say so rather than fail on a nil path.
+  if opts and not opts.out and not (env.home and env.home ~= "") then
+    opts, perr = nil, "HOME is not set; pass --out DIR"
+  end
   if opts then
     opts.home = env.home
     opts.root, opts.start, perr = locate(env)
@@ -454,7 +462,8 @@ function M.main(args, out, err, env)
   env = {
     pwd = env.pwd or os.getenv("PWD"),
     cwd = env.cwd or require("lfs").currentdir(),
-    home = env.home or os.getenv("HOME"),
+    -- false (specs) stands for an unset HOME
+    home = env.home == nil and os.getenv("HOME") or env.home,
   }
   for _, a in ipairs(args) do
     if a == "-h" or a == "--help" then

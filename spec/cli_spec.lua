@@ -33,7 +33,7 @@ local function env_at(dir, home) return { pwd = dir, cwd = dir, home = home or t
 
 -- Replaces runner.character for one call of fn; each log plays `played(cfg)`
 -- (default { "GB" }) and records one jump over GA.
-local function with_runner(fn, played)
+local function with_runner(fn, played, jumps)
   local runner = require("hwc.driver.run")
   local real = runner.character
   local calls = {}
@@ -41,7 +41,7 @@ local function with_runner(fn, played)
     calls[#calls + 1] = { cfg = cfg, opts = opts }
     return { character = { race = cfg.race, class = cfg.class, professions = {} }, rank = 2, steps = {},
       signals = {}, guides = played and played(cfg) or { "GB" },
-      jumps = { { from = "GA", passed = { "GA" }, to = "GB", level_before = 1, level_after = 1 } },
+      jumps = jumps or { { from = "GA", passed = { "GA" }, to = "GB", level_before = 1, level_after = 1 } },
       addon = { path = cfg.addon_path, git = false, version = "1.0" } }
   end
   local ok, res = pcall(fn, calls)
@@ -263,6 +263,28 @@ describe("cli", function()
     }, h.filters)
     assert.same({ "GA" }, h.jumped)
     assert.same({}, h.unreached)
+  end)
+
+  it("jumped leaves out guides passed after the last included guide", function()
+    local outdir = tmpdir()
+    with_runner(function()
+      local out, _ = capture()
+      assert.equal(0, cli.main({ "run", "--class", "WARRIOR", "--exclude", "*/a.lua", "--date", "2026-11-17",
+        "--out", outdir }, out, nil, env_at(fixture())))
+    end, nil, {
+      { from = "GA", passed = { "GA" }, to = "GB", level_before = 1, level_after = 1 },
+      { from = "GB", passed = { "GC" }, to = nil, level_before = 1, level_after = 1 },
+    })
+    local h = read_json(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline-filtered.json").header
+    assert.same({ "GA" }, h.jumped)
+  end)
+
+  it("an unset HOME without --out exits 2", function()
+    local root = fixture()
+    local out, _ = capture()
+    local err, etext = capture()
+    assert.equal(2, cli.main({ "run", "--class", "WARRIOR" }, out, err, { pwd = root, cwd = root, home = false }))
+    assert.matches("hwc: HOME is not set; pass %-%-out DIR", etext())
   end)
 
   it("a run with no filters passes no included set and no filter header", function()
