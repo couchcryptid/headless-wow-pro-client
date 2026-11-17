@@ -4,12 +4,14 @@
 -- and record a run log of snapshots and signals (§7.1) for the findings step.
 --
 -- Fidelity: the driver never chooses a step, never writes engine state and makes
--- only the player-equivalent engine calls (E:complete_manual, via actions
--- E:update_guide). Everything it reads goes through the Engine adapter.
+-- only the player-equivalent engine calls (E:complete_manual, E:load_guide for the
+-- guide-list click over an excluded guide, via actions E:update_guide). Everything
+-- it reads goes through the Engine adapter.
 --
 -- Determinism: the run log holds only ordered data (arrays in loop order, indices
 -- walked 1..n); nothing in it is built from pairs.
 local actions = require("hwc.driver.actions")
+local xp = require("hwc.world.xp")
 
 local run = {}
 
@@ -17,16 +19,14 @@ run.DEFAULTS = {
   max_iterations = 20000, -- loop passes before the iterations watchdog
   stuck_limit = 5,        -- same (gid, index) acted on more than this many times in a row
   max_addon_errors = 200, -- addon (non-harness) lua errors before the errors watchdog
-  stop_level = 25,        -- design spec §4.4 stop condition
   max_guides = nil,       -- Ruling C: stop with max-guides once this many guides loaded (nil = unlimited)
+  included = nil,         -- { [gid] = true } the guide filters selected; nil = every guide
 }
 
--- A guide whose startlevel is at or past this is outside the 1-25 chain (spec §4.4).
-run.CHAIN_MAX_START = 25
-
 -- Stop reasons. max-guides is Ruling C's opts.max_guides cap (integration specs).
+-- The run plays the chain to its last line: no level or guide-range stop.
 run.STOP = {
-  level = true, ["chain-range"] = true, ["no-next-guide"] = true, stuck = true,
+  ["no-next-guide"] = true, stuck = true,
   iterations = true, errors = true, ["no-step"] = true, ["max-guides"] = true,
 }
 
@@ -152,9 +152,12 @@ function Driver:refresh_why()
 end
 
 -- A guide the engine loaded: capture its steps while its arrays are live, then
--- apply the chain-range and max-guides stops.
+-- apply the max-guides stop. A guide the filters excluded is jumped instead,
+-- before it becomes self.gid, so it is never played, captured or closed.
 function Driver:open(gid)
   local E = self.E
+  local included = self.opts.included
+  if included and not included[gid] then return self:jump(gid) end
   self.gid = gid
   local g = E:guide(gid)
   local info = { file = g.file, steps = {}, accepts = {}, seen = {}, why = {}, sticky_done = {}, max_acted = 0 }
@@ -168,9 +171,41 @@ function Driver:open(gid)
     end
   end
   self.log.guides[#self.log.guides + 1] = gid
-  if (g.startlevel or 0) >= run.CHAIN_MAX_START then return self:stop("chain-range") end
   if self.opts.max_guides and #self.log.guides >= self.opts.max_guides then return self:stop("max-guides") end
   self:refresh_why()
+end
+
+-- Jumps over the excluded guide `from` (and any excluded guides after it) to the
+-- next included guide on the chain, as a player skipping them would: raise the
+-- level to that guide's startlevel (never lowering it, at most xp.CAP_LEVEL) and
+-- click it in the guide list (E:load_guide). A chain that ends, or cycles back,
+-- before an included guide is the end of the run (no-next-guide).
+function Driver:jump(from)
+  local E, p, included = self.E, self.W.player, self.opts.included
+  local passed, seen, to = {}, {}, nil
+  local g = from
+  while g ~= nil and not seen[g] do
+    seen[g] = true
+    passed[#passed + 1] = g
+    local nxt = E:guide(g).next_gid
+    if nxt ~= nil and included[nxt] then to = nxt; break end
+    g = nxt
+  end
+  local jump = { from = from, passed = passed, to = to, level_before = p.level }
+  self.log.jumps[#self.log.jumps + 1] = jump
+  if to == nil then
+    jump.level_after = p.level
+    return self:stop("no-next-guide")
+  end
+  local start = E:guide(to).startlevel or 0
+  while p.level < start and p.level < xp.CAP_LEVEL do p:add_xp(xp.to_next(p.level)) end
+  jump.level_after = p.level
+  local _, err = E:load_guide(to)
+  if E:gid() ~= to then
+    self:signal("stuck", nil, { gid = to, reason = "load-guide-failed", message = err })
+    return self:stop("no-step")
+  end
+  return self:open(to)
 end
 
 -- Closes a guide: unshown accepts and the quests left in the log. A guide the
@@ -408,8 +443,7 @@ end
 
 -- One pass of the loop. Returns nothing; sets self.stopped to end the run.
 function Driver:iterate()
-  local E, W, opts = self.E, self.W, self.opts
-  if W.player.level >= opts.stop_level then return self:stop("level") end
+  local E, opts = self.E, self.opts
   self.iter = self.iter + 1
   if self.iter > opts.max_iterations then
     self:signal("stuck", nil, { gid = self.gid, reason = "max-iterations" })
@@ -552,6 +586,7 @@ function run.drive(ctx, opts)
     dungeon_skips = {},
     carried = {},
     steps = {}, signals = {}, guides = {},
+    jumps = {}, -- { from, passed = {gid...}, to (nil: end of chain), level_before, level_after }
   }
   local d = setmetatable({
     ctx = { engine = ctx.engine, world = W, cfg = cfg, errors = ctx.errors, missing_order = ctx.missing_order },

@@ -19,14 +19,13 @@ describe("driver.run against the real engine #slow", function()
     return
   end
 
-  -- stop_level 13, not the brief's 12: this Dwarf Warrior reaches level 12 at
-  -- guide line ~281 of 303, before the guide ends, so a level-12 stop never
-  -- sees the next guide. max_guides = 2 is the stop that ends the run.
+  -- The run plays the chain to its last line (no level stop), so max_guides = 2
+  -- is the stop that ends it once the engine autoloads the next guide.
   local log
   local function get()
     if log then return log end
     local cfg = require("hwc.config").load({ addon_path = flow.ADDON, race = "Dwarf", class = "WARRIOR" })
-    log = require("hwc.driver.run").character(cfg, { stop_level = 13, max_guides = 2 })
+    log = require("hwc.driver.run").character(cfg, { max_guides = 2 })
     return log
   end
 

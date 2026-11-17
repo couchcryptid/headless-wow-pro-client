@@ -6,6 +6,7 @@
 --   mutating, the two player equivalents only:
 --     WoWPro.CompleteStep(i, "Right-Click")   complete_manual (WoWPro_Broker.lua:3857)
 --     WoWPro:UpdateGuide("sim:level")         update_guide (after a ding; no level-up handler)
+--     WoWPro:LoadGuide(gid)                   load_guide (the guide-list click over an excluded guide)
 --   pure reads:
 --     WoWPro:NextGuide(gid)                   guide(), only when the registry names a nextGID
 --                                             (it pops the guide stack otherwise, Broker:777-808)
@@ -273,6 +274,16 @@ end
 function Engine:complete_manual(i)
   local W = self:W()
   if not call(self.sb, W.CompleteStep, i, "Right-Click") then return false, self:last_error() end
+  return true
+end
+
+-- The guide-list click: loads gid as a player picking it would, then lets the
+-- engine settle. Same return contract as complete_manual.
+function Engine:load_guide(gid)
+  local W = self:W()
+  local ok = call(self.sb, W.LoadGuide, W, gid)
+  self:settle()
+  if not ok then return false, self:last_error() end
   return true
 end
 

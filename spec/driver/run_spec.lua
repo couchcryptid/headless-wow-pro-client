@@ -203,8 +203,8 @@ describe("driver.run", function()
       G1 = { startlevel = 1, next_gid = "G2", file = "g1.lua", steps = { { action = "R", name = "a" } } },
       G2 = { startlevel = 25, file = "g2.lua", steps = { { action = "T", name = "Wolves", qids = { 77 } } } },
     }
-    local log = drive(guides, { G1 = { { complete = { 1 }, done = true, switch = "G2" } } }, {}, world)
-    assert.equal("chain-range", log.stop.reason)
+    local log = drive(guides, { G1 = { { complete = { 1 }, done = true, switch = "G2" } } }, { max_guides = 2 }, world)
+    assert.equal("max-guides", log.stop.reason)
     assert.same({}, signals(log, "leftover-quests"))
     assert.same({ { qid = 77, qname = "Wolves" } }, log.carried)
   end)
@@ -349,19 +349,6 @@ describe("driver.run", function()
     assert.same({}, log.dungeon_skips)
   end)
 
-  it("stops with chain-range when the next guide starts at level 25", function()
-    local guides = {
-      G1 = { startlevel = 1, next_gid = "G2", steps = { { action = "R", name = "a" } } },
-      G2 = { startlevel = 25, steps = { { action = "R", name = "b" } } },
-    }
-    local log, E = drive(guides, { G1 = { { complete = { 1 }, done = true, switch = "G2" } } })
-    assert.equal("chain-range", log.stop.reason)
-    assert.equal("G2", log.stop.gid)
-    assert.same({ "G1", "G2" }, log.guides)
-    assert.same({ "G1:1" }, E.acted)
-    assert.same({}, signals(log, "never-shown-accept"))
-  end)
-
   it("stops with max-guides once that many guides have loaded", function()
     local guides = {
       G1 = { startlevel = 1, next_gid = "G2", steps = { { action = "R", name = "a" } } },
@@ -370,17 +357,6 @@ describe("driver.run", function()
     local log = drive(guides, { G1 = { { complete = { 1 }, done = true, switch = "G2" } } }, { max_guides = 2 })
     assert.equal("max-guides", log.stop.reason)
     assert.same({ "G1", "G2" }, log.guides)
-  end)
-
-  it("stops with level when the player reaches stop_level", function()
-    local world = fx.fake_world()
-    local steps = { { action = "R", name = "a" }, { action = "A", name = "b", qids = { 2 }, hidden = true } }
-    local log, E = drive(one_guide(steps), { G1 = { { complete = { 1 }, level = 25 } } }, {}, world)
-    assert.equal("level", log.stop.reason)
-    assert.equal(25, log.stop.level)
-    assert.same({ "G1:1" }, E.acted)
-    -- the unreached rest of the guide is not reported as hidden
-    assert.same({}, signals(log, "never-shown-accept"))
   end)
 
   it("turns refusals into log-full, accept-refused, orphan-turnin and below-level", function()
@@ -578,8 +554,141 @@ describe("driver.run", function()
   end)
 
   it("lists the stop reasons", function()
-    for _, r in ipairs({ "level", "chain-range", "no-next-guide", "stuck", "iterations", "errors", "no-step", "max-guides" }) do
+    for _, r in ipairs({ "no-next-guide", "stuck", "iterations", "errors", "no-step", "max-guides" }) do
       assert.is_true(run.STOP[r], r)
     end
+    assert.is_nil(run.STOP.level)
+    assert.is_nil(run.STOP["chain-range"])
+    assert.is_nil(run.DEFAULTS.stop_level)
+    assert.is_nil(run.CHAIN_MAX_START)
+  end)
+
+  -- Guide filters: the driver plays the chain to its last line and jumps over the
+  -- guides the include/exclude filters left out, with the guide-list click (LoadGuide).
+  describe("guide filters", function()
+    local function set(...)
+      local out = {}
+      for _, g in ipairs({ ... }) do out[g] = true end
+      return out
+    end
+
+    -- G1 (1) -> G2 (5) -> G3 (10); G1 completes and the engine switches to G2.
+    local function chain()
+      return {
+        G1 = { startlevel = 1, next_gid = "G2", file = "g1.lua", steps = { { action = "R", name = "a" } } },
+        G2 = { startlevel = 5, next_gid = "G3", file = "g2.lua", steps = { { action = "R", name = "b" } } },
+        G3 = { startlevel = 10, file = "g3.lua", steps = {
+          { action = "R", name = "c" }, { action = "D", name = "Done" },
+        } },
+      }
+    end
+    local SCRIPT = {
+      G1 = { { complete = { 1 }, done = true, switch = "G2" } },
+      G2 = { { complete = { 1 }, done = true, switch = "G3" } },
+      G3 = completes(1),
+    }
+
+    it("an excluded guide is jumped to the next included one on the chain", function()
+      local log, E = drive(chain(), SCRIPT, { included = set("G1", "G3") })
+      assert.same({ "G1", "G3" }, log.guides)
+      assert.same({ "G3" }, E.loaded)
+      assert.equal(1, #log.jumps)
+      local j = log.jumps[1]
+      assert.equal("G2", j.from)
+      assert.same({ "G2" }, j.passed)
+      assert.equal("G3", j.to)
+      assert.equal(1, j.level_before)
+      assert.equal(10, j.level_after)
+      for _, s in ipairs(log.steps) do assert.not_equal("G2", s.gid) end
+      assert.same({ "G1:1", "G3:1", "G3:2" }, E.acted)
+      assert.equal("no-next-guide", log.stop.reason)
+    end)
+
+    it("the start guide excluded jumps before playing", function()
+      local log, E = drive(chain(), SCRIPT, { included = set("G2") })
+      assert.same({ "G2" }, log.guides)
+      assert.equal("G1", log.jumps[1].from)
+      assert.same({ "G1" }, log.jumps[1].passed)
+      assert.equal("G2", log.jumps[1].to)
+      assert.equal(5, log.jumps[1].level_after)
+      assert.same({ "G2" }, E.loaded)
+      assert.equal("G2:1", E.acted[1])
+    end)
+
+    it("excluded guides to the end of the chain stop with no-next-guide", function()
+      local log, E = drive(chain(), SCRIPT, { included = set("G1") })
+      assert.equal("no-next-guide", log.stop.reason)
+      assert.same({ "G1" }, log.guides)
+      assert.same({ "G2", "G3" }, log.jumps[1].passed)
+      assert.is_nil(log.jumps[1].to)
+      assert.equal(1, log.jumps[1].level_after)
+      assert.same({}, E.loaded)
+    end)
+
+    it("treats a cycle in the chain as its end", function()
+      local guides = chain()
+      guides.G3.next_gid = "G2"
+      local log = drive(guides, SCRIPT, { included = set("G1") })
+      assert.equal("no-next-guide", log.stop.reason)
+      assert.same({ "G2", "G3" }, log.jumps[1].passed)
+      assert.is_nil(log.jumps[1].to)
+    end)
+
+    it("the level is never lowered", function()
+      local world = fx.fake_world()
+      world.player.level = 12
+      local log = drive(chain(), SCRIPT, { included = set("G1", "G3") }, world)
+      assert.equal(12, log.jumps[1].level_before)
+      assert.equal(12, log.jumps[1].level_after)
+    end)
+
+    it("raises the level with the XP table, recording it as XP", function()
+      local world = fx.fake_world()
+      local log = drive(chain(), SCRIPT, { included = set("G1", "G3") }, world)
+      assert.equal(10, world.player.level)
+      local xp = require("hwc.world.xp")
+      local total = 0
+      for l = 1, 9 do total = total + xp.to_next(l) end
+      local recorded = 0
+      for _, r in ipairs(world.xp_records) do recorded = recorded + r.n end
+      assert.equal(total, recorded)
+      assert.equal(10, log.jumps[1].level_after)
+    end)
+
+    it("stops the raise at the XP cap", function()
+      local guides = chain()
+      guides.G3.startlevel = 40
+      local log = drive(guides, SCRIPT, { included = set("G1", "G3") })
+      assert.equal(require("hwc.world.xp").CAP_LEVEL, log.jumps[1].level_after)
+    end)
+
+    it("stops with load-guide-failed when the engine does not load the guide", function()
+      local guides = chain()
+      local world = fx.fake_world()
+      local E = fx.scripted_engine(guides, SCRIPT, "G1", world)
+      function E:load_guide(gid) self.loaded[#self.loaded + 1] = gid; return false, "boom" end
+      local log = run.drive({ engine = E, world = world, cfg = {}, errors = {}, missing_order = {} },
+        { perform = E.perform, included = set("G1", "G3") })
+      assert.equal("no-step", log.stop.reason)
+      local stuck = signals(log, "stuck")
+      assert.equal(1, #stuck)
+      assert.equal("load-guide-failed", stuck[1].reason)
+      assert.same({ "G1" }, log.guides)
+    end)
+
+    it("plays every guide with no included set", function()
+      local log, E = drive(chain(), SCRIPT)
+      assert.same({ "G1", "G2", "G3" }, log.guides)
+      assert.same({}, log.jumps)
+      assert.same({}, E.loaded)
+    end)
+
+    it("a run past level 25 keeps playing", function()
+      local steps = { { action = "R", name = "a" }, { action = "R", name = "b" } }
+      local log, E = drive(one_guide(steps), { G1 = { { complete = { 1 }, level = 30 }, { complete = { 2 } } } })
+      assert.equal("no-next-guide", log.stop.reason)
+      assert.equal(30, log.stop.level)
+      assert.same({ "G1:1", "G1:2", "G1:3" }, E.acted)
+    end)
   end)
 end)
