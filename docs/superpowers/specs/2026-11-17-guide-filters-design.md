@@ -20,7 +20,8 @@ behave like the AWS S3 CLI's. To make "stand in the folder and run it" real,
 **Success:** from inside a WoW-Pro folder,
 `hwc run --class PRIEST --exclude "*" --include "*Dun_Morogh*"` plays only the
 Dun Morogh guide, at its place in the chain, and writes the usual findings; and
-`hwc run --class PRIEST` with no filters produces the same findings as today's
+`hwc run --class PRIEST` with no filters plays the race's whole chain to the
+last line of the last guide, and up to level 25 its findings match today's
 `bin/hwc run --class PRIEST --addon <that folder>`.
 
 ## 2. Goals, non-goals, anti-goals
@@ -36,10 +37,10 @@ Dun Morogh guide, at its place in the chain, and writes the usual findings; and
 - Playing guide files that live outside a WoW-Pro folder, or overriding a
   guide with a copy from elsewhere.
 - Making up quest progress for jumped guides (see §5, known limits).
-- Horde characters, guides past the 1-25 chain, or lifting any other existing
-  scope limit.
+- Horde characters, or lifting any other existing scope limit beyond the stop
+  rule below.
 - A configurable stop level. `--stop-level` is removed (decided by the user:
-  scope creep); runs stop at 25 as the design spec says.
+  scope creep).
 - Packaging (Homebrew formula, LuaRocks rockspec). A symlink install is enough.
 
 **Anti-goals** (a failure even if it works)
@@ -50,7 +51,8 @@ Dun Morogh guide, at its place in the chain, and writes the usual findings; and
   `/opt/homebrew/bin/luajit`, quest data read from
   `~/Projects/wow-pro-leveling`). LuaRocks packages under `~/.luarocks` are
   the one accepted exception: that is LuaRocks' default install location.
-- A no-filter run whose findings differ from today's for the same folder.
+- A no-filter run whose findings up to level 25 differ from today's for the
+  same folder.
 
 ## 3. The source folder
 
@@ -131,9 +133,8 @@ start guide (the addon picks it at boot), then each guide's next guide as
 When the run reaches a guide (at boot, or when the engine autoloads the next
 guide) and that guide is **excluded**:
 1. Walk the chain forward from it with the engine's own next-guide resolution
-   until reaching an included guide. If the chain ends first, or reaches a
-   guide whose `startlevel` is at or past `CHAIN_MAX_START` (25), the run
-   stops (`no-next-guide` / `chain-range`, as today).
+   until reaching an included guide. If the chain ends first, the run stops
+   (`no-next-guide`).
 2. If the character's level is below that guide's `startlevel`, raise it
    through the simulated world's XP path (so the addon sees the level-ups as
    it would in game).
@@ -151,17 +152,26 @@ in the run log and the report header, not silently dropped. Only guides an
 excludes, nothing is listed, since every Horde, dungeon and 25+ guide would
 otherwise be "never reached" in every run.
 
-**When the guide to jump to starts at or past the stop level (25)** (decided by
-Claude): the run stops with `level` before raising the character, and that
-guide is logged as passed over, not played.
-
 **`matrix` with a race that reaches no included guide** (decided by Claude):
 that race's combos are skipped and named in the report header; the matrix
 exits 2 only if no race reaches any included guide.
 
-**Stops** are unchanged except that `--stop-level` is gone: level 25, `chain-range`,
-`no-next-guide`, and the watchdogs. The run also ends when no included guide
-remains ahead on the chain.
+**Stops** (decided by the user): a run ends when it reaches the last line of
+the last included guide on the chain (`no-next-guide`), or on a watchdog
+(`stuck`, `iterations`, `errors`, `no-step`). The level stop (25) and the
+`chain-range` stop (`CHAIN_MAX_START`) are removed, together with
+`--stop-level`. Consequences the builder must handle:
+- A no-filter run now plays past 25 for as long as the chain goes. The world,
+  catalog and XP tables have only been exercised to 25, so harness gaps past
+  25 will show up as findings or watchdog stops; that is expected, not a
+  reason to keep a level cap. The XP cap (`xp.CAP_LEVEL`) still caps level.
+- `run.DEFAULTS.stop_level`, `run.CHAIN_MAX_START` and the `level` /
+  `chain-range` stop reasons go; specs that relied on them (including
+  `max_guides` users, which stay) are updated.
+- Output scope names lose the `-1-25` suffix
+  (`forever-alliance-dwarf-gnome`).
+- Slow specs that run the full chain get slower; their timeouts may need
+  raising.
 
 **Known limit:** quests from jumped guides were never done. Prerequisite
 gates, `orphan-turnin`, and `leftover-quests` (`not-turned-in`) findings next
@@ -184,9 +194,7 @@ hwc matrix [--race RACE]... [--races LIST]
 - `--out` defaults to `$HOME/.hwc/findings` (decided by the user), created
   if missing, so runs never write into the WoW-Pro folder. `--relative-to`
   keeps its default, the current directory.
-- `--stop-level` is removed from `run`. `run.DEFAULTS.stop_level` stays as the
-  driver's internal constant; specs that pass `stop_level` directly to the
-  driver keep working.
+- `--stop-level` is removed from `run` (see §5, Stops).
 - `boot` keeps no filters: it shows what the addon loads at login, which is
   the start guide.
 - `matrix --race` is repeatable; `--races Dwarf,Gnome` stays as an alias, and
@@ -260,4 +268,5 @@ user), so a fresh clone plus LuaRocks packages is a complete install:
 - Test fixtures: tiny fake WoW-Pro folders like the ones `matrix_spec` already
   builds.
 - Updating `2026-11-11-headless-client-design.md` where it describes
-  `--addon` and the run's start.
+  `--addon`, the run's start and the §4.4 stop conditions, and the README's
+  "levels 1 to 25" scope line.
