@@ -704,13 +704,17 @@ end
 
 -- LVL is `level` or `level;offset` (WoWPro_Broker.lua:2597-2645): a positive offset is an XP
 -- point at that level, a negative one is that many XP short of the next level. The character
--- ends at max(check, actual): grind only when below the check point.
+-- ends at max(check, actual): grind only when below the check point. On a step that is not an L
+-- step an offset tag never hides it (WoWPro_Broker.lua:2648-2680); the addon just completes it at
+-- the XP point, so grinding there would invent XP the guide never asks for: only a plain
+-- integer LVL grinds (Ruling G).
 local function perform_level(ctx, step, out)
   local w = ctx.world
   local tag = tostring(step.tags and step.tags.level or "")
   local want = tonumber(tag:match("^%s*(%d+)"))
   if not want then return end
   local offset = tonumber(tag:match(";%s*(-?%d+)")) or 0
+  if step.action ~= "L" and tag:find(";", 1, true) then return end
   local p = w.player
   local point = offset >= 0 and offset or math.max(0, xp.to_next(math.min(want, xp.CAP_LEVEL)) + offset)
   if p.level > want or (p.level == want and p.xp >= point) then return end
