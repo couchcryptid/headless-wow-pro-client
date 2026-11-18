@@ -92,19 +92,34 @@
   - Paste any red or orange findings with their quest.
 - [ ] **Step 6: Commit** `feat: Grade level findings by quest colour`.
 
-### Task 3: `L` steps complete as the game completes them
+### Task 3: Level checks grind to exactly the point the guide checks
+
+User rule (2026-11-18): at a guide level check the character ends at `max(check, actual)`. It grinds only when below the check point and is never moved back.
+
+Cause of today's `did-not-advance` on `L Level 3/4/6/10` (`01_12_Dun_Morogh.lua:44,60,108,219-220`): their `LVL` tag carries an XP offset (`LVL|2;-1234`). WoWPro completes an `L` step at `level;offset` like this (`WoWPro_Broker.lua:2597-2645`):
+- **no offset:** when `UnitLevel >= level`
+- **negative offset:** when `UnitLevel == level and UnitXPMax - UnitXP <= -offset`, or when `UnitLevel > level`
+- **positive offset:** when `UnitLevel == level and UnitXP >= offset`, or when `UnitLevel > level`
+
+`perform_level` (`src/hwc/driver/actions.lua:704`) reads only the integer, so it stops short.
 
 **Files:**
-- Investigate:
-  - `~/Projects/WoW-Pro-Guides/WoWPro` (which event makes WoWPro refresh after a level-up; check `WoWPro.lua` event registration lists and `RegisterBucketEvent`)
-  - the harness's level-up path (`src/hwc/world/player.lua` `add_xp`, the driver's `after_levels`)
-- Modify: the harness's level-up event firing (wherever events are fired after XP), only to fire what the real client fires
-- Test: `spec/driver/run_spec.lua` or the stubs/world specs
+- Modify:
+  - `src/hwc/driver/actions.lua` (`perform_level`: parse `level;offset`, and grind to the check point when the character is below it)
+  - `src/hwc/world/kills.lua` (a grind-to-XP-point helper, if `grind_to` can't express it)
+- Test: `spec/driver/actions_spec.lua` (or wherever `perform_level` is tested), `spec/world/kills_spec.lua`
 
-- [ ] **Step 1: Investigate and write the evidence into the report:** the event(s) WoWPro registers that run `UpdateGuide`/`NextStep` on a level change (e.g. `PLAYER_LEVEL_UP`, `PLAYER_XP_UPDATE`), with file:line, and what the harness fires today after `add_xp` levels up.
-  - **If the client fires an event WoWPro listens for and the harness doesn't fire it,** go on to Step 2.
-  - **If WoWPro registers nothing that refreshes on a level-up,** stop and report. The finding is then real addon behaviour.
-- [ ] **Step 2: Failing spec:** a level-up during a scripted run fires that event, and an `L` step for the new level completes without a manual click.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: GREEN.** Full and slow suites plus luacheck. Real Dwarf run: the `did-not-advance` findings for `L Level 3/4/6/10` in Dun Morogh are gone (or explained, if Step 1 stopped).
-- [ ] **Step 5: Commit** `fix: Fire the level-up event the client fires`.
+**Interfaces:**
+- Produces: `kills.grind_to_point(player, level, xp) -> kills, xp_gained, levels`, which grinds until `player.level > level` or (`player.level == level` and `player.xp >= xp`). Reuse `grind_to`'s same-level mob model.
+
+- [ ] **Step 1: Failing specs:**
+  - `LVL|2;-650` at level 2 with 900 XP to go: grinds, and ends with `max - xp <= 650` at level 2 (or level 3 if one kill overshoots).
+  - At level 2 with 400 to go: no grind, and `out.grind` is nil.
+  - At level 3: no grind.
+  - `LVL|5;300` at level 5 with 100 XP: grinds to at least 300 XP.
+  - `LVL|10` with no offset: unchanged (grinds to 10 only when below).
+  - The check applies the same way for non-`L` steps that carry `LVL` (today's Ruling G).
+- [ ] **Step 2: RED.**
+- [ ] **Step 3: Implement.** For a negative offset the target is `xp >= xp_max(level) + offset`.
+- [ ] **Step 4: GREEN.** Full and slow suites plus luacheck. Real Dwarf run (same command as Task 2): the four Dun Morogh `L` `did-not-advance` findings are gone. Paste the new per-signal counts, including quest-red, quest-orange and below-level.
+- [ ] **Step 5: Commit** `fix: Grind level checks to the XP point the guide checks`.
