@@ -15,7 +15,7 @@ describe("professions.parse", function()
   it("rejects a third primary", function()
     local list, err = professions.parse("alchemy,herbalism,mining")
     assert.is_nil(list)
-    assert.matches("has 3 primary professions; a character can know 2", err, 1, true)
+    assert.equal("--professions alchemy,herbalism,mining has 3 primary professions; a character can know 2", err)
   end)
 
   it("rejects a duplicate", function()

@@ -50,8 +50,8 @@ function professions.parse(text)
     out[#out + 1] = name
   end
   if primaries > MAX_PRIMARY then
-    return nil, string.format("--professions has %d primary professions; a character can know %d",
-      primaries, MAX_PRIMARY)
+    return nil, string.format("--professions %s has %d primary professions; a character can know %d",
+      text, primaries, MAX_PRIMARY)
   end
   table.sort(out)
   return out
