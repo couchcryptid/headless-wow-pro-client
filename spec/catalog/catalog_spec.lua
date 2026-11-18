@@ -108,7 +108,7 @@ describe("catalog (fixtures)", function()
     assert.are.same({}, q.pre_group)
     assert.are.equal(2001, q.starter)
     assert.are.equal(2002, q.ender)
-    assert.is_nil(q.races)
+    assert.are.same({ "Dwarf", "Gnome", "Human", "NightElf" }, q.races)
     assert.is_nil(q.classes)
   end)
 
@@ -140,14 +140,19 @@ describe("catalog (fixtures)", function()
     assert.are.equal("verified", cat:quest(90001).confidence) -- named by the supplement
   end)
 
-  it("treats the 'any race' masks as no restriction", function()
-    assert.is_nil(cat:quest(1001).races)
-    assert.is_nil(cat:quest(1003).races)
+  -- 77 is classic Alliance; 4294967373 adds Skyborne (Alliance), bit 32
+  -- (QuestieDB src/corrections/enum/expansions.lua:27, :364). Neither means "any race":
+  -- a Horde character can't take these quests.
+  it("decodes the Alliance faction masks, Skyborne bit included", function()
+    assert.are.same({ "Dwarf", "Gnome", "Human", "NightElf" }, cat:quest(1001).races)
+    assert.are.same({ "Dwarf", "Gnome", "Human", "NightElf", "SkyborneAlliance" }, cat:quest(1003).races)
   end)
 
-  it("decodes QuestieDB race and class masks into token lists", function()
+  -- 8589934770 is Forever's ALL_HORDE: classic Horde plus Skyborne (Horde), bit 33
+  -- (QuestieDB src/corrections/enum/expansions.lua:28, :366), past the 32-bit range.
+  it("decodes QuestieDB race and class masks into race keys and class tokens", function()
     local q = cat:quest(1004)
-    assert.are.same({ "Orc", "Tauren", "Troll", "Undead" }, q.races)
+    assert.are.same({ "Orc", "SkyborneHorde", "Tauren", "Troll", "Undead" }, q.races)
     assert.are.same({ "SHAMAN" }, q.classes)
   end)
 

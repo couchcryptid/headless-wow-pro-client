@@ -44,7 +44,8 @@ function QuestLog:refusal(qid, opts)
   if self.history[qid] then return "already-completed" end
   if #self.order >= QuestLog.SIZE then return "log-full" end
   if not (opts and opts.ignore_level) and player.level < (quest.required_level or 1) then return "below-level" end
-  if quest.races and not contains(quest.races, player.race_token) then return "race" end
+  -- quest.races holds Player.RACES keys (catalog RACE_BITS), not client tokens.
+  if quest.races and not contains(quest.races, player.race_key) then return "race" end
   if quest.classes and not contains(quest.classes, player.class_token) then return "class" end
   if quest.pre_single and #quest.pre_single > 0 then
     local any = false

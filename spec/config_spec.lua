@@ -37,6 +37,19 @@ describe("config.load", function()
     os.execute("rm -rf '" .. dir .. "'")
   end)
 
+  it("takes the faction from the race", function()
+    assert.are.equal("Alliance", config.load({ race = "Gnome", class = "PRIEST" }).faction)
+    assert.are.equal("Horde", config.load({ race = "Orc", class = "WARRIOR" }).faction)
+    assert.are.equal("Horde", config.load({ race = "Undead", class = "PALADIN" }).faction)
+  end)
+
+  it("rejects a class the race can't play in Forever", function()
+    assert.has_error(function() config.load({ race = "Tauren", class = "MAGE" }) end,
+      "hwc: Tauren can't be a MAGE in Forever")
+    assert.has_error(function() config.load({ race = "Gnome", class = "SHAMAN" }) end,
+      "hwc: Gnome can't be a SHAMAN in Forever")
+  end)
+
   it("defaults to no professions and keeps a professions list", function()
     local dir = fake_addon()
     assert.same({}, config.load({ addon_path = dir }).professions)

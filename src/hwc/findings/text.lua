@@ -96,7 +96,7 @@ end
 -- tokens (and labels that already hold the display name) pass through.
 local function race_name(token)
   local r = RACES[token]
-  return r and r.name or token
+  return r and (r.label or r.name) or token
 end
 
 function text.character(combo)

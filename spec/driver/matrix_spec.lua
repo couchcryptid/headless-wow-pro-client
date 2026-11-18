@@ -1,97 +1,36 @@
--- Character matrix (design spec §3, §11): classes come from the start guide's own
--- C| tags, never from memory. Real-guide cases assert stable facts only and pend
--- without the addon checkout.
+-- Character matrix (design spec §3, §11): which race x class x profession variants
+-- `hwc matrix` plays. Classes come from Player.RACES (Blizzard's Forever table), never
+-- from guide tags: the guide is what's under test. The Camping 101 case reads the
+-- real guides and pends without the addon checkout.
 local lfs = require("lfs")
 local matrix = require("hwc.driver.matrix")
+local Player = require("hwc.world.player")
 
 local ADDON = os.getenv("HOME") .. "/Projects/WoW-Pro-Guides"
 local present = lfs.attributes(ADDON .. "/WoWPro/WoWPro.toc", "mode") ~= nil
 
-local function has(list, v)
-  for _, x in ipairs(list) do if x == v then return true end end
-  return false
-end
-
-local function write(path, text)
-  local f = assert(io.open(path, "w"))
-  f:write(text)
-  f:close()
-end
-
-local function mkdirs(path)
-  local cur = ""
-  for part in path:gmatch("[^/]+") do
-    cur = cur .. "/" .. part
-    lfs.mkdir(cur)
-  end
-end
-
--- a throwaway addon tree: a ForeverStartGuides table plus one start guide
-local function fixture(guide_lines)
-  local root = os.tmpname()
-  os.remove(root)
-  mkdirs(root .. "/WoWPro_Leveling/Forever/Alliance")
-  write(root .. "/WoWPro_Leveling/WoWPro_Leveling.lua", [[
-WoWPro.Leveling.ForeverStartGuides = {
-    Dwarf = 'Fix Start 1-12',
-    Gnome = 'Fix Start 1-12',
-}
-]])
-  write(root .. "/WoWPro_Leveling/Forever/Alliance/01_12_Fix.lua", [==[
-local guide = WoWPro:RegisterGuide('ClassicFix0112', 'Leveling', 'Fix', 'WoWPro Team', 'Alliance', 1)
-WoWPro:GuideName(guide,'Fix Start 1-12')
-WoWPro:GuideLevels(guide,1,12, 2)
-WoWPro:GuideSteps(guide, function()
-return [[
-]==] .. guide_lines .. "\n]]\nend)\n")
-  return root
-end
-
 describe("matrix.classes_for", function()
-  -- Ruling W (user, 2026-11-12): only C| lines whose R| names the race count. A class-only
-  -- line (no R|) adds nothing: it would admit combos the game has no such race/class for.
-  it("takes classes only from C| tags on lines whose R| tag names the race", function()
-    local root = fixture(table.concat({
-      "A One|QID|1|C|Mage|R|Gnome|",
-      "A Two|QID|2|C|Priest|R|Dwarf,Gnome|",
-      "A Three|QID|3|C|Warrior,Rogue|",
-      "A Four|QID|4|R|Dwarf|",
-      "C Five|QID|5|C|-Druid|R|Dwarf|",
-      "A Six|QID|6|C|Warrior|R|Dwarf|",
-    }, "\n"))
-    assert.same({ "PRIEST", "WARRIOR" }, matrix.classes_for(root, "Dwarf"))
-    assert.is_false(has(matrix.classes_for(root, "Dwarf"), "ROGUE"))
-    assert.is_false(has(matrix.classes_for(root, "Dwarf"), "MAGE"))
-    assert.same({ "MAGE", "PRIEST" }, matrix.classes_for(root, "Gnome"))
+  it("is the race's Forever class list from Player.RACES", function()
+    assert.same(Player.RACES.Gnome.classes, matrix.classes_for("Gnome"))
+    assert.same(Player.RACES.Undead.classes, matrix.classes_for("Undead"))
   end)
 
-  it("returns sorted upper-case tokens", function()
-    local root = fixture("A Two|QID|2|C|Priest|R|Dwarf|\nA Three|QID|3|C|Hunter|R|Dwarf|")
-    assert.same({ "HUNTER", "PRIEST" }, matrix.classes_for(root, "Dwarf"))
+  -- Upstream 9310ff2ab (2026-11-17) dropped the guide's only C|Priest|R|Dwarf,Gnome lines;
+  -- the matrix must not lose a combo the game has when a guide changes.
+  it("keeps Gnome Priest whatever the guides say", function()
+    local found = false
+    for _, c in ipairs(matrix.classes_for("Gnome")) do if c == "PRIEST" then found = true end end
+    assert.is_true(found)
   end)
 
-  it("errors for a race with no start guide", function()
-    local root = fixture("A One|QID|1|")
-    assert.has_error(function() matrix.classes_for(root, "Human") end)
+  it("returns a copy the caller may change", function()
+    local a = matrix.classes_for("Dwarf")
+    a[1] = "NOPE"
+    assert.equal("HUNTER", matrix.classes_for("Dwarf")[1])
   end)
 
-  if not present then
-    pending("addon checkout absent at " .. ADDON)
-    return
-  end
-
-  it("Dwarf has PRIEST and PALADIN, Gnome has PRIEST (01_12_Dun_Morogh.lua)", function()
-    local dwarf = matrix.classes_for(ADDON, "Dwarf")
-    assert.is_true(has(dwarf, "PRIEST"))
-    assert.is_true(has(dwarf, "PALADIN"))
-    assert.is_true(has(matrix.classes_for(ADDON, "Gnome"), "PRIEST"))
-  end)
-
-  it("Dwarf has no WARLOCK, Gnome no SHAMAN or HUNTER (Ruling W: invalid in game)", function()
-    local dwarf, gnome = matrix.classes_for(ADDON, "Dwarf"), matrix.classes_for(ADDON, "Gnome")
-    assert.is_false(has(dwarf, "WARLOCK"))
-    assert.is_false(has(gnome, "SHAMAN"))
-    assert.is_false(has(gnome, "HUNTER"))
+  it("errors for a race not in scope", function()
+    assert.has_error(function() matrix.classes_for("Goblin") end, "hwc: race not in scope: Goblin")
   end)
 end)
 
@@ -139,12 +78,12 @@ end)
 
 describe("matrix.combos", function()
   it("has #classes + 6 entries per race, extra variants on the first class", function()
-    local root = fixture("A Two|QID|2|C|Priest|R|Dwarf,Gnome|\nA Three|QID|3|C|Hunter|R|Dwarf|")
-    local combos = matrix.combos(root, { "Dwarf", "Gnome" })
-    assert.equal(2 + 6 + 1 + 6, #combos)
-    assert.same({ race = "Dwarf", class = "HUNTER", variant = "baseline" }, combos[1])
-    assert.same({ race = "Dwarf", class = "PRIEST", variant = "baseline" }, combos[2])
-    assert.same({ race = "Dwarf", class = "HUNTER", variant = "secondary" }, combos[3])
-    assert.same({ race = "Gnome", class = "PRIEST", variant = "tailoring" }, combos[#combos])
+    local combos = matrix.combos({ "Tauren", "Gnome" })
+    local nt, ng = #Player.RACES.Tauren.classes, #Player.RACES.Gnome.classes
+    assert.equal(nt + 6 + ng + 6, #combos)
+    assert.same({ race = "Tauren", class = "DRUID", variant = "baseline" }, combos[1])
+    assert.same({ race = "Tauren", class = "HUNTER", variant = "baseline" }, combos[2])
+    assert.same({ race = "Tauren", class = "DRUID", variant = "secondary" }, combos[nt + 1])
+    assert.same({ race = "Gnome", class = "MAGE", variant = "tailoring" }, combos[#combos])
   end)
 end)

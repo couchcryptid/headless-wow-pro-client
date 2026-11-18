@@ -202,6 +202,14 @@ describe("stubs", function()
 
   it("knows the starting maps and records popups and super-tracking", function()
     assert.same({ mapID = 1426, name = "Dun Morogh", mapType = 3, parentMapID = 1415 }, env.C_Map.GetMapInfo(1426))
+    -- every race's start zone and its continent, Horde as well as Alliance
+    for id, m in pairs({
+      [1411] = { "Durotar", 3, 1414 }, [1412] = { "Mulgore", 3, 1414 }, [1420] = { "Tirisfal Glades", 3, 1415 },
+      [1429] = { "Elwynn Forest", 3, 1415 }, [1438] = { "Teldrassil", 3, 1414 },
+      [1414] = { "Kalimdor", 2, 947 }, [1415] = { "Eastern Kingdoms", 2, 947 },
+    }) do
+      assert.same({ mapID = id, name = m[1], mapType = m[2], parentMapID = m[3] }, env.C_Map.GetMapInfo(id))
+    end
     assert.is_nil(env.C_Map.GetMapInfo(99999))
     env.StaticPopup_Show("WOWPRO_MISSING_ARROW")
     assert.same({ "WOWPRO_MISSING_ARROW" }, sb.popups)

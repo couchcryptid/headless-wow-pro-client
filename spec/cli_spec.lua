@@ -112,7 +112,7 @@ describe("cli", function()
   it("run with a race outside the scope exits 2", function()
     local out, _ = capture()
     local err, etext = capture()
-    assert.equal(2, cli.main({ "run", "--race", "Orc", "--class", "WARRIOR" }, out, err))
+    assert.equal(2, cli.main({ "run", "--race", "Goblin", "--class", "WARRIOR" }, out, err))
     assert.matches("race not in scope", etext())
   end)
 
@@ -139,8 +139,8 @@ describe("cli", function()
 
   it("run and matrix accept --relative-to (parsed as an option, so the race check is what fails)", function()
     for _, args in ipairs({
-      { "run", "--class", "WARRIOR", "--race", "Orc", "--relative-to", "/x" },
-      { "matrix", "--races", "Orc", "--relative-to", "/x" },
+      { "run", "--class", "WARRIOR", "--race", "Goblin", "--relative-to", "/x" },
+      { "matrix", "--races", "Goblin", "--relative-to", "/x" },
     }) do
       local out, _ = capture()
       local err, etext = capture()
@@ -178,10 +178,17 @@ describe("cli", function()
     assert.is_nil(lfs.attributes(dir, "mode"))
   end)
 
-  it("matrix --races Orc exits 2 (race not in scope)", function()
+  it("run exits 2 for a class the race can't play in Forever", function()
     local out, _ = capture()
     local err, etext = capture()
-    assert.equal(2, cli.main({ "matrix", "--races", "Orc" }, out, err))
+    assert.equal(2, cli.main({ "run", "--race", "Tauren", "--class", "MAGE" }, out, err))
+    assert.matches("Tauren can't be a MAGE in Forever", etext())
+  end)
+
+  it("matrix --races Goblin exits 2 (race not in scope)", function()
+    local out, _ = capture()
+    local err, etext = capture()
+    assert.equal(2, cli.main({ "matrix", "--races", "Goblin" }, out, err))
     assert.matches("race not in scope", etext())
   end)
 
@@ -416,7 +423,7 @@ describe("cli", function()
     local seen
     local ok, e = pcall(with_combos, { { race = "Dwarf", class = "WARRIOR", variant = "baseline" },
       { race = "Gnome", class = "MAGE", variant = "baseline" },
-      { race = "Dwarf", class = "MAGE", variant = "baseline" } }, function()
+      { race = "Dwarf", class = "PRIEST", variant = "baseline" } }, function()
       seen = with_runner(function(calls)
         local out, _ = capture()
         assert.equal(0, cli.main({ "matrix", "--races", "Dwarf,Gnome", "--date", "2026-11-17",
@@ -445,8 +452,8 @@ describe("cli", function()
   it("matrix accepts repeated --race and merges --races, first-seen order", function()
     local matrix = require("hwc.driver.matrix")
     local real = matrix.combos
-    local got, got_path
-    matrix.combos = function(path, races) got_path, got = path, races; return {} end
+    local got
+    matrix.combos = function(races) got = races; return {} end
     local root = fixture()
     local out, _ = capture()
     local err, _ = capture()
@@ -455,7 +462,6 @@ describe("cli", function()
     matrix.combos = real
     assert.is_true(ok, tostring(status))
     assert.same({ "Dwarf", "Gnome" }, got)
-    assert.equal(root, got_path)
   end)
 
   it("--out defaults to $HOME/.hwc/findings", function()
@@ -551,6 +557,24 @@ describe("cli", function()
     end)
     assert.matches("2026%-11%-17%-forever%-alliance%-dwarf%-filtered%.html", text)
     assert.is_nil(text:match("1%-25"))
+  end)
+
+  it("a Horde matrix scope is forever-horde-<races>; a mixed one is forever-<races>", function()
+    local outdir = tmpdir()
+    local function scope(races, combos)
+      return with_combos(combos, function()
+        return with_runner(function()
+          local out, text = capture()
+          assert.equal(0, cli.main({ "matrix", "--races", races, "--date", "2026-11-17", "--out", outdir },
+            out, nil, env_at(fixture())))
+          return text()
+        end)
+      end)
+    end
+    assert.matches("2026%-11%-17%-forever%-horde%-orc%-undead%.html",
+      scope("Orc,Undead", { { race = "Orc", class = "WARRIOR", variant = "baseline" } }))
+    assert.matches("2026%-11%-17%-forever%-dwarf%-orc%.html",
+      scope("Dwarf,Orc", { { race = "Dwarf", class = "WARRIOR", variant = "baseline" } }))
   end)
 
   it("matrix names races that reach no included guide and skips their combos", function()

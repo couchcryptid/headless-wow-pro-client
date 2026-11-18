@@ -34,7 +34,7 @@ Today the only way to check a WoW-Pro guide fix is to level an alt in the game c
 **Non-goals (this pass)**
 - **Time model.** No travel, kill or talk seconds and no hours-to-level. This is route-optimisation work, deferred to a later pass. Keep room for it without building it.
 - **Route opinions.** The client doesn't add, suggest or chase quests that the guide doesn't mention, and it doesn't judge routing.
-- **Horde, other guide types** (Dailies, Professions, World Events), **other flavors** (Retail, Classic Era, TBC, Mists), and Zephras Isle/Skyborne for now.
+- **Other guide types** (Dailies, Professions, World Events) and **other flavors** (Retail, Classic Era, TBC, Mists). (Revised 2026-11-18: Horde and Skyborne are in scope; see §3.)
 - **UI fidelity.** Frames exist only as stateful stand-ins (see §5.3). Nothing is drawn.
 - **Fixing guides or the addon.** The client and triage report. People fix.
 
@@ -47,8 +47,8 @@ Today the only way to check a WoW-Pro guide fix is to level an alt in the game c
 ## 3. Scope of the first pass
 
 - **Flavor:** Forever only. `GetBuildInfo` returns TOC 16001, so `WoWPro.FOREVER` is true.
-- **Characters:** Dwarf and Gnome, every class each race can play in Forever, as the 80/20 slice: they share the Dun Morogh start, and #3535 and the issue-01–16 work cover it best. The race and class matrix is configuration. The **class list per race must come from Forever data** (Wowhead Forever or the guides' own `C|` tags), not from Classic assumptions or memory.
-- **Then:** all Alliance races: Human (Elwynn), Night Elf (Teldrassil, then Darkshore). Each race starts on its `WoWPro.Leveling.ForeverStartGuides` entry (`WoWPro_Leveling/WoWPro_Leveling.lua:49–59`). Skyborne (Zephras Isle) is listed there too but is out of scope until the user says otherwise.
+- **Characters:** Dwarf and Gnome, every class each race can play in Forever, as the 80/20 slice: they share the Dun Morogh start, and #3535 and the issue-01–16 work cover it best. The race and class matrix is configuration. The **class list per race must come from Forever data**, not from Classic assumptions or memory. (Revised 2026-11-18: from Blizzard's Forever race/class table, in `Player.RACES`, never from the guides' `C|` tags. The guide is what's under test, and upstream 9310ff2ab dropped Gnome Priest from the matrix when the class list came from its tags.)
+- **Then:** all Alliance races: Human (Elwynn), Night Elf (Teldrassil, then Darkshore). Each race starts on its `WoWPro.Leveling.ForeverStartGuides` entry (`WoWPro_Leveling/WoWPro_Leveling.lua:49–59`). (Revised 2026-11-18, user's decision: all Horde races, Orc, Troll (Durotar), Tauren (Mulgore) and Undead (Tirisfal Glades, client token `Scourge`), and Skyborne for both factions are in scope. Skyborne is two client races, ChrRaces 95 SKYBORNE_ALLIANCE and 96 SKYBORNE_HORDE, sharing the token `Skyborne`; the client names them `SkyborneAlliance` and `SkyborneHorde`.)
 - **Guide chain:** start guide, then the next guide by the engine's own `GuideNextGuide` autoload (Dun Morogh → `ClassicEasternKingdom1220` → `ClassicAlliance1925` → …). A run plays the chain to its last line (revised by `2026-11-17-guide-filters-design.md` §5: the level-25 and chain-range stops are gone).
 - **Professions and Camping 101 (user's decision, 2026-11-11):** all Camping 101 profession quests are in scope. The quests that require the profession to be trained first are gated on the character having that skill.
   - **In the world model:** each Camping 101 quest object carries a "requires skill" condition, for example First Aid, Fishing or Leatherworking. Per Wowhead, those end at the profession trainer, whose progress text gates on the skill. The quest can't be completed or turned in until the simulated character knows that skill.
@@ -345,7 +345,7 @@ A Claude Code skill in this repo (`.claude/skills/triage/SKILL.md`), run on dema
 
 - The no-profession baseline trains only when a step says so. Profession variants start with their skill already known. (The user decided that all Camping 101 quests are in scope and that skill-requiring ones are gated on the skill; how the variants start is my call.)
 - A run plays the chain to its last line; the level-25 stop was removed (`2026-11-17-guide-filters-design.md` §5).
-- Skyborne/Zephras Isle is out of scope until the user says otherwise.
+- Skyborne/Zephras Isle is in scope for both factions (revised 2026-11-18).
 - Elite kills always succeed solo (party size 1), flagged in the log.
 - Finding severities (§7.2).
 - Pinning QuestieDB at `d57637f49` and per-field source precedence carried over from `sim.py` (§6).

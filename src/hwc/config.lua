@@ -66,6 +66,10 @@ function M.load(tbl)
   if not Player.RACES[race] then
     error("hwc: race not in scope: " .. tostring(race), 0)
   end
+  local class = tbl.class or "WARRIOR"
+  if not Player.can_play(race, class) then
+    error("hwc: " .. race .. " can't be a " .. tostring(class) .. " in Forever", 0)
+  end
   for _, p in ipairs(tbl.professions or {}) do
     if not SKILL_LINES[p.name] then
       error("hwc: unknown profession: " .. tostring(p.name), 0)
@@ -76,8 +80,8 @@ function M.load(tbl)
     flavor = "Forever",
     toc_version = 16001,
     race = race,
-    class = tbl.class or "WARRIOR",
-    faction = "Alliance",
+    class = class,
+    faction = Player.RACES[race].faction,
     sex = tbl.sex or 2,
     seed = tbl.seed or 1,
     quest_log_size = 40,

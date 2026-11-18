@@ -7,7 +7,7 @@ character never sees, turn-ins for quests it never had, steps that don't
 advance, quests it can't take, and Lua errors.
 
 The point is to check guide fixes without levelling an alt in the game.
-- **Bug finding:** play the Forever Alliance guides, the race's chain to its last
+- **Bug finding:** play the Forever Alliance and Horde guides, the race's chain to its last
   guide, for each race, class and profession combination, then read the findings.
 - **Red/Green:** run the same characters against `main` and against a fix
   branch, and compare the findings.
@@ -19,13 +19,25 @@ come from a catalog built from QuestieDB and a Wowhead extract, never from the
 guide lines.
 
 **Status:**
-- **Scope:** Forever Alliance, the race's chain to its last guide. The XP
+- **Scope:** Forever Alliance and Horde, the race's chain to its last guide. The XP
   table caps at level 26, so play past 25 currently runs at level 26 (quest
-  data to level 60 is a separate future plan). Races: Human, Dwarf, Gnome and Night Elf
-  (`NightElf`), each starting from its guide in the addon's
-  `ForeverStartGuides` table: Elwynn Forest, Dun Morogh, Dun Morogh and
-  Teldrassil. Dwarf and Gnome are the most tested, so `matrix` defaults to
-  `--races Dwarf,Gnome`.
+  data to level 60 is a separate future plan). Each race starts from its guide in
+  the addon's `ForeverStartGuides` table:
+
+  | Race (`--race`) | Faction | Start |
+  |---|---|---|
+  | `Dwarf`, `Gnome` | Alliance | Dun Morogh |
+  | `Human` | Alliance | Elwynn Forest |
+  | `NightElf` | Alliance | Teldrassil |
+  | `SkyborneAlliance` | Alliance | Zephras Isle |
+  | `Orc`, `Troll` | Horde | Durotar |
+  | `Tauren` | Horde | Mulgore |
+  | `Undead` | Horde | Tirisfal Glades |
+  | `SkyborneHorde` | Horde | Zephras Isle |
+
+  Skyborne is two races in the client (ChrRaces 95 and 96), picked at character
+  creation, with different classes. Dwarf and Gnome are the most tested, so
+  `matrix` defaults to `--races Dwarf,Gnome`.
 - **Next:** the `/triage` skill.
 - **Data gaps:** listed in every findings file's header.
 - **Design:** the design spec, the plans and the per-plan rulings are in
@@ -161,14 +173,16 @@ hwc matrix --races Dwarf,Gnome --date 2026-11-12                 # the whole mat
 (to the chain's last line, or to the last included guide when filters are given); `hwc matrix` plays every
 combo and groups all the signals into one findings file. Both exit 0 once the
 findings are written, whatever they contain, 1 on a harness failure and 2 on a
-usage error (a missing `--class`, a race outside Human/Dwarf/Gnome/NightElf).
+usage error (a missing `--class`, a race not in the table above, or a class the
+race can't play in Forever).
 
 Output, under `--out DIR` (default `~/.hwc/findings`, created if missing, so runs never write into the WoW-Pro folder):
 
 - `DIR/<date>-<scope>.html`: the findings report, one self-contained page
   with the findings JSON embedded in it (it opens from disk and loads nothing
   from the network). The scope is
-  `forever-alliance-<races lower, joined by '-'>` for `matrix` and
+  `forever-<faction>-<races lower, joined by '-'>` for `matrix` (`forever-<races>`
+  when the races span both factions) and
   `<race>-<class>-<variant>` for `run`. With any filter given, the scope gains
   `-filtered`.
 - `DIR/<date>-<scope>.json`: the same findings as a machine-readable document
@@ -188,15 +202,14 @@ finding's id depends on the base: run from the same directory (or pass the same
 addon commit, catalog, config and seed give byte-identical `.html` and `.json`.
 The `Client` row under "About this run" is this repo's own HEAD commit.
 
-Matrix combos (`src/hwc/driver/matrix.lua`): for each race, every class that
-the race's start guide names in a `C|` tag on a line whose `R|` tag names the
-race (a class-only line adds nothing: it would admit pairs the game lacks, such
-as Gnome Shaman, Dwarf Warlock or Gnome Hunter) at the `baseline` variant, plus each other variant on
-the race's first class in sorted order. The start guide is
-`WoWPro.Leveling.ForeverStartGuides[race]`, read from the Leveling source text
-and matched to its guide file by `WoWPro:GuideName` (or GID); the addon is not
-executed. For Dwarf and Gnome (both start in Dun Morogh) that gives Dwarf HUNTER, PALADIN, PRIEST, ROGUE,
-SHAMAN, WARRIOR and Gnome MAGE, PRIEST, ROGUE, WARLOCK, WARRIOR: 11 classes,
+Matrix combos (`src/hwc/driver/matrix.lua`): for each race, every class it can
+play in Forever at the `baseline` variant, plus each other variant on the race's
+first class in sorted order. The class lists are in `Player.RACES`
+(`src/hwc/world/player.lua`), from Blizzard's Forever race/class table
+(<https://worldofwarcraft.blizzard.com/news/24304075/>). They never come from
+guide tags: the guide is what's under test, and a guide edit must not change
+which characters are played. Dwarf: HUNTER, PALADIN, PRIEST, ROGUE, SHAMAN,
+WARRIOR; Gnome: MAGE, PRIEST, ROGUE, WARLOCK, WARRIOR. That's 11 classes and
 23 runs for `--races Dwarf,Gnome`. Variants start with each profession at rank 1, max 75, and with the spell that
 teaches it (`src/hwc/world/profession_spells.lua`, checked on Wowhead Forever),
 which the guides' `SPELL|<Profession>; <id>; Flip` tags test. Together they

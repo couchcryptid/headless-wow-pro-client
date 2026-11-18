@@ -35,16 +35,33 @@ local function register_gid(line)
   return line:match("RegisterGuide%s*%(%s*'([^']+)'") or line:match('RegisterGuide%s*%(%s*"([^"]+)"')
 end
 
+-- RegisterGuide's faction argument (the fifth string), or nil.
+local function register_faction(line)
+  local args = line:match("RegisterGuide%s*(%b())")
+  if not args then return nil end
+  local n = 0
+  for _, value in args:gmatch("(['\"])(.-)%1") do
+    n = n + 1
+    if n == 5 then return value end
+  end
+  return nil
+end
+
 -- { [gid] = rel_file } from the RegisterGuide('<gid>' calls under `dir`
--- (default WoWPro_Leveling/Forever), rel_file relative to addon_path.
-function M.index(addon_path, dir)
+-- (default WoWPro_Leveling/Forever), rel_file relative to addon_path. With a
+-- faction, a guide registered for the other faction is left out, as the engine
+-- rejects it (WoWPro_GuideRegistry.lua:266: neither the player's faction nor
+-- Neutral); the Alliance and Horde Zephras Isle files share one GID.
+function M.index(addon_path, dir, faction)
   local root = addon_path .. "/" .. (dir or LEVELING_DIR)
   local out = {}
   if lfs.attributes(root, "mode") ~= "directory" then return out end
   for _, path in ipairs(lua_files(root, {})) do
     for _, line in ipairs(M.read_lines(path) or {}) do
       local gid = register_gid(line)
-      if gid and not out[gid] then out[gid] = path:sub(#addon_path + 2) end
+      local gf = gid and faction and register_faction(line)
+      local other = gf and gf ~= faction and gf ~= "Neutral"
+      if gid and not other and not out[gid] then out[gid] = path:sub(#addon_path + 2) end
     end
   end
   return out
@@ -124,7 +141,11 @@ function M.loads(line, character)
   local class = line:match("|C|([^|]*)|?")
   if class and not M.semi_match(class:gsub(" ", ""):upper(), character.class) then return false end
   local race = line:match("|R|([^|]*)|?")
-  if race and not M.semi_match((race:gsub(" ", "")), character.race) then return false end
+  -- WoWPro_Parser.lua:1097-1099: the engine tests R| against "Undead" for the
+  -- Scourge (and Forsaken) token.
+  local myrace = character.race
+  if myrace == "Scourge" or myrace == "Forsaken" then myrace = "Undead" end
+  if race and not M.semi_match((race:gsub(" ", "")), myrace) then return false end
   local faction = line:match("|FACTION|([^|]*)|?")
   if faction then
     faction = trim(faction):upper()

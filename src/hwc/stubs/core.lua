@@ -174,10 +174,16 @@ function M.install(sb, cfg)
   env.GetZoneText = function() return player().zone end
   env.GetRealZoneText = function() return player().zone end
   env.GetSubZoneText = function() return player().subzone end
-  -- WoWPro_Mapping.lua:624 (CheckHBDData via WoWPro_Events.lua:302). Client map facts for the starting
-  -- maps only; any other id returns nil like an unknown map.
+  -- WoWPro_Mapping.lua:624 (CheckHBDData via WoWPro_Events.lua:302). Client map facts for every race's
+  -- start zone (Player.RACES start) and its continent only; any other id returns nil like an unknown map.
   local MAPS = {
+    [1411] = { mapID = 1411, name = "Durotar", mapType = 3, parentMapID = 1414 },
+    [1412] = { mapID = 1412, name = "Mulgore", mapType = 3, parentMapID = 1414 },
+    [1420] = { mapID = 1420, name = "Tirisfal Glades", mapType = 3, parentMapID = 1415 },
     [1426] = { mapID = 1426, name = "Dun Morogh", mapType = 3, parentMapID = 1415 },
+    [1429] = { mapID = 1429, name = "Elwynn Forest", mapType = 3, parentMapID = 1415 },
+    [1438] = { mapID = 1438, name = "Teldrassil", mapType = 3, parentMapID = 1414 },
+    [1414] = { mapID = 1414, name = "Kalimdor", mapType = 2, parentMapID = 947 },
     [1415] = { mapID = 1415, name = "Eastern Kingdoms", mapType = 2, parentMapID = 947 },
   }
   env.C_Map = trap(sb, "C_Map", {

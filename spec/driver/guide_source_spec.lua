@@ -8,6 +8,15 @@ describe("guide_source", function()
     assert.equal("Fix/forever/G1.lua", idx.FixG1)
   end)
 
+  -- WoWPro_GuideRegistry.lua:266: the engine rejects a guide registered for the other
+  -- faction, so the Alliance and Horde Zephras Isle files can share one GID.
+  it("indexes the file registered for the character's faction or Neutral", function()
+    assert.equal("Fix/factions/A.lua", gs.index(ROOT, "Fix/factions", "Alliance").FixIsle)
+    assert.equal("Fix/factions/H.lua", gs.index(ROOT, "Fix/factions", "Horde").FixIsle)
+    assert.equal("Fix/factions/A.lua", gs.index(ROOT, "Fix/factions", "Horde").FixBoth)
+    assert.equal("Fix/factions/A.lua", gs.index(ROOT, "Fix/factions").FixIsle)
+  end)
+
   it("accepts double-quoted GIDs and returns {} for a missing directory", function()
     assert.same({}, gs.index(ROOT, "nope"))
   end)
@@ -56,6 +65,16 @@ describe("guide_source", function()
     local elf_warrior = { race = "NightElf", class = "WARRIOR", faction = "Alliance" }
     assert.equal(14, gs.line_of(ROOT, FILE, STORMWIND, 1, elf_druid))
     assert.equal(13, gs.line_of(ROOT, FILE, STORMWIND, 1, elf_warrior))
+  end)
+
+  -- WoWPro_Parser.lua:1097-1099: the engine reads UnitRace's token Scourge as Undead
+  -- before it tests R| tags, so an Undead character loads R|Undead lines.
+  it("reads the Undead token Scourge as Undead for R| tags", function()
+    local undead = { race = "Scourge", class = "PRIEST", faction = "Horde" }
+    assert.is_true(gs.loads("A Rude Awakening|QID|363|R|Undead|", undead))
+    assert.is_true(gs.loads("A X|QID|1|R|Undead,Troll|", undead))
+    assert.is_false(gs.loads("A X|QID|1|R|-Undead|", undead))
+    assert.is_false(gs.loads("A X|QID|1|R|Orc|", undead))
   end)
 
   it("skips a line for the other faction", function()

@@ -96,8 +96,8 @@ describe("Player behind the stubs", function()
 end)
 
 describe("config race scope", function()
-  it("rejects races outside the Alliance table", function()
-    assert.has_error(function() config.load({ race = "Orc" }) end, "hwc: race not in scope: Orc")
+  it("rejects races outside Player.RACES", function()
+    assert.has_error(function() config.load({ race = "Goblin" }) end, "hwc: race not in scope: Goblin")
   end)
 end)
 
