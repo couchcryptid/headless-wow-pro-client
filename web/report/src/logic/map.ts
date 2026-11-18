@@ -2,6 +2,7 @@
 // close pins grouped so none hides another, level text and flags. Pure; no DOM.
 import type { Finding, GuideEntry, ReportDoc } from "../types";
 import { matches } from "./filter";
+import { guideSections } from "./order";
 import { counted, shortFile, type FilterState } from "./state";
 
 export interface PinGroup {
@@ -33,13 +34,35 @@ export interface Track {
   flags: TrackFlag[];
   perCombo: ComboLevels[];
   groups: PinGroup[];
+  /**
+   * The file's own Guide-order section; else, when its matching findings all
+   * nest under another file's cards, the first of them by line; else null (no
+   * jump: the name is drawn disabled).
+   */
+  target: TrackTarget | null;
 }
 
 /**
- * Two pins closer than this (as a share of the track) join one group. 0.012 is
- * about 8px on a 680px track: below that, two 10px pins overlap.
+ * Fallback grouping gap (a share of the track) for when the rail's rendered
+ * width isn't known, e.g. before the first layout. It is not tied to any
+ * marker size: the page always passes gapFor(measured width) once it can.
  */
 export const MIN_GAP = 0.012;
+
+/** Widest marker on the full map: the group pill's min-width (styles.css `.pin.grp`). */
+export const PILL_PX = 22;
+
+/**
+ * The grouping gap for a rail `railPx` wide: the widest marker plus 2px, as a
+ * share of the rail. Groups whose centres are at least this far apart can't
+ * overlap. Falls back to MIN_GAP when the width is unknown (0 or NaN).
+ */
+export function gapFor(railPx: number, markerPx = PILL_PX): number {
+  return railPx > 0 ? (markerPx + 2) / railPx : MIN_GAP;
+}
+
+/** Where a track name's click goes in Guide order (ruling R12). */
+export type TrackTarget = { kind: "section"; file: string } | { kind: "card"; id: string };
 
 /** "7", or "5–7" when the values differ. */
 function span(xs: number[]): string {
@@ -69,6 +92,7 @@ function groupPins(pins: { at: number; f: Finding }[], minGap: number): PinGroup
 
 export function tracks(doc: ReportDoc, s: FilterState, minGap = MIN_GAP): Track[] {
   const name = (c: string) => doc.labels.combos[c] ?? c;
+  const sections = new Set(guideSections(doc, s).map((x) => x.file));
   return doc.header.guides.map((g) => {
     const pins = doc.findings
       .filter((f) => f.file === g.file && f.line !== undefined && counted(f) && matches(f, s))
@@ -93,6 +117,11 @@ export function tracks(doc: ReportDoc, s: FilterState, minGap = MIN_GAP): Track[
       flags: [...byRule].map(([rule, combos]) => ({ rule, combos })),
       perCombo,
       groups: groupPins(pins, minGap),
+      target: sections.has(g.file)
+        ? { kind: "section", file: g.file }
+        : pins.length > 0
+          ? { kind: "card", id: pins[0]!.f.id }
+          : null,
     };
   });
 }

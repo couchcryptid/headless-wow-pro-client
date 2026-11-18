@@ -100,9 +100,9 @@ export function App({ doc }: { doc: ReportDoc }) {
             <>
               <GuideMap
                 onPin={(f) => setPending(cardId(f.id))}
-                onFile={(file) => {
+                onFile={(target) => {
                   setS({ ...s, order: "guide" });
-                  setPending(fileSecId(file));
+                  setPending(target.kind === "section" ? fileSecId(target.file) : cardId(target.id));
                 }}
               />
               <OrderSwitch onOrder={(order) => setS({ ...s, order })} />

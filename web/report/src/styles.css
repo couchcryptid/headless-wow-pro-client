@@ -141,6 +141,8 @@ a { color: var(--accent); }
   text-decoration: underline transparent; text-underline-offset: 3px;
 }
 .trk-file:hover { color: var(--accent); text-decoration-color: currentColor; }
+.trk-file[aria-disabled="true"] { cursor: default; color: var(--muted); }
+.trk-file[aria-disabled="true"]:hover { color: var(--muted); text-decoration-color: transparent; }
 .trk-sub { display: flex; flex-direction: column; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .lv.has-tip { position: relative; align-self: flex-start; cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
 

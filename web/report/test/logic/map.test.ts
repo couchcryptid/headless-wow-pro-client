@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { scaleTicks, tracks } from "../../src/logic/map";
+import { MIN_GAP, gapFor, scaleTicks, tracks } from "../../src/logic/map";
 import { counted, defaultState } from "../../src/logic/state";
 import type { Finding, ReportDoc } from "../../src/types";
 import { load } from "./helpers";
@@ -162,5 +162,61 @@ describe("scaleTicks", () => {
   });
   it("never more than max + 1 ticks", () => {
     for (const n of [1, 9, 33, 101, 999, 1234, 5000]) expect(scaleTicks(n, 5).length).toBeLessThanOrEqual(6);
+  });
+});
+
+describe("gapFor: a minGap from the rail's rendered width", () => {
+  it("is the widest marker plus 2px over the rail width", () => {
+    expect(gapFor(320)).toBeCloseTo(24 / 320, 10);
+    expect(gapFor(400, 16)).toBeCloseTo(18 / 400, 10);
+  });
+  it("falls back to MIN_GAP when no width is known", () => {
+    expect(gapFor(0)).toBe(MIN_GAP);
+    expect(gapFor(Number.NaN)).toBe(MIN_GAP);
+  });
+
+  it("a narrow rail groups the 300/303 pins, and pins the default keeps apart", () => {
+    const narrow = gapFor(320);
+    const big = trackOf(single, longGuide.file, s0, narrow).groups.find((g) => g.findings.length > 1)!;
+    expect(lines(big.findings)).toEqual(expect.arrayContaining([300, 303]));
+    // Some pair of pins sits in separate groups at the default but one group on a narrow rail.
+    const sizes = (gap: number) => tracks(single, s0, gap).flatMap((t) => t.groups.map((g) => g.findings.length));
+    expect(sizes(narrow).length).toBeLessThan(sizes(MIN_GAP).length);
+    const apart = tracks(single, s0).flatMap((t) => t.groups);
+    const together = tracks(single, s0, narrow).flatMap((t) => t.groups).filter((g) => g.findings.length > 1);
+    const merged = together.some((g) => new Set(g.findings.map((f) => apart.find((a) => a.findings.includes(f)))).size > 1);
+    expect(merged).toBe(true);
+  });
+
+  it("no two groups on a track are closer than the minGap passed in", () => {
+    for (const gap of [0, MIN_GAP, gapFor(680), gapFor(320), gapFor(120)])
+      for (const doc of [single, matrix])
+        for (const t of tracks(doc, defaultState(doc), gap))
+          for (let i = 1; i < t.groups.length; i++)
+            expect(t.groups[i]!.at - t.groups[i - 1]!.at).toBeGreaterThanOrEqual(gap);
+  });
+});
+
+describe("track target (ruling R12)", () => {
+  it("a file with its own section in Guide order jumps to the section", () => {
+    for (const t of tracks(single, s0)) expect(t.target).toEqual({ kind: "section", file: t.file });
+  });
+
+  it("a file with no matching findings has no target", () => {
+    const file = new Set([...s0.file].filter((x) => x !== longGuide.file));
+    expect(trackOf(single, longGuide.file, { ...s0, file }).target).toBeNull();
+  });
+
+  it("a file whose matching findings all nest under another file's card jumps to the first of them", () => {
+    const doc = structuredClone(single);
+    const child = doc.findings.find((f) => f.caused_by && f.file !== undefined && counted(doc.findings.find((c) => c.id === f.caused_by)!))!;
+    const root = doc.findings.find((f) => f.id === child.caused_by)!;
+    const other = doc.header.guides.find((g) => g.file !== root.file)!.file;
+    // Move the follow-on into another guide that has nothing else.
+    doc.findings = doc.findings.filter((f) => f === child || f.file !== other);
+    child.file = other;
+    const t = trackOf(doc, other, defaultState(doc));
+    expect(t.count).toBe(1);
+    expect(t.target).toEqual({ kind: "card", id: child.id });
   });
 });

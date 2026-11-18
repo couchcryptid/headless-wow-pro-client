@@ -4,15 +4,15 @@
 import type { ComponentChildren } from "preact";
 import { useContext, useEffect, useRef, useState } from "preact/hooks";
 import { SEVERITY_ORDER } from "../logic/state";
-import { scaleTicks, tracks, type PinGroup, type Track } from "../logic/map";
+import { gapFor, scaleTicks, tracks, type PinGroup, type Track, type TrackTarget } from "../logic/map";
 import type { Finding } from "../types";
 import { PageContext, plural, scrollToEl, shortFile } from "./context";
 
 interface Actions {
   /** Scroll to a finding's card and highlight it. */
   onPin: (f: Finding) => void;
-  /** Switch to Guide order and jump to the file's section. */
-  onFile: (file: string) => void;
+  /** Switch to Guide order and jump to the track's target (its section, or a nested card). */
+  onFile: (target: TrackTarget) => void;
 }
 
 /** Group key: the file and its first finding (stable while the group exists). */
@@ -201,7 +201,13 @@ function TrackRow({
     <li class={`trk${t.flags.length ? " flagged" : ""}`}>
       <div class="trk-name">
         <span class="trk-line">
-          <button type="button" class="trk-file" tabIndex={mini ? -1 : undefined} onClick={() => actions.onFile(t.file)}>
+          <button
+            type="button"
+            class="trk-file"
+            tabIndex={mini ? -1 : undefined}
+            aria-disabled={t.target === null ? "true" : undefined}
+            onClick={() => t.target && actions.onFile(t.target)}
+          >
             {t.label}
           </button>
           {!mini && <Flags t={t} />}
@@ -247,12 +253,33 @@ function TrackRow({
   );
 }
 
+/** Mini pills' min-width (styles.css `.map.mini .pin.grp`). */
+const MINI_PILL_PX = 16;
+
+/** The rendered width of the first rail inside `ref`, kept current with a ResizeObserver. */
+function useRailWidth(ref: { current: HTMLElement | null }, active: boolean): number {
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    const rail = ref.current?.querySelector<HTMLElement>(".rail");
+    if (!active || !rail) return;
+    setW(rail.getBoundingClientRect().width);
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setW(e!.contentRect.width));
+    ro.observe(rail);
+    return () => ro.disconnect();
+  }, [active]);
+  return w;
+}
+
 export function GuideMap({ onPin, onFile }: Actions) {
   const { doc, s } = useContext(PageContext);
-  const ts = tracks(doc, s);
   const [open, setOpen] = useState<string | null>(null);
   const [away, setAway] = useState(false);
   const full = useRef<HTMLElement>(null);
+  const mini = useRef<HTMLElement>(null);
+  // Pins are grouped by the rails' rendered widths, so no marker hides another.
+  const ts = tracks(doc, s, gapFor(useRailWidth(full, true)));
+  const miniTs = tracks(doc, s, gapFor(useRailWidth(mini, away), MINI_PILL_PX));
   // Jumping to a card closes any spread-out group, so the pinned copy doesn't cover the card.
   const actions = {
     onPin: (f: Finding) => {
@@ -280,14 +307,16 @@ export function GuideMap({ onPin, onFile }: Actions) {
   }, [away, ts.length]);
 
   if (ts.length === 0) return null;
-  const rows = (mini: boolean) =>
-    ts.map((t) => <TrackRow key={t.file} t={t} mini={mini} open={open} setOpen={setOpen} actions={actions} />);
+  const rows = (compact: boolean) =>
+    (compact ? miniTs : ts).map((t) => (
+      <TrackRow key={t.file} t={t} mini={compact} open={open} setOpen={setOpen} actions={actions} />
+    ));
 
   return (
     <>
       <div class="mini-anchor">
         {away && (
-          <nav class="map mini" aria-label="Guide map, compact">
+          <nav class="map mini" ref={mini} aria-label="Guide map, compact">
             <ol class="tracks">{rows(true)}</ol>
             <button type="button" class="mini-back" onClick={() => full.current && scrollToEl(full.current)}>
               Back to map
