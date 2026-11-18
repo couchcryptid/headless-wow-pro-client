@@ -1,0 +1,771 @@
+{
+  "findings":[{
+      "action":"A",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_11_14.lua",
+      "gid":"Dun Morogh 11-14",
+      "id":"F-ee548519",
+      "line":300,
+      "name":"Gnome Trouble",
+      "qid":500,
+      "reasons":[],
+      "sentence":"The guide tells you to accept this quest, but WoWPro never shows the step and gave no reason.",
+      "severity":"high",
+      "signal":"never-shown-accept",
+      "step":{
+        "action":"A",
+        "name":"Gnome Trouble"
+      },
+      "title":"\"Gnome Trouble\" is never offered"
+    },{
+      "action":"A",
+      "causes":["F-10e6df85","F-55fddb0c"],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"unverified",
+      "explains":3,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
+      "gid":"Dun Morogh 1-5",
+      "id":"F-fc3e70a6",
+      "line":12,
+      "name":"Rites of the Dun Morogh",
+      "qid":96393,
+      "reasons":["prerequisite"],
+      "sentence":"The guide shows this accept, but the quest data says a prerequisite of quest 96393 isn't done yet.",
+      "severity":"high",
+      "signal":"accept-refused",
+      "step":{
+        "action":"A",
+        "name":"Rites of the Dun Morogh"
+      },
+      "title":"\"Rites of the Dun Morogh\" can't be taken yet"
+    },{
+      "action":"A",
+      "caused_by":"F-fc3e70a6",
+      "causes":["F-338f033f"],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
+      "gid":"Dun Morogh 1-5",
+      "id":"F-10e6df85",
+      "line":30,
+      "name":"A Warrior's Welcome",
+      "qid":93,
+      "reasons":[],
+      "sentence":"The guide tells you to accept this quest, but WoWPro hides the step because its prerequisite, quest 96393, is never completed.",
+      "severity":"high",
+      "signal":"never-shown-accept",
+      "step":{
+        "action":"A",
+        "name":"A Warrior's Welcome"
+      },
+      "title":"\"A Warrior's Welcome\" is never offered",
+      "why":"NextStep:PRE&(96393): A mandatory prereq was not met: 96393"
+    },{
+      "action":"A",
+      "caused_by":"F-10e6df85",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
+      "gid":"Dun Morogh 1-5",
+      "id":"F-338f033f",
+      "line":44,
+      "name":"The Warrior's Path",
+      "qid":94,
+      "reasons":[],
+      "sentence":"The guide tells you to accept this quest, but WoWPro hides the step because its prerequisite, quest 93, is never completed.",
+      "severity":"high",
+      "signal":"never-shown-accept",
+      "step":{
+        "action":"A",
+        "name":"The Warrior's Path"
+      },
+      "title":"\"The Warrior's Path\" is never offered",
+      "why":"NextStep:PRE&(93): A mandatory prereq was not met: 93"
+    },{
+      "action":"U",
+      "causes":["F-bd21ffe9"],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "explains":1,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
+      "gid":"Dun Morogh 1-5",
+      "id":"F-cf8051cf",
+      "line":100,
+      "loot":{
+        "5001":2
+      },
+      "name":"Use the Healing Salve",
+      "qid":200,
+      "reasons":[],
+      "sentence":"WoWPro hides this use step until item 5001 is in bags, and it wasn't while the run passed here, so the client never used item 5000.",
+      "severity":"high",
+      "signal":"hidden-use-step",
+      "step":{
+        "action":"U",
+        "name":"Use the Healing Salve"
+      },
+      "title":"\"Use the Healing Salve\" is never shown",
+      "use":"5000"
+    },{
+      "action":"A",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
+      "gid":"Dun Morogh 1-5",
+      "id":"F-cf80780f",
+      "line":170,
+      "name":"Mage Training",
+      "qid":310,
+      "reasons":["class"],
+      "sentence":"WoWPro shows this step to a Warrior, but quest 310 is for other classes.",
+      "severity":"high",
+      "signal":"wrong-race-class",
+      "step":{
+        "action":"A",
+        "name":"Mage Training"
+      },
+      "title":"\"Mage Training\" is shown to the wrong class"
+    },{
+      "action":"T",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
+      "gid":"Dun Morogh 5-11",
+      "id":"F-1efcac3f",
+      "line":51,
+      "name":"Beer Run",
+      "qid":420,
+      "reasons":[],
+      "sentence":"The guide asks you to turn in quest 420, but this character never had it.",
+      "severity":"high",
+      "signal":"orphan-turnin",
+      "step":{
+        "action":"T",
+        "name":"Beer Run"
+      },
+      "title":"Turn in \"Beer Run\" for a quest the character never had"
+    },{
+      "action":"A",
+      "causes":["F-1a8070fc"],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "explains":1,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
+      "gid":"Dun Morogh 5-11",
+      "id":"F-7fb988d1",
+      "level":7,
+      "line":70,
+      "log":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],
+      "name":"Troll Menace",
+      "qid":430,
+      "reasons":[],
+      "sentence":"The guide shows this accept while the quest log is already full.",
+      "severity":"high",
+      "signal":"log-full",
+      "step":{
+        "action":"A",
+        "name":"Troll Menace"
+      },
+      "title":"\"Troll Menace\" can't be taken: quest log full"
+    },{
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
+      "gid":"Dun Morogh 5-11",
+      "id":"F-d15aabd7",
+      "line":99,
+      "message":"bad argument #1 to 'strsplit' (string expected, got nil)",
+      "name":"bad argument #1 to 'strsplit' (string expected, got nil)",
+      "reasons":[],
+      "sentence":"WoWPro raised an error during the run. The message and stack are in the detail below.",
+      "severity":"high",
+      "signal":"lua-error",
+      "stack":"WoWPro_Leveling.lua:12: in main chunk",
+      "step":{
+        "name":"bad argument #1 to 'strsplit' (string expected, got nil)"
+      },
+      "title":"Lua error: bad argument #1 to 'strsplit' (string expected, got nil)"
+    },{
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "explains":0,
+      "id":"F-c2589899",
+      "message":"attempt to index a nil value (field 'frame')",
+      "name":"attempt to index a nil value (field 'frame')",
+      "reasons":[],
+      "sentence":"WoWPro raised an error during the run. The message and stack are in the detail below.",
+      "severity":"high",
+      "signal":"lua-error",
+      "stack":"WoWPro.lua:410: in function 'NextStep'\nWoWPro_Broker.lua:88: in function <WoWPro_Broker.lua:70>",
+      "step":{
+        "name":"attempt to index a nil value (field 'frame')"
+      },
+      "title":"Lua error: attempt to index a nil value (field 'frame')"
+    },{
+      "action":"A",
+      "after":{
+        "action":"T",
+        "name":"Report"
+      },
+      "before":{
+        "action":"C",
+        "name":"Mine the Vein"
+      },
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_11_14.lua",
+      "gid":"Dun Morogh 11-14",
+      "id":"F-4eecf663",
+      "line":303,
+      "name":"Deep Digging",
+      "qid":510,
+      "qname":"Gnome Trouble",
+      "reasons":[],
+      "sentence":"The guide reaches this accept below the level the quest requires.",
+      "severity":"medium-high",
+      "signal":"below-level",
+      "step":{
+        "action":"A",
+        "name":"Deep Digging"
+      },
+      "title":"\"Deep Digging\" is offered below its level"
+    },{
+      "action":"A",
+      "after":{
+        "action":"T",
+        "name":"Return to Thorgas"
+      },
+      "before":{
+        "action":"C",
+        "name":"Skin the Boar"
+      },
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
+      "gid":"Dun Morogh 1-5",
+      "grind":{
+        "kills":4,
+        "to":6
+      },
+      "id":"F-8347e435",
+      "line":150,
+      "name":"A Dwarf's Burden",
+      "qid":300,
+      "qname":"Rites of Passage",
+      "reasons":[],
+      "sentence":"The guide reaches this accept below level 6, the level the quest requires; the client ground 4 kills to get there.",
+      "severity":"medium-high",
+      "signal":"below-level",
+      "step":{
+        "action":"A",
+        "name":"A Dwarf's Burden"
+      },
+      "title":"\"A Dwarf's Burden\" is offered below its level",
+      "why":"level 4, quest needs 5"
+    },{
+      "action":"C",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_11_14.lua",
+      "gid":"Dun Morogh 11-14",
+      "id":"F-052b746f",
+      "level":13,
+      "line":520,
+      "log":[520],
+      "name":"Clear the Tunnel",
+      "qid":520,
+      "reasons":[],
+      "sentence":"The client did what this step asks, but WoWPro didn't mark it done, so the client clicked it off.",
+      "severity":"medium",
+      "signal":"did-not-advance",
+      "step":{
+        "action":"C",
+        "name":"Clear the Tunnel"
+      },
+      "title":"\"Clear the Tunnel\" doesn't advance"
+    },{
+      "action":"T",
+      "after":{
+        "action":"C",
+        "name":"Kill Frostmane"
+      },
+      "before":{
+        "action":"C",
+        "name":"Talk to Grull"
+      },
+      "caused_by":"F-fc3e70a6",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
+      "gid":"Dun Morogh 1-5",
+      "id":"F-55fddb0c",
+      "level":3,
+      "line":60,
+      "log":[314],
+      "name":"Rites of the Dun Morogh",
+      "qid":96393,
+      "reasons":["not-in-log"],
+      "sentence":"Quest 96393 wasn't in the log when the guide reached this step, so the client clicked it off.",
+      "severity":"medium",
+      "signal":"did-not-advance",
+      "step":{
+        "action":"T",
+        "name":"Rites of the Dun Morogh"
+      },
+      "title":"\"Rites of the Dun Morogh\" doesn't advance",
+      "why":"step still current"
+    },{
+      "action":"T",
+      "caused_by":"F-cf8051cf",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
+      "gid":"Dun Morogh 1-5",
+      "id":"F-bd21ffe9",
+      "level":4,
+      "line":110,
+      "log":[200],
+      "name":"Salve for the Wounded",
+      "qid":200,
+      "reasons":["incomplete"],
+      "sentence":"The turn-in was refused because quest 200 wasn't complete, so the client clicked the step off.",
+      "severity":"medium",
+      "signal":"did-not-advance",
+      "step":{
+        "action":"T",
+        "name":"Salve for the Wounded"
+      },
+      "title":"\"Salve for the Wounded\" doesn't advance"
+    },{
+      "action":"C",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
+      "gid":"Dun Morogh 5-11",
+      "id":"F-bb76db4a",
+      "level":6,
+      "line":33,
+      "log":[410],
+      "name":"Scout the Ridge",
+      "qid":410,
+      "reasons":[],
+      "sentence":"No game event completed this step, so the client clicked it off.",
+      "severity":"medium",
+      "signal":"manual-completion",
+      "step":{
+        "action":"C",
+        "name":"Scout the Ridge"
+      },
+      "title":"\"Scout the Ridge\" needed a manual click"
+    },{
+      "action":"T",
+      "caused_by":"F-7fb988d1",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
+      "gid":"Dun Morogh 5-11",
+      "id":"F-1a8070fc",
+      "level":7,
+      "line":90,
+      "log":[1],
+      "name":"Troll Menace",
+      "qid":430,
+      "reasons":["not-in-log"],
+      "sentence":"Quest 430 wasn't in the log when the guide reached this step, so the client clicked it off.",
+      "severity":"medium",
+      "signal":"did-not-advance",
+      "step":{
+        "action":"T",
+        "name":"Troll Menace"
+      },
+      "title":"\"Troll Menace\" doesn't advance"
+    },{
+      "action":"T",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
+      "gid":"Dun Morogh 5-11",
+      "id":"F-16d2c2b0",
+      "level":8,
+      "line":120,
+      "log":[440],
+      "name":"Forging a Blade",
+      "qid":440,
+      "reasons":["requires-skill"],
+      "sentence":"The turn-in needs a profession skill the character doesn't have, so the client clicked the step off.",
+      "severity":"medium",
+      "signal":"did-not-advance",
+      "step":{
+        "action":"T",
+        "name":"Forging a Blade"
+      },
+      "title":"\"Forging a Blade\" doesn't advance"
+    },{
+      "action":"C",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
+      "gid":"Dun Morogh 5-11",
+      "id":"F-3b0c009b",
+      "level":8,
+      "line":130,
+      "log":[450],
+      "name":"Hunt the Dire Wolf",
+      "qid":450,
+      "reasons":[],
+      "sentence":"The client did what this step asks, but WoWPro didn't mark it done, so the client clicked it off.",
+      "severity":"medium",
+      "signal":"did-not-advance",
+      "step":{
+        "action":"C",
+        "name":"Hunt the Dire Wolf"
+      },
+      "title":"\"Hunt the Dire Wolf\" doesn't advance"
+    },{
+      "action":"R",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
+      "gid":"Dun Morogh 5-11",
+      "id":"F-7df91ab0",
+      "level":10,
+      "line":175,
+      "name":"Run to Ironforge",
+      "reasons":["same-step"],
+      "sentence":"WoWPro stayed on this step past the watchdog limit.",
+      "severity":"medium",
+      "signal":"stuck",
+      "step":{
+        "action":"R",
+        "name":"Run to Ironforge"
+      },
+      "title":"Stuck on \"Run to Ironforge\""
+    },{
+      "action":"T",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
+      "gid":"Dun Morogh 5-11",
+      "id":"F-8675dc5f",
+      "line":150,
+      "name":"Rumours in Kharanos",
+      "qid":460,
+      "qname":"Rumours in Kharanos",
+      "reasons":["not-turned-in"],
+      "sentence":"The guide accepts this quest here, but no guide the run played has a turn-in step for it; it was still in the log when the run ended.",
+      "severity":"low",
+      "signal":"leftover-quests",
+      "step":{
+        "action":"T",
+        "name":"Rumours in Kharanos"
+      },
+      "title":"Quest \"Rumours in Kharanos\" (460) is not turned in within scope"
+    },{
+      "action":"T",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
+      "gid":"Dun Morogh 5-11",
+      "id":"F-041c5753",
+      "line":160,
+      "name":"Ore for Ironforge",
+      "qid":470,
+      "qname":"Ore for Ironforge",
+      "reasons":[],
+      "sentence":"The run passed this turn-in step, but quest \"Ore for Ironforge\" (470) was still in the log when the run ended.",
+      "severity":"low",
+      "signal":"leftover-quests",
+      "step":{
+        "action":"T",
+        "name":"Ore for Ironforge"
+      },
+      "title":"Quest \"Ore for Ironforge\" (470) is left in the log"
+    },{
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "explains":0,
+      "id":"F-da5d3755",
+      "name":"GetNumGroupMembers",
+      "reasons":[],
+      "sentence":"",
+      "severity":"low",
+      "signal":"missing-global",
+      "step":{
+        "name":"GetNumGroupMembers"
+      },
+      "title":"missing-global: \"GetNumGroupMembers\""
+    },{
+      "action":"H",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "expected":true,
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
+      "gid":"Dun Morogh 1-5",
+      "id":"F-9a73c6fb",
+      "line":215,
+      "name":"Hearth to Kharanos",
+      "reasons":[],
+      "sentence":"No game event completed this step, so the client clicked it off.",
+      "signal":"manual-completion",
+      "step":{
+        "action":"H",
+        "name":"Hearth to Kharanos"
+      },
+      "title":"\"Hearth to Kharanos\" needed a manual click"
+    }],
+  "format":2,
+  "header":{
+    "addon":{
+      "branch":"master",
+      "commit":"0123456789abcdef0123456789abcdef01234567",
+      "dirty":false,
+      "git":true,
+      "path":"../WoW-Pro-Guides",
+      "version":"1.0"
+    },
+    "client":{
+      "commit":"89abcdef0123456789abcdef0123456789abcdef",
+      "dirty":false
+    },
+    "date":"2026-01-01",
+    "gaps":["rested XP","Forever Boosted Rest from campfires","party XP for non-elites (spec §5.5)","dungeon runs and instance XP (spec §3)","Camping 101 quests are recognised only by name from the local supplement (no catalog source names them); without it, profession variants equal baselines","talk-to NPC objectives may be credited as kills","quest rewards give one of each item QuestieDB lists, choice rewards included","subzones are known only from R steps; steps gated on a subzone by IZ may stay hidden"],
+    "guides":[{
+        "end_level":5,
+        "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
+        "flags":[],
+        "gid":"Dun Morogh 1-5",
+        "last_line":220,
+        "levels":{
+          "Dwarf WARRIOR baseline":{
+            "enter":1,
+            "finished":true,
+            "leave":5
+          }
+        },
+        "start_level":1
+      },{
+        "end_level":11,
+        "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
+        "flags":[{
+            "combo":"Dwarf WARRIOR baseline",
+            "rule":"enter-under"
+          }],
+        "gid":"Dun Morogh 5-11",
+        "last_line":180,
+        "levels":{
+          "Dwarf WARRIOR baseline":{
+            "enter":4,
+            "finished":true,
+            "leave":11
+          }
+        },
+        "start_level":5
+      },{
+        "end_level":14,
+        "file":"WoWPro_Leveling/Guides/Alliance/Dun_11_14.lua",
+        "flags":[],
+        "gid":"Dun Morogh 11-14",
+        "last_line":600,
+        "levels":{
+          "Dwarf WARRIOR baseline":{
+            "enter":11,
+            "finished":true,
+            "leave":14
+          }
+        },
+        "start_level":11
+      }],
+    "matrix":{
+      "combos":["Dwarf WARRIOR baseline"]
+    },
+    "notes":{
+      "rank":"Guide rank: 2 (WoWPro's setting for which optional steps are shown)."
+    },
+    "paths_relative_to":"headless-wow-pro-client",
+    "rank":2,
+    "scope":"Dwarf-WARRIOR-baseline",
+    "warnings":["1 guide entered under-levelled"]
+  },
+  "labels":{
+    "actions":{
+      "*":"Trash",
+      "A":"Accept",
+      "B":"Buy",
+      "C":"Complete",
+      "D":"Guide done:",
+      "F":"Fly to",
+      "H":"Hearth to",
+      "K":"Kill",
+      "L":"Reach level",
+      "M":"Make",
+      "N":"Note:",
+      "P":"Take portal to",
+      "R":"Run to",
+      "T":"Turn in",
+      "U":"Use",
+      "a":"Accept repeatable",
+      "b":"Take boat to",
+      "f":"Get flight path at",
+      "h":"Set hearth at",
+      "l":"Loot",
+      "r":"Repair or restock at",
+      "t":"Turn in when complete"
+    },
+    "combos":{
+      "Dwarf WARRIOR baseline":"Dwarf Warrior"
+    },
+    "folds":{
+      "expected":"the client clicked off by design (notes, repair-or-restock stops, guide ends)",
+      "harness":"gaps in this client's WoW API stubs, not guide bugs"
+    },
+    "severities":{
+      "high":"High",
+      "low":"Low",
+      "medium":"Medium",
+      "medium-high":"Medium-high"
+    },
+    "signals":{
+      "accept-refused":"Can't be taken",
+      "below-level":"Offered below level",
+      "did-not-advance":"Doesn't advance",
+      "hidden-use-step":"Use step never shown",
+      "leftover-quests":"Left in log",
+      "log-full":"Quest log full",
+      "lua-error":"Lua error",
+      "manual-completion":"Manual click",
+      "missing-global":"Missing global",
+      "never-shown-accept":"Never offered",
+      "orphan-turnin":"Turn-in without the quest",
+      "stuck":"Stuck",
+      "wrong-race-class":"Wrong race or class"
+    },
+    "stops":{
+      "errors":"Too many addon errors",
+      "guide-cycle":"Guide loops back on itself",
+      "iterations":"Hit its step limit",
+      "max-guides":"Reached --max-guides",
+      "no-step":"No step to show",
+      "stuck":"Stuck on a step"
+    }
+  },
+  "summary":{
+    "by_combo":{
+      "Dwarf WARRIOR baseline":{
+        "high":{
+          "follow":2,
+          "primary":8
+        },
+        "low":{
+          "follow":0,
+          "primary":2
+        },
+        "medium":{
+          "follow":3,
+          "primary":5
+        },
+        "medium-high":{
+          "follow":0,
+          "primary":2
+        }
+      }
+    },
+    "by_file":{
+      "WoWPro_Leveling/Guides/Alliance/Dun_11_14.lua":{
+        "high":{
+          "follow":0,
+          "primary":1
+        },
+        "medium":{
+          "follow":0,
+          "primary":1
+        },
+        "medium-high":{
+          "follow":0,
+          "primary":1
+        }
+      },
+      "WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua":{
+        "high":{
+          "follow":2,
+          "primary":3
+        },
+        "medium":{
+          "follow":2,
+          "primary":0
+        },
+        "medium-high":{
+          "follow":0,
+          "primary":1
+        }
+      },
+      "WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua":{
+        "high":{
+          "follow":0,
+          "primary":3
+        },
+        "low":{
+          "follow":0,
+          "primary":2
+        },
+        "medium":{
+          "follow":1,
+          "primary":4
+        }
+      }
+    },
+    "by_severity":{
+      "high":10,
+      "low":2,
+      "medium":8,
+      "medium-high":2
+    },
+    "by_signal":{
+      "accept-refused":1,
+      "below-level":2,
+      "did-not-advance":6,
+      "hidden-use-step":1,
+      "leftover-quests":2,
+      "log-full":1,
+      "lua-error":2,
+      "manual-completion":1,
+      "never-shown-accept":3,
+      "orphan-turnin":1,
+      "stuck":1,
+      "wrong-race-class":1
+    },
+    "findings":22,
+    "roots":17
+  }
+}

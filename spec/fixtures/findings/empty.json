@@ -1,0 +1,109 @@
+{
+  "findings":[],
+  "format":2,
+  "header":{
+    "addon":{
+      "branch":"master",
+      "commit":"0123456789abcdef0123456789abcdef01234567",
+      "dirty":false,
+      "git":true,
+      "path":"../WoW-Pro-Guides",
+      "version":"1.0"
+    },
+    "client":{
+      "commit":"89abcdef0123456789abcdef0123456789abcdef",
+      "dirty":false
+    },
+    "date":"2026-01-01",
+    "gaps":["rested XP","Forever Boosted Rest from campfires","party XP for non-elites (spec §5.5)","dungeon runs and instance XP (spec §3)","Camping 101 quests are recognised only by name from the local supplement (no catalog source names them); without it, profession variants equal baselines","talk-to NPC objectives may be credited as kills","quest rewards give one of each item QuestieDB lists, choice rewards included","subzones are known only from R steps; steps gated on a subzone by IZ may stay hidden"],
+    "guides":[],
+    "matrix":{
+      "combos":["Dwarf WARRIOR baseline"]
+    },
+    "notes":{
+      "rank":"Guide rank: 2 (WoWPro's setting for which optional steps are shown)."
+    },
+    "paths_relative_to":"headless-wow-pro-client",
+    "rank":2,
+    "scope":"Dwarf-WARRIOR-baseline",
+    "stop":[{
+        "combo":"Dwarf WARRIOR baseline",
+        "reason":"iterations"
+      }],
+    "warnings":[]
+  },
+  "labels":{
+    "actions":{
+      "*":"Trash",
+      "A":"Accept",
+      "B":"Buy",
+      "C":"Complete",
+      "D":"Guide done:",
+      "F":"Fly to",
+      "H":"Hearth to",
+      "K":"Kill",
+      "L":"Reach level",
+      "M":"Make",
+      "N":"Note:",
+      "P":"Take portal to",
+      "R":"Run to",
+      "T":"Turn in",
+      "U":"Use",
+      "a":"Accept repeatable",
+      "b":"Take boat to",
+      "f":"Get flight path at",
+      "h":"Set hearth at",
+      "l":"Loot",
+      "r":"Repair or restock at",
+      "t":"Turn in when complete"
+    },
+    "combos":{
+      "Dwarf WARRIOR baseline":"Dwarf Warrior"
+    },
+    "folds":{
+      "expected":"the client clicked off by design (notes, repair-or-restock stops, guide ends)",
+      "harness":"gaps in this client's WoW API stubs, not guide bugs"
+    },
+    "severities":{
+      "high":"High",
+      "low":"Low",
+      "medium":"Medium",
+      "medium-high":"Medium-high"
+    },
+    "signals":{
+      "accept-refused":"Can't be taken",
+      "below-level":"Offered below level",
+      "did-not-advance":"Doesn't advance",
+      "hidden-use-step":"Use step never shown",
+      "leftover-quests":"Left in log",
+      "log-full":"Quest log full",
+      "lua-error":"Lua error",
+      "manual-completion":"Manual click",
+      "missing-global":"Missing global",
+      "never-shown-accept":"Never offered",
+      "orphan-turnin":"Turn-in without the quest",
+      "stuck":"Stuck",
+      "wrong-race-class":"Wrong race or class"
+    },
+    "stops":{
+      "errors":"Too many addon errors",
+      "guide-cycle":"Guide loops back on itself",
+      "iterations":"Hit its step limit",
+      "max-guides":"Reached --max-guides",
+      "no-step":"No step to show",
+      "stuck":"Stuck on a step"
+    }
+  },
+  "summary":{
+    "by_combo":{
+    },
+    "by_file":{
+    },
+    "by_severity":{
+    },
+    "by_signal":{
+    },
+    "findings":0,
+    "roots":0
+  }
+}

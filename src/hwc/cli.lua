@@ -179,7 +179,7 @@ end
 
 -- The CLI's closing line: both files and the character count.
 function M.wrote_line(stem, n)
-  return "hwc: wrote " .. stem .. ".md and " .. stem .. ".json (" .. n .. (n == 1 and " character" or " characters") .. ")\n"
+  return "hwc: wrote " .. stem .. ".html and " .. stem .. ".json (" .. n .. (n == 1 and " character" or " characters") .. ")\n"
 end
 
 local function write_file(path, text)
@@ -372,7 +372,10 @@ local function play(combos, scope, opts, out, err)
   header.paths_relative_to = base:match("([^/]+)$") or "/"
   local findings = group.findings(logs)
   local stem = outdir .. "/" .. date .. "-" .. scope
-  write_file(stem .. ".json", json.encode(report_json(report.build(findings, header)), { indent = true }) .. "\n")
+  local doc = json.encode(report_json(report.build(findings, header)), { indent = true }) .. "\n"
+  local html = require("hwc.findings.html")
+  write_file(stem .. ".json", doc)
+  write_file(stem .. ".html", html.render(doc, html.template()))
   out:write(M.wrote_line(stem, #logs))
   return 0
 end

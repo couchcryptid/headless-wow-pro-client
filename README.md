@@ -146,13 +146,14 @@ usage error (a missing `--class`, a race outside Human/Dwarf/Gnome/NightElf).
 
 Output, under `--out DIR` (default `~/.hwc/findings`, created if missing, so runs never write into the WoW-Pro folder):
 
-- `DIR/<date>-<scope>.md`: the findings report (layout in
-  `docs/superpowers/specs/2026-11-12-findings-report-design.md`). The scope is
+- `DIR/<date>-<scope>.html`: the findings report, one self-contained page
+  with the findings JSON embedded in it (it opens from disk and loads nothing
+  from the network). The scope is
   `forever-alliance-<races lower, joined by '-'>` for `matrix` and
   `<race>-<class>-<variant>` for `run`. With any filter given, the scope gains
   `-filtered`.
 - `DIR/<date>-<scope>.json`: the same findings as a machine-readable document
-  (the JSON contract in the same spec), which `/triage` reads.
+  (format 2, the JSON the page embeds), which `/triage` reads.
 - `DIR/<date>-<scope>/<race>-<class>-<variant>.json`: one run log per character
   (git-ignored).
 

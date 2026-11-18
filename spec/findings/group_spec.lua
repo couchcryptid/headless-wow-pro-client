@@ -53,6 +53,14 @@ describe("group.findings", function()
     assert.same({ name = "c", action = "C" }, f.after)
   end)
 
+  it("passes the use item and the loot items of a hidden use step through", function()
+    local sig = { signal = "hidden-use-step", gid = "G1", file = "f", line = 1, action = "U", name = "Use", qid = 9,
+      use = "5456", loot = { [5455] = 1 } }
+    local f = group.findings({ runlog("Dwarf", "WARRIOR", { sig }) })[1]
+    assert.equal("5456", f.use)
+    assert.same({ [5455] = 1 }, f.loot)
+  end)
+
   it("keeps the id when the line changes", function()
     local a = group.findings({ runlog("Dwarf", "WARRIOR", { dna({ line = 40 }) }) })[1]
     local b = group.findings({ runlog("Dwarf", "WARRIOR", { dna({ line = 99 }) }) })[1]

@@ -1,0 +1,354 @@
+{
+  "findings":[{
+      "action":"A",
+      "causes":[],
+      "combos":["Gnome MAGE baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
+      "gid":"Dun Morogh 1-5",
+      "id":"F-701d990f",
+      "line":170,
+      "name":"Warrior Training",
+      "qid":310,
+      "reasons":["class"],
+      "sentence":"WoWPro shows this step to a Mage, but quest 310 is for other classes.",
+      "severity":"high",
+      "signal":"wrong-race-class",
+      "step":{
+        "action":"A",
+        "name":"Warrior Training"
+      },
+      "title":"\"Warrior Training\" is shown to the wrong class"
+    },{
+      "action":"A",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
+      "gid":"Dun Morogh 5-11",
+      "id":"F-11f7b959",
+      "line":20,
+      "name":"Beer Run",
+      "qid":421,
+      "reasons":[],
+      "sentence":"The guide tells you to accept this quest, but WoWPro never shows the step and gave no reason.",
+      "severity":"high",
+      "signal":"never-shown-accept",
+      "step":{
+        "action":"A",
+        "name":"Beer Run"
+      },
+      "title":"\"Beer Run\" is never offered"
+    },{
+      "action":"A",
+      "after":{
+        "action":"T",
+        "name":"Wait"
+      },
+      "before":{
+        "action":"R",
+        "name":"Go"
+      },
+      "causes":[],
+      "combos":["Gnome PRIEST baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Wes_12_15.lua",
+      "gid":"Westfall 12-15",
+      "id":"F-ef84fbec",
+      "line":40,
+      "name":"The Defias Brotherhood",
+      "qid":600,
+      "qname":"Deliver the Crates",
+      "reasons":[],
+      "sentence":"The guide reaches this accept below the level the quest requires.",
+      "severity":"medium-high",
+      "signal":"below-level",
+      "step":{
+        "action":"A",
+        "name":"The Defias Brotherhood"
+      },
+      "title":"\"The Defias Brotherhood\" is offered below its level"
+    },{
+      "action":"T",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline","Gnome MAGE baseline","Gnome PRIEST baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
+      "gid":"Dun Morogh 1-5",
+      "id":"F-f2b78d03",
+      "level":3,
+      "line":60,
+      "log":[314],
+      "name":"Report to Grull",
+      "qid":314,
+      "reasons":["incomplete"],
+      "sentence":"The turn-in was refused because quest 314 wasn't complete, so the client clicked the step off.",
+      "severity":"medium",
+      "signal":"did-not-advance",
+      "step":{
+        "action":"T",
+        "name":"Report to Grull"
+      },
+      "title":"\"Report to Grull\" doesn't advance"
+    },{
+      "action":"C",
+      "causes":[],
+      "combos":["Gnome MAGE baseline"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
+      "gid":"Dun Morogh 5-11",
+      "id":"F-bb76db4a",
+      "level":7,
+      "line":33,
+      "log":[410],
+      "name":"Scout the Ridge",
+      "qid":410,
+      "reasons":[],
+      "sentence":"No game event completed this step, so the client clicked it off.",
+      "severity":"medium",
+      "signal":"manual-completion",
+      "step":{
+        "action":"C",
+        "name":"Scout the Ridge"
+      },
+      "title":"\"Scout the Ridge\" needed a manual click"
+    }],
+  "format":2,
+  "header":{
+    "addon":{
+      "branch":"master",
+      "commit":"0123456789abcdef0123456789abcdef01234567",
+      "dirty":false,
+      "git":true,
+      "path":"../WoW-Pro-Guides",
+      "version":"1.0"
+    },
+    "client":{
+      "commit":"89abcdef0123456789abcdef0123456789abcdef",
+      "dirty":false
+    },
+    "date":"2026-01-01",
+    "gaps":["rested XP","Forever Boosted Rest from campfires","party XP for non-elites (spec §5.5)","dungeon runs and instance XP (spec §3)","Camping 101 quests are recognised only by name from the local supplement (no catalog source names them); without it, profession variants equal baselines","talk-to NPC objectives may be credited as kills","quest rewards give one of each item QuestieDB lists, choice rewards included","subzones are known only from R steps; steps gated on a subzone by IZ may stay hidden"],
+    "guides":[{
+        "end_level":5,
+        "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
+        "flags":[],
+        "gid":"Dun Morogh 1-5",
+        "last_line":220,
+        "levels":{
+          "Dwarf WARRIOR baseline":{
+            "enter":1,
+            "finished":true,
+            "leave":5
+          },
+          "Gnome MAGE baseline":{
+            "enter":1,
+            "finished":true,
+            "leave":5
+          },
+          "Gnome PRIEST baseline":{
+            "enter":1,
+            "finished":true,
+            "leave":5
+          }
+        },
+        "start_level":1
+      },{
+        "end_level":11,
+        "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
+        "flags":[],
+        "gid":"Dun Morogh 5-11",
+        "last_line":180,
+        "levels":{
+          "Dwarf WARRIOR baseline":{
+            "enter":5,
+            "finished":true,
+            "leave":11
+          },
+          "Gnome MAGE baseline":{
+            "enter":7,
+            "finished":true,
+            "leave":11
+          }
+        },
+        "start_level":5
+      },{
+        "end_level":15,
+        "file":"WoWPro_Leveling/Guides/Alliance/Wes_12_15.lua",
+        "flags":[{
+            "combo":"Gnome PRIEST baseline",
+            "rule":"enter-over"
+          }],
+        "gid":"Westfall 12-15",
+        "last_line":300,
+        "levels":{
+          "Dwarf WARRIOR baseline":{
+            "enter":12,
+            "finished":false,
+            "leave":14
+          },
+          "Gnome PRIEST baseline":{
+            "enter":16,
+            "finished":true,
+            "leave":16
+          }
+        },
+        "start_level":12
+      }],
+    "matrix":{
+      "combos":["Dwarf WARRIOR baseline","Gnome MAGE baseline","Gnome PRIEST baseline"]
+    },
+    "notes":{
+      "rank":"Guide rank: 2 (WoWPro's setting for which optional steps are shown)."
+    },
+    "paths_relative_to":"headless-wow-pro-client",
+    "rank":2,
+    "scope":"forever-alliance-dwarf-gnome",
+    "warnings":["1 guide entered over-levelled"]
+  },
+  "labels":{
+    "actions":{
+      "*":"Trash",
+      "A":"Accept",
+      "B":"Buy",
+      "C":"Complete",
+      "D":"Guide done:",
+      "F":"Fly to",
+      "H":"Hearth to",
+      "K":"Kill",
+      "L":"Reach level",
+      "M":"Make",
+      "N":"Note:",
+      "P":"Take portal to",
+      "R":"Run to",
+      "T":"Turn in",
+      "U":"Use",
+      "a":"Accept repeatable",
+      "b":"Take boat to",
+      "f":"Get flight path at",
+      "h":"Set hearth at",
+      "l":"Loot",
+      "r":"Repair or restock at",
+      "t":"Turn in when complete"
+    },
+    "combos":{
+      "Dwarf WARRIOR baseline":"Dwarf Warrior",
+      "Gnome MAGE baseline":"Gnome Mage",
+      "Gnome PRIEST baseline":"Gnome Priest"
+    },
+    "folds":{
+      "expected":"the client clicked off by design (notes, repair-or-restock stops, guide ends)",
+      "harness":"gaps in this client's WoW API stubs, not guide bugs"
+    },
+    "severities":{
+      "high":"High",
+      "low":"Low",
+      "medium":"Medium",
+      "medium-high":"Medium-high"
+    },
+    "signals":{
+      "accept-refused":"Can't be taken",
+      "below-level":"Offered below level",
+      "did-not-advance":"Doesn't advance",
+      "hidden-use-step":"Use step never shown",
+      "leftover-quests":"Left in log",
+      "log-full":"Quest log full",
+      "lua-error":"Lua error",
+      "manual-completion":"Manual click",
+      "missing-global":"Missing global",
+      "never-shown-accept":"Never offered",
+      "orphan-turnin":"Turn-in without the quest",
+      "stuck":"Stuck",
+      "wrong-race-class":"Wrong race or class"
+    },
+    "stops":{
+      "errors":"Too many addon errors",
+      "guide-cycle":"Guide loops back on itself",
+      "iterations":"Hit its step limit",
+      "max-guides":"Reached --max-guides",
+      "no-step":"No step to show",
+      "stuck":"Stuck on a step"
+    }
+  },
+  "summary":{
+    "by_combo":{
+      "Dwarf WARRIOR baseline":{
+        "high":{
+          "follow":0,
+          "primary":1
+        },
+        "medium":{
+          "follow":0,
+          "primary":1
+        }
+      },
+      "Gnome MAGE baseline":{
+        "high":{
+          "follow":0,
+          "primary":1
+        },
+        "medium":{
+          "follow":0,
+          "primary":2
+        }
+      },
+      "Gnome PRIEST baseline":{
+        "medium":{
+          "follow":0,
+          "primary":1
+        },
+        "medium-high":{
+          "follow":0,
+          "primary":1
+        }
+      }
+    },
+    "by_file":{
+      "WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua":{
+        "high":{
+          "follow":0,
+          "primary":1
+        },
+        "medium":{
+          "follow":0,
+          "primary":1
+        }
+      },
+      "WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua":{
+        "high":{
+          "follow":0,
+          "primary":1
+        },
+        "medium":{
+          "follow":0,
+          "primary":1
+        }
+      },
+      "WoWPro_Leveling/Guides/Alliance/Wes_12_15.lua":{
+        "medium-high":{
+          "follow":0,
+          "primary":1
+        }
+      }
+    },
+    "by_severity":{
+      "high":2,
+      "medium":2,
+      "medium-high":1
+    },
+    "by_signal":{
+      "below-level":1,
+      "did-not-advance":1,
+      "manual-completion":1,
+      "never-shown-accept":1,
+      "wrong-race-class":1
+    },
+    "findings":5,
+    "roots":5
+  }
+}
