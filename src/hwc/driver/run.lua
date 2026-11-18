@@ -565,6 +565,11 @@ function Driver:quest_color(cur, out)
   local quest = out.qid and catalog and catalog:quest(out.qid)
   if not (quest and quest.level) then return end
   local level = self.W.player.level
+  -- One colour finding per guide line: a repeatable accept replayed at another level
+  -- would otherwise give red and orange findings on one line. The first play wins.
+  self.colored = self.colored or {}
+  local line_key = tostring(cur.gid or self.gid) .. ":" .. tostring(cur.line)
+  if self.colored[line_key] then return end
   local color = quest_color.of(level, quest.level)
   local fields = { qid = out.qid, quest_level = quest.level, char_level = level, color = color }
   if color == "red" or color == "orange" then
@@ -572,6 +577,7 @@ function Driver:quest_color(cur, out)
   elseif color ~= "grey" then
     return
   end
+  self.colored[line_key] = true
   self:signal("quest-" .. color, cur, fields)
 end
 

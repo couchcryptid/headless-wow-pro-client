@@ -221,6 +221,13 @@ function text.quest_ref(id, name, chain)
   return out
 end
 
+-- "0.9", or "less than 0.1" for a shortfall that rounds to 0.0.
+local function levels_short_text(n)
+  local out = string.format("%.1f", n)
+  if out == "0.0" then return "less than 0.1" end
+  return out
+end
+
 local function name_of(f)
   if f.name and f.name ~= "" then return text.with_part(f.name, f.chain) end
   if f.qid then return text.quest_ref(f.qid, f.qname, f.chain) end
@@ -317,7 +324,7 @@ function text.title(f)
   elseif s == "wrong-race-class" then
     return nm .. " is shown to the wrong " .. (kind_of(f) or "race/class")
   elseif s == "below-level" then
-    if f.levels_short then return nm .. " is offered " .. string.format("%.1f", f.levels_short) .. " levels below its level" end
+    if f.levels_short then return nm .. " is offered " .. levels_short_text(f.levels_short) .. " levels below its level" end
     return nm .. " is offered below its level"
   elseif s == "quest-red" or s == "quest-orange" or s == "quest-grey" then
     return nm .. " is " .. tostring(f.color) .. " for this character (quest level " .. tostring(f.quest_level)
@@ -453,7 +460,7 @@ local function clauses(f, ctx)
     -- ground up to, not the level the guide reached the accept at.
     local g = f.grind
     if f.levels_short and g and g.to and g.kills then
-      local out = "The guide reaches this accept " .. string.format("%.1f", f.levels_short) .. " levels below level "
+      local out = "The guide reaches this accept " .. levels_short_text(f.levels_short) .. " levels below level "
         .. tostring(g.to) .. ", the level the quest requires (the client ground " .. tostring(g.kills)
         .. " kills to get there)."
       if f.levels_short < 2 then

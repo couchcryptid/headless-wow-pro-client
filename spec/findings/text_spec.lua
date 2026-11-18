@@ -437,6 +437,16 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     assert.equal("The guide reaches this accept 2.5 levels below level 32, the level the quest requires "
       .. "(the client ground 228 kills to get there).", s)
   end)
+  it("below-level under 0.1 levels short says less than 0.1", function()
+    local t, s = both(F({ signal = "below-level", name = "Tiny", qid = 7, level = 8, levels_short = 0.04,
+      grind = { kills = 2, to = 8 } }))
+    assert.equal('"Tiny" is offered less than 0.1 levels below its level', t)
+    assert.equal("The guide reaches this accept less than 0.1 levels below level 8, the level the quest requires "
+      .. "(the client ground 2 kills to get there). Gaps under 2 levels are within what the simulation's "
+      .. "missing XP explains (no incidental kills or rested XP).", s)
+    t = both(F({ signal = "below-level", name = "Tiny", qid = 7, levels_short = 0, grind = { kills = 2, to = 8 } }))
+    assert.equal('"Tiny" is offered less than 0.1 levels below its level', t)
+  end)
   it("words a red, orange and grey quest", function()
     local f = { signal = "quest-red", name = "Hard", qid = 7, quest_level = 40, char_level = 30, color = "red" }
     local t, s = both(F(f))

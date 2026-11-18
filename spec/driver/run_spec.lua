@@ -850,6 +850,35 @@ describe("driver.run", function()
       assert.same({}, colours(accept(1, { level = 60, noncombat = "commerce" })))
       assert.same({}, colours(accept(30, { level = 33, noncombat = "no-combat-objective" })))
     end)
+    it("emits one colour signal per guide line: the first play wins", function()
+      local steps = { { action = "A", name = "Q", qids = { 5 } }, { action = "R", name = "Back" } }
+      local script = { G1 = { { complete = { 1 } }, { complete = { 2 }, uncomplete = { 1 }, level = 33 } } }
+      local world = fx.fake_world({ [5] = { name = "Hard", level = 36 } })
+      world.player.level = 30
+      local log, E = drive(one_guide(steps), script, {}, world)
+      local plays = 0
+      for _, a in ipairs(E.acted) do if a == "G1:1" then plays = plays + 1 end end
+      assert.equal(2, plays)
+      local c = colours(log)
+      assert.equal(1, #c)
+      assert.equal("quest-red", c[1].signal)
+    end)
+    it("emits nothing for a quest with no level or no catalog entry, and does not error", function()
+      assert.same({}, colours(accept(30, { name = "No level" })))
+      local steps = { { action = "A", name = "Q", qids = { 5 } } }
+      local log = drive(one_guide(steps), { G1 = { { complete = { 1 } } } }, {}, fx.fake_world({}))
+      assert.same({}, colours(log))
+    end)
+    it("reads the level after a grind raised it", function()
+      -- Quest 33 needs level 33: the grind leaves the player at 33, so it is yellow, not red.
+      local steps = { { action = "A", name = "Q", qids = { 5 },
+        outcome = { kind = "acted", grind = { kills = 9, to = 33, short = 3 }, level = 33 } } }
+      local world = fx.fake_world({ [5] = { name = "Q", level = 33, required_level = 33 } })
+      world.player.level = 30
+      local log = drive(one_guide(steps), { G1 = { { complete = { 1 } } } }, {}, world)
+      assert.same({}, colours(log))
+      assert.equal(1, #signals(log, "below-level"))
+    end)
     it("emits nothing for a refused accept", function()
       local steps = { { action = "A", name = "Q", qids = { 5 }, outcome = { kind = "refused", reason = "class" } } }
       local log = drive(one_guide(steps), {}, {}, fx.fake_world({ [5] = { level = 60 } }))

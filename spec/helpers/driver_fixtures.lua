@@ -144,6 +144,8 @@ local function scripted_engine(guides, script, start, world)
     local out = { kind = o.kind, reason = o.reason, qid = (step.qids or {})[1], events = {}, levels = 0,
       grind = o.grind, elite = false, abstracted_turnin = o.abstracted_turnin, missing = o.missing,
       missing_any = o.missing_any, arrivals = o.arrivals }
+    -- o.level: the level the action leaves the player at (a grind during the step).
+    if o.level then ctx.world.player.level = o.level end
     -- o.records: world events this step's action leaves behind (quest_accept / quest_turn_in).
     for _, rec in ipairs(o.records or {}) do ctx.world.events[#ctx.world.events + 1] = rec end
     out.settle = E:settle()
