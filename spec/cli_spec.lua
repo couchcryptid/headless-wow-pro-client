@@ -968,6 +968,17 @@ describe("hwc diff", function()
     assert.equal(2, code)
   end)
 
+  it("exits 2 for a format-2 file with a malformed body", function()
+    local dir = tmpdir()
+    local bad = put(dir, "bad.json", '{"format":2,"header":{"matrix":{"combos":["A"]}},"findings":5}')
+    for _, args in ipairs({ { "diff", bad, bad }, { "diff", bad, bad, "--json" } }) do
+      local code, out, err = run(args)
+      assert.equal(2, code)
+      assert.equal("", out)
+      assert.matches("^hwc: [^\n]*not valid findings files[^\n]*\nsee hwc %-%-help\n$", err)
+    end
+  end)
+
   it("needs no WoW-Pro folder", function()
     local dir = tmpdir()
     local a = put(dir, "a.json", doc({}))

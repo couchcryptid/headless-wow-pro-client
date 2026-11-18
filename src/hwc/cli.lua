@@ -469,14 +469,20 @@ local function run_diff(args, out, err)
     docs[i] = decoded
   end
   local diff = require("hwc.findings.diff")
-  local result, cerr = diff.compare(docs[1], docs[2])
-  if not result then return fail(cerr) end
-  if as_json then
-    out:write(require("hwc.json").encode(result, { indent = true }), "\n")
-  else
-    out:write(diff.render(result))
+  -- A format-2 file with a malformed body must not crash into a traceback.
+  local ok, result, cerr, text, code = pcall(function()
+    local r, e = diff.compare(docs[1], docs[2])
+    if not r then return nil, e end
+    local body = as_json and (require("hwc.json").encode(r, { indent = true }) .. "\n") or diff.render(r)
+    return r, nil, body, diff.exit_code(r)
+  end)
+  if not ok then
+    local first = tostring(result):match("^[^\n]*"):gsub("^[^:]*:%d+: ", "")
+    return fail("not valid findings files: " .. first)
   end
-  return diff.exit_code(result)
+  if not result then return fail(cerr) end
+  out:write(text)
+  return code
 end
 
 -- hwc init / doctor / sync questie: they work on ~/.hwc, so they need no WoW-Pro
