@@ -156,7 +156,8 @@ function diff.compare(old, new)
       for c in pairs(oe.set) do if not ne.set[c] then gone[c] = true end end
       for c in pairs(ne.set) do if not oe.set[c] then added[c] = true end end
       if next(added) then
-        r.spread[#r.spread + 1] = copy_with(ne.finding, ne.set, { added_for = sorted_list(added) })
+        r.spread[#r.spread + 1] = copy_with(ne.finding, ne.set,
+          { added_for = sorted_list(added), fixed_for = array(sorted_list(gone)) })
       elseif next(gone) then
         r.partly_fixed[#r.partly_fixed + 1] = copy_with(ne.finding, ne.set,
           { fixed_for = sorted_list(gone), still = sorted_list(ne.set) })
@@ -180,6 +181,106 @@ end
 
 function diff.exit_code(result)
   return (result.counts.new + result.counts.spread > 0) and 1 or 0
+end
+
+local function names(combos)
+  local out = {}
+  for i, c in ipairs(combos) do out[i] = text.character(c) end
+  return table.concat(out, ", ")
+end
+
+-- "main@aaaaaaa", "main@aaaaaaa (dirty)", or "2026.11.12.A (not a git folder)".
+function diff.side_label(side)
+  if side.git == false then
+    return tostring(side.version) .. " (not a git folder)"
+  end
+  local label = tostring(side.branch) .. "@" .. tostring(side.commit):sub(1, 7)
+  if side.dirty then label = label .. " (dirty)" end
+  return label
+end
+
+-- Entries whose caused_by is another entry of the same list fold under their
+-- root; the root shows how many descendants it carries.
+local function roots_with_follow_ons(list)
+  local ids, children = {}, {}
+  for _, f in ipairs(list) do ids[f.id] = true end
+  for _, f in ipairs(list) do
+    if f.caused_by and ids[f.caused_by] then
+      local kids = children[f.caused_by] or {}
+      kids[#kids + 1] = f.id
+      children[f.caused_by] = kids
+    end
+  end
+  local function descendants(id, seen)
+    local n = 0
+    for _, kid in ipairs(children[id] or {}) do
+      if not seen[kid] then
+        seen[kid] = true
+        n = n + 1 + descendants(kid, seen)
+      end
+    end
+    return n
+  end
+  local out = {}
+  for _, f in ipairs(list) do
+    if not (f.caused_by and ids[f.caused_by]) then
+      out[#out + 1] = { finding = f, follow_ons = descendants(f.id, { [f.id] = true }) }
+    end
+  end
+  return out
+end
+
+local SECTIONS = {
+  { key = "fixed", heading = "Fixed" },
+  { key = "new", heading = "New" },
+  { key = "partly_fixed", heading = "Partly fixed", extra = function(f)
+    return "fixed: " .. names(f.fixed_for) .. " · still: " .. names(f.still)
+  end },
+  { key = "spread", heading = "Spread", extra = function(f)
+    local e = "now also: " .. names(f.added_for)
+    if f.fixed_for and #f.fixed_for > 0 then e = e .. " · fixed: " .. names(f.fixed_for) end
+    return e
+  end },
+}
+
+local function basename(path)
+  return tostring(path):match("([^/]*)$")
+end
+
+function diff.render(result)
+  local out = {}
+  local function add(s) out[#out + 1] = s end
+  local c = result.counts
+
+  add("hwc diff: " .. diff.side_label(result.runs.old) .. " → " .. diff.side_label(result.runs.new))
+  for _, w in ipairs(result.warnings) do add("warning: " .. w.message) end
+  add("")
+
+  if c.fixed + c.new + c.partly_fixed + c.spread == 0 then
+    add(string.format("no changes (%d findings in both)", c.unchanged))
+    return table.concat(out, "\n") .. "\n"
+  end
+
+  local line = string.format("fixed %d · new %d · partly fixed %d", c.fixed, c.new, c.partly_fixed)
+  if c.spread > 0 then line = line .. " · spread " .. c.spread end
+  add(line .. " · unchanged " .. c.unchanged)
+
+  for _, section in ipairs(SECTIONS) do
+    local list = result[section.key]
+    if #list > 0 then
+      add("")
+      add(section.heading)
+      for _, entry in ipairs(roots_with_follow_ons(list)) do
+        local f = entry.finding
+        local row = string.format("  %s %s  %s:%s", text.SEVERITY[f.severity].marker, f.title,
+          basename(f.file), tostring(f.line))
+        if entry.follow_ons > 0 then row = row .. string.format("  (+%d follow-on)", entry.follow_ons) end
+        if section.extra then row = row .. "  " .. section.extra(f) end
+        add(row)
+      end
+    end
+  end
+  return table.concat(out, "\n") .. "\n"
 end
 
 return diff

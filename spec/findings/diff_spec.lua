@@ -69,6 +69,20 @@ describe("diff.compare", function()
     assert.equal(1, diff.exit_code(r))
   end)
 
+  it("keeps fixed_for on a spread finding that also lost characters", function()
+    local r = diff.compare(
+      doc({ combos = { DWARF, GNOME, "Human PRIEST baseline" }, findings = { f("F-1", { DWARF, GNOME }) } }),
+      doc({ combos = { DWARF, GNOME, "Human PRIEST baseline" }, findings = { f("F-1", { GNOME, "Human PRIEST baseline" }) } }))
+    assert.equal(1, r.counts.spread)
+    assert.same({ "Human PRIEST baseline" }, r.spread[1].added_for)
+    assert.same({ DWARF }, r.spread[1].fixed_for)
+  end)
+
+  it("gives a plain spread finding an empty fixed_for", function()
+    local r = diff.compare(doc({ findings = { f("F-1", { DWARF }) } }), doc({ findings = { f("F-1", { DWARF, GNOME }) } }))
+    assert.same({}, r.spread[1].fixed_for)
+  end)
+
   it("ignores harness, expected and severity-less findings", function()
     local r = diff.compare(doc(), doc({ findings = {
       f("F-1", { DWARF }, { signal = "missing-global" }),
@@ -153,5 +167,90 @@ describe("diff.compare", function()
       local r = diff.compare(doc({ filters = nil, commit = "b" }), doc({ filters = {} }))
       assert.same({}, r.warnings)
     end)
+  end)
+end)
+
+describe("diff.render", function()
+  local function render(old, new)
+    local r = assert(diff.compare(old, new))
+    return diff.render(r)
+  end
+  local function lines(s)
+    local out = {}
+    for l in s:gmatch("([^\n]*)\n") do out[#out + 1] = l end
+    return out
+  end
+
+  it("names both sides", function()
+    local out = render(doc({ commit = "aaaaaaaffff" }), doc({ branch = "fix/x", commit = "bbbbbbbeeee", dirty = true }))
+    assert.equal("hwc diff: main@aaaaaaa → fix/x@bbbbbbb (dirty)", lines(out)[1])
+    assert.equal("\n", out:sub(-1))
+  end)
+
+  it("labels a non-git side by its version", function()
+    assert.equal("2026.11.12.A (not a git folder)", diff.side_label({ git = false, version = "2026.11.12.A" }))
+  end)
+
+  it("prints warnings, then counts", function()
+    local out = render(
+      doc({ commit = "b", findings = { f("F-1", { DWARF }), f("F-2", { DWARF }), f("F-3", { DWARF }), f("F-4", { DWARF }) } }),
+      doc({ filters = { { kind = "include", pattern = "x" } }, findings = { f("F-2", { DWARF }), f("F-3", { DWARF }), f("F-4", { DWARF }), f("F-5", { DWARF }) } }))
+    local w = out:find("warning: different guide filters", 1, true)
+    local c = out:find("fixed 1 · new 1 · partly fixed 0 · unchanged 3", 1, true)
+    assert.is_truthy(w); assert.is_truthy(c)
+    assert.is_true(w < c)
+  end)
+
+  it("lists a finding with marker, title, basename and line", function()
+    local out = render(doc(), doc({ findings = { f("F-1", { DWARF }, { title = '"Secure the Mountain" is never offered', line = 162 }) } }))
+    assert.matches('🔴 "Secure the Mountain" is never offered', out, 1, true)
+    assert.matches("01_12_Dun_Morogh.lua:162", out, 1, true)
+    assert.is_nil(out:find("WoWPro_Leveling/", 1, true))
+  end)
+
+  it("folds follow-ons under their root in the same list", function()
+    local out = render(doc({ findings = {
+      f("F-1", { DWARF }, { line = 1 }),
+      f("F-2", { DWARF }, { line = 2, caused_by = "F-1" }),
+      f("F-3", { DWARF }, { line = 3, caused_by = "F-2" }),
+    } }), doc())
+    assert.matches("(+2 follow-on)", out, 1, true)
+    assert.matches("Dun_Morogh.lua:1  (+2 follow-on)", out, 1, true)
+    assert.is_nil(out:find("Dun_Morogh.lua:2", 1, true))
+    assert.is_nil(out:find("Dun_Morogh.lua:3", 1, true))
+  end)
+
+  it("shows who a partly fixed finding was fixed for", function()
+    local out = render(
+      doc({ findings = { f("F-1", { DWARF, GNOME }), f("F-2", { DWARF }, { line = 20 }) } }),
+      doc({ findings = { f("F-1", { DWARF }), f("F-2", { DWARF, GNOME }, { line = 20 }) } }))
+    assert.matches("fixed: Gnome Mage · still: Dwarf Warrior", out, 1, true)
+    assert.matches("now also: Gnome Mage", out, 1, true)
+  end)
+
+  it("shows both sides of a spread finding that also lost characters", function()
+    local priest = "Human PRIEST baseline"
+    local out = render(
+      doc({ combos = { DWARF, GNOME, priest }, findings = { f("F-1", { DWARF, GNOME }) } }),
+      doc({ combos = { DWARF, GNOME, priest }, findings = { f("F-1", { GNOME, priest }) } }))
+    assert.matches("now also: Human Priest · fixed: Dwarf Warrior", out, 1, true)
+  end)
+
+  it("leaves out empty sections", function()
+    local out = render(doc({ findings = { f("F-1", { DWARF }) } }), doc())
+    assert.matches("Fixed", out, 1, true)
+    assert.is_nil(out:find("New", 1, true))
+  end)
+
+  it("adds spread to the counts only when there is some", function()
+    local out = render(doc({ findings = { f("F-1", { DWARF }) } }), doc({ findings = { f("F-1", { DWARF, GNOME }) } }))
+    assert.matches("partly fixed 0 · spread 1 · unchanged 0", out, 1, true)
+  end)
+
+  it("says no changes when nothing moved", function()
+    local same = {}
+    for i = 1, 4 do same[i] = f("F-" .. i, { DWARF }) end
+    local out = render(doc({ findings = same }), doc({ findings = same }))
+    assert.matches("no changes (4 findings in both)", out, 1, true)
   end)
 end)
