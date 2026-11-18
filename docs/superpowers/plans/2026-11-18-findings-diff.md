@@ -71,7 +71,7 @@ Spec §4.6. Without this, the second run of the contributor loop overwrites the 
 - Consumes: `report.is_harness(f)` from `hwc.findings.report`.
 - Produces:
   - `diff.compare(old, new) -> result | nil, err` where `old`/`new` are decoded findings documents (tables) and `err` is a message string for "not comparable".
-  - `result = { old = side, new = side, shared = {combo...}, warnings = { {code=string, message=string}... }, counts = { fixed=n, new=n, partly_fixed=n, spread=n, unchanged=n }, fixed = {f...}, new = {f...}, partly_fixed = {f...}, spread = {f...} }`
+  - `result = { runs = { old = side, new = side }, shared = {combo...}, warnings = { {code=string, message=string}... }, counts = { fixed=n, new=n, partly_fixed=n, spread=n, unchanged=n }, fixed = {f...}, new = {f...}, partly_fixed = {f...}, spread = {f...} }`
   - `side = { branch, commit, dirty, git, version }` copied from `header.addon`.
   - Entries in `partly_fixed` are shallow copies of the NEW finding plus `fixed_for` and `still` (sorted combo lists). Entries in `spread` are copies of the NEW finding plus `added_for`. `fixed` holds OLD findings; `new` holds NEW findings. Every finding's `combos` is already cut to `shared`.
   - `diff.exit_code(result) -> 0 | 1`: 1 when `counts.new + counts.spread > 0`.
@@ -171,6 +171,6 @@ Spec §4.6. Without this, the second run of the contributor loop overwrites the 
 
 - [ ] **Step 6: README "Comparing runs"**: the contributor loop (run on `main`, switch branch, run again with the same flags and from the same folder, `hwc diff`), an example with two real stem names, the five categories, the warning list (one line each), and the exit-code table with the note that 1 means "new findings" here, as in `diff(1)`.
 
-- [ ] **Step 7: Manual check.** From `~/Projects/WoW-Pro-Guides`, run `hwc run --race Dwarf --class WARRIOR --out "$TMPDIR/hwc-diff"`, then `hwc diff` on the resulting `$TMPDIR/hwc-diff/<date>-Dwarf-WARRIOR-baseline.json` against itself. Expected: `no changes (N findings in both)`, the same-commit or dirty warning, `echo $?` → 0.
+- [ ] **Step 7: Manual check.** From `~/Projects/WoW-Pro-Guides`, run `hwc run --race Dwarf --class WARRIOR --out "$TMPDIR/hwc-diff"`, then `hwc diff` on the resulting `$TMPDIR/hwc-diff/<date>-Dwarf-WARRIOR-baseline-<hash>.json` (the path the `wrote` line prints) against itself. Expected: `no changes (N findings in both)`, the same-commit or dirty warning, `echo $?` → 0.
 
 - [ ] **Step 8: Commit.** `git add src/hwc/cli.lua spec/cli_spec.lua README.md && git commit -m "feat: Add hwc diff to compare two findings files"`

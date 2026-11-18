@@ -119,7 +119,7 @@ Partly fixed
 
 ### 4.5 `--json`
 
-One object: `old` and `new` (addon branch/commit/dirty, path given),
+One object: `runs.old` and `runs.new` (addon branch/commit/dirty, path given; under `runs` so they cannot clash with the `new` findings list),
 `warnings` (array of `{ code, message }`), `counts`, and `fixed`, `new`,
 `partly_fixed`, `spread` as arrays of the findings (from the side they're
 present on), partly/spread entries adding `fixed_for`/`still`/`added_for`. Arrays
