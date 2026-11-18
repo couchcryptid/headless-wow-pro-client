@@ -66,6 +66,7 @@ make install                                                  # links bin/hwc in
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc       # zsh
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc      # bash (~/.bash_profile on macOS)
 hwc --help                                                    # check
+hwc version                                                   # release tag and commit (also hwc --version)
 ```
 
 `PREFIX` sets another location (`make install PREFIX=/usr/local`);
@@ -83,6 +84,9 @@ cd ~/Projects/WoW-Pro-Guides
 hwc run --race Dwarf --class WARRIOR                           # play one character along the chain
 hwc diff OLD.json NEW.json                                     # compare two runs (see "Comparing runs")
 ```
+
+`hwc boot`, `hwc matrix` and `hwc sync questie` remain for one release as
+stubs that print what replaced them (`hwc doctor`, `hwc run`, `hwc update`).
 
 `hwc help` lists the commands and `hwc help <command>` shows one command's
 options. `hwc list` shows the races, their classes and the professions that
@@ -519,7 +523,7 @@ client loads files in TOC order, so the harness does the same: Patches loads
 
 The sandbox records every global read that has no value. These are the reads
 left after loading the addon for a Dwarf Warrior (the `hwc doctor` addon check), in first-read order. None of them blocks the
-boot.
+load.
 
 | Globals | Status |
 |---|---|
@@ -534,5 +538,5 @@ boot.
 | `GetBindLocation` | guarded probe (`WoWPro_Events.lua:249`). The hearth location is player state for a later plan, so `WoWProDB.char.hearth` stays unset. |
 
 Frame methods the mock doesn't model show up as `Frame:<Name>`, and
-unstubbed namespaced APIs show up as `<Namespace>.<Field>`. The Dwarf boot
+unstubbed namespaced APIs show up as `<Namespace>.<Field>`. The Dwarf Warrior load
 has neither.
