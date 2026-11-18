@@ -63,7 +63,8 @@ export function visible(doc: ReportDoc, s: FilterState): { roots: Finding[]; lif
   for (const f of doc.findings) {
     if (!counted(f) || !matches(f, s)) continue;
     if (!f.caused_by) roots.push(f);
-    else if (ancestors(f, ids).some((a) => !matches(a, s))) lifted.push(f);
+    // Lifted only when no counted ancestor matches; otherwise childrenShown nests it.
+    else if (!ancestors(f, ids).some((a) => counted(a) && matches(a, s))) lifted.push(f);
   }
   return { roots, lifted };
 }

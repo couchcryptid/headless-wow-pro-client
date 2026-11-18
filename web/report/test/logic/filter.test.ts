@@ -56,11 +56,27 @@ describe("visible", () => {
     expect(v.lifted.map((f) => f.id)).not.toContain(follow.id);
     expect(childrenShown(cause, single, withQ(single, "96393")).map((f) => f.id)).toContain(follow.id);
   });
-  it("lifts a follow-on whose own ancestor chain is partly unmatched", () => {
+  const chain = () => {
+    const root = pick(single, (f) => f.qid === 96393 && !f.caused_by);
+    const middle = pick(single, (f) => f.qid === 93);
     const leaf = pick(single, (f) => f.qid === 94);
-    const v = visible(single, withQ(single, "never offered"));
-    // 94's cause (93) and root (96393) don't both match "never offered"
-    expect(v.lifted.map((f) => f.id)).toContain(leaf.id);
+    return { root, middle, leaf };
+  };
+  it("does not lift a grandchild whose root matches, though the middle does not", () => {
+    const { root, middle, leaf } = chain();
+    const st = withQ(single, "the"); // root and leaf titles contain "the"; the middle's does not
+    expect([root, middle, leaf].map((f) => matches(f, st))).toEqual([true, false, true]);
+    const v = visible(single, st);
+    expect(v.roots.map((f) => f.id)).toContain(root.id);
+    expect(v.lifted.map((f) => f.id)).not.toContain(leaf.id);
+    expect(childrenShown(root, single, st).map((f) => f.id)).toContain(middle.id);
+    expect(childrenShown(middle, single, st).map((f) => f.id)).toEqual([leaf.id]);
+  });
+  it("lifts a grandchild when only it matches", () => {
+    const { leaf } = chain();
+    const v = visible(single, withQ(single, "warrior's path"));
+    expect(v.lifted.map((f) => f.id)).toEqual([leaf.id]);
+    expect(v.roots).toEqual([]);
   });
   it("childrenShown keeps a non-matching cause that has a matching descendant", () => {
     const root = pick(single, (f) => f.qid === 96393 && !f.caused_by);
@@ -137,4 +153,32 @@ describe("matrix", () => {
     expect(c.options.combo[only]).toBe(ids.length);
     
   });
+});
+
+describe("every visible finding is rendered exactly once", () => {
+  const states = (doc: typeof single) => {
+    const d = defaultState(doc);
+    const qs = ["", "the", "93", "94", "advance", "never", "offered", "lua", "Dun_1_5", "Dun_5_11.lua:99", "warrior", "300", "zzz"];
+    const out = qs.map((q) => ({ ...d, q }));
+    out.push({ ...d, sev: new Set(["high"]) }, { ...d, sev: new Set(["medium"]) }, { ...d, kind: new Set(["did-not-advance"]) });
+    for (const c of doc.header.matrix.combos) out.push({ ...d, combo: new Set([c]) });
+    out.push({ ...d, q: "advance", sev: new Set(["medium"]) });
+    return out;
+  };
+  for (const [name, doc] of [["single", single], ["matrix", matrix]] as const) {
+    it(`${name}: walking roots+lifted through childrenShown visits each matching counted finding once`, () => {
+      for (const s of states(doc)) {
+        const v = visible(doc, s);
+        const seen = new Map<string, number>();
+        const walk = (f: (typeof doc.findings)[number], path: Set<string>) => {
+          seen.set(f.id, (seen.get(f.id) ?? 0) + 1);
+          for (const c of childrenShown(f, doc, s)) if (!path.has(c.id)) walk(c, new Set(path).add(c.id));
+        };
+        for (const f of [...v.roots, ...v.lifted]) walk(f, new Set([f.id]));
+        for (const f of doc.findings.filter((x) => counted(x) && matches(x, s))) {
+          expect(seen.get(f.id), `${f.id} under ${JSON.stringify([s.q, [...s.sev]])}`).toBe(1);
+        }
+      }
+    });
+  }
 });
