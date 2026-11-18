@@ -1,8 +1,9 @@
 // The page: holds the FilterState (mirrored in the URL hash) and the open folds,
 // and hands everything else to the logic in ./logic.
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { PageContext, cardId, foldId, scrollToEl, type FoldKey, type Page } from "./components/context";
+import { PageContext, cardId, fileSecId, foldId, scrollToEl, type FoldKey, type Page } from "./components/context";
 import { Folds } from "./components/Folds";
+import { GuideMap } from "./components/GuideMap";
 import { Header } from "./components/Header";
 import { OrderSwitch, Sections } from "./components/Sections";
 import { Sidebar } from "./components/Sidebar";
@@ -97,8 +98,13 @@ export function App({ doc }: { doc: ReportDoc }) {
             <p class="empty">No findings</p>
           ) : (
             <>
-              {/* Guide map (spec §4.4) goes here. */}
-              <div class="map-slot" />
+              <GuideMap
+                onPin={(f) => setPending(cardId(f.id))}
+                onFile={(file) => {
+                  setS({ ...s, order: "guide" });
+                  setPending(fileSecId(file));
+                }}
+              />
               <OrderSwitch onOrder={(order) => setS({ ...s, order })} />
               {c.shown === 0 ? (
                 <div class="empty">

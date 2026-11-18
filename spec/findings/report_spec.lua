@@ -124,6 +124,15 @@ describe("report.build", function()
     assert.equal("Hit its step limit", labels.stops.iterations)
   end)
 
+  it("carries the level-flag rule wording", function()
+    local labels = report.build({}, {}).labels
+    assert.same({
+      ["enter-under"] = "Entered below the guide's start level",
+      ["leave-under"] = "Left below the guide's end level",
+      ["enter-over"] = "Entered above the guide's end level",
+    }, labels.flags)
+  end)
+
   it("carries gaps and warnings in the header", function()
     local doc = report.build({}, { client = { dirty = true }, catalog = { supplement = { present = false } } })
     assert.same(report.GAPS, doc.header.gaps)

@@ -74,7 +74,7 @@ a { color: var(--accent); }
 
 /* ---------- layout ---------- */
 .layout { display: grid; grid-template-columns: 264px minmax(0, 1fr); min-height: 100vh; }
-.main { padding: 28px 40px 80px; max-width: 980px; width: 100%; }
+.main { --gut: 40px; padding: 28px var(--gut) 80px; max-width: 980px; width: 100%; }
 
 /* ---------- severity ---------- */
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--lo); }
@@ -123,6 +123,132 @@ a { color: var(--accent); }
 .warnings li { background: var(--warn-bg); color: var(--warn-ink); padding: 6px 11px; border-radius: 6px; font-size: 13px; }
 .warnings li.stop { background: var(--stop-bg); color: var(--stop-ink); font-weight: 600; }
 
+/* ---------- guide map ---------- */
+.map.full {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 18px 4px; margin: 0 0 14px; scroll-margin-top: 12px;
+}
+.map:focus { outline: none; }
+.map.flash { animation: flash 1.6s ease-out; }
+.tracks { list-style: none; margin: 0; padding: 0; }
+.trk { display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: 16px; align-items: start; padding: 10px 0 6px; }
+.trk + .trk { border-top: 1px solid var(--line); }
+.trk-name { display: flex; flex-direction: column; min-width: 0; padding-top: 1px; }
+.trk-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.trk-file {
+  border: 0; background: none; padding: 0; cursor: pointer; font-weight: 650; font-size: 13.5px;
+  text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-decoration: underline transparent; text-underline-offset: 3px;
+}
+.trk-file:hover { color: var(--accent); text-decoration-color: currentColor; }
+.trk-sub { display: flex; flex-direction: column; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.lv.has-tip { position: relative; align-self: flex-start; cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
+
+/* the level flag: same family as below-level, drawn in its colour */
+.flag { position: relative; display: inline-flex; flex: none; cursor: help; border-radius: 4px; }
+.flag-mark {
+  display: inline-block; padding: 0 5px; border-radius: 4px; font-size: 10px; line-height: 16px; font-weight: 700;
+  color: var(--mh); background: color-mix(in srgb, var(--mh) 15%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mh) 45%, transparent);
+}
+
+.rail-wrap { position: relative; min-width: 0; }
+.rail {
+  position: relative; height: 26px; border-radius: 5px;
+  background: var(--chip); box-shadow: inset 0 0 0 1px var(--line);
+}
+.scale { position: relative; height: 15px; margin-top: 1px; }
+.scale span {
+  position: absolute; top: 2px; transform: translateX(-50%);
+  font: 10px/1 var(--mono); color: var(--muted);
+}
+.scale span::before {
+  content: ""; position: absolute; left: 50%; top: -7px; width: 1px; height: 4px; background: var(--line);
+}
+
+.pin {
+  position: absolute; top: 50%; width: 14px; height: 14px; padding: 0;
+  transform: translate(-50%, -50%); border-radius: 50%; cursor: pointer;
+  background: var(--sev); border: 2px solid var(--panel);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / .22);
+}
+.pin.follow { width: 9px; height: 9px; border-width: 1.5px; }
+.pin:hover, .pin:focus-visible { z-index: 3; box-shadow: 0 0 0 2px var(--ink); }
+.pin:focus-visible { outline-offset: 3px; border-radius: 50%; }
+.pin.grp {
+  width: auto; min-width: 22px; height: 18px; padding: 0 5px; border-radius: 9px;
+  color: #fff; font-size: 10.5px; font-weight: 700; line-height: 14px;
+}
+.pin.grp:focus-visible { border-radius: 9px; }
+.pin.grp[aria-expanded="true"] { box-shadow: 0 0 0 2px var(--ink); }
+.grp-n { display: block; text-shadow: 0 1px 1px rgb(0 0 0 / .3); }
+
+/* tooltips: shown on hover or keyboard focus with no delay */
+.tip {
+  display: none; position: absolute; z-index: 10; bottom: calc(100% + 9px); left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: 320px; padding: 7px 10px; border-radius: 6px;
+  background: var(--ink); color: var(--bg); box-shadow: 0 6px 18px rgb(0 0 0 / .25);
+  font: 400 12px/1.4 var(--sans); text-align: left; white-space: normal; pointer-events: none;
+}
+.tip-l { left: -6px; transform: none; }
+.tip-r { left: auto; right: -6px; transform: none; }
+.pin:hover > .tip, .pin:focus-visible > .tip,
+.flag:hover > .tip, .flag:focus-visible > .tip,
+.has-tip:hover > .tip, .has-tip:focus-visible > .tip { display: block; }
+.tip-title { display: block; font-weight: 650; }
+.tip-meta { display: flex; flex-wrap: wrap; gap: 2px 12px; opacity: .85; }
+.tip-meta .mono { font-size: 11.5px; }
+.tip-sev { display: inline-flex; align-items: center; gap: 5px; }
+.tip-list { display: grid; gap: 2px; margin-top: 5px; }
+.tip-row { display: flex; align-items: baseline; gap: 7px; }
+.tip-row + .tip-row { margin-top: 3px; }
+.tip-row .dot { position: relative; top: -1px; }
+.tip-hint { display: block; margin-top: 5px; font-size: 11px; opacity: .65; }
+.flag .tip, .lv .tip { bottom: auto; top: calc(100% + 7px); }
+.flag .tip-row, .lv .tip-row { display: block; }
+
+/* an open group, spread out under its track */
+.spread {
+  list-style: none; margin: 4px 0 6px; padding: 5px; display: grid; gap: 1px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+}
+.spread-pin {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 3px 6px;
+  border: 0; border-radius: 4px; background: none; cursor: pointer; text-align: left; font-size: 12.5px;
+}
+.spread-pin:hover { background: var(--panel); }
+.spread-pin .mono { color: var(--muted); min-width: 3ch; }
+.spread-pin.follow { padding-left: 20px; }
+.spread-pin.follow .dot { width: 6px; height: 6px; }
+.spread-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* the compact copy, pinned to the top of the main column once the map scrolls away */
+.mini-anchor { position: sticky; top: 0; height: 0; z-index: 6; }
+.map.mini {
+  position: absolute; top: 0; left: calc(-1 * var(--gut)); right: calc(-1 * var(--gut));
+  display: flex; align-items: center; gap: 14px; padding: 6px var(--gut);
+  background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--line); box-shadow: 0 8px 16px -14px rgb(0 0 0 / .5);
+}
+.map.mini .tracks { flex: 1 1 auto; min-width: 0; }
+.map.mini .trk { grid-template-columns: 150px minmax(0, 1fr); gap: 12px; align-items: center; padding: 0; height: 22px; border: 0; }
+.map.mini .trk-file { font-size: 12px; font-weight: 600; }
+.map.mini .trk-n { margin-left: auto; color: var(--muted); font-size: 11px; }
+.map.mini .flag-mark { font-size: 8px; line-height: 13px; padding: 0 3px; }
+.map.mini .rail { height: 12px; border-radius: 6px; }
+.map.mini .pin { width: 10px; height: 10px; border-width: 1.5px; }
+.map.mini .pin.follow { width: 7px; height: 7px; border-width: 1px; }
+.map.mini .pin.grp { min-width: 16px; height: 12px; padding: 0 3px; font-size: 8.5px; line-height: 9px; }
+.map.mini .tip { bottom: auto; top: calc(100% + 7px); }
+.map.mini .spread { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 8; box-shadow: 0 8px 20px rgb(0 0 0 / .2); }
+.mini-back {
+  flex: none; padding: 3px 10px; border-radius: 6px; cursor: pointer; font-size: 12px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+}
+.mini-back:hover { border-color: var(--accent); color: var(--accent); }
+.section.file { scroll-margin-top: var(--mini-h, 0px); }
+.section.file:focus { outline: none; }
+
 /* ---------- order switch ---------- */
 .order { display: flex; align-items: center; gap: 10px; margin: 8px 0 4px; }
 .order-label { color: var(--muted); font-size: 13px; }
@@ -139,7 +265,7 @@ a { color: var(--accent); }
 }
 .section-count, .section-path { font-weight: 400; color: var(--muted); font-size: 12.5px; }
 .section-head.sticky {
-  position: sticky; top: 0; z-index: 2;
+  position: sticky; top: var(--stick, 0px); z-index: 2;
   background: var(--bg); padding: 10px 0 8px; margin-bottom: 4px;
   border-bottom: 1px solid var(--line);
 }
@@ -153,7 +279,7 @@ a { color: var(--accent); }
   border-radius: 6px;
   padding: 12px 14px 8px;
   margin-bottom: 10px;
-  scroll-margin-top: 56px;
+  scroll-margin-top: calc(56px + var(--mini-h, 0px));
 }
 .card:focus { outline: none; }
 .card.flash { animation: flash 1.6s ease-out; }
@@ -235,7 +361,7 @@ a { color: var(--accent); }
 
 /* ---------- folds ---------- */
 .folds { margin-top: 40px; border-top: 1px solid var(--line); }
-.fold { border-bottom: 1px solid var(--line); scroll-margin-top: 8px; }
+.fold { border-bottom: 1px solid var(--line); scroll-margin-top: calc(8px + var(--mini-h, 0px)); }
 .fold:focus { outline: none; }
 .fold.flash { animation: flash 1.6s ease-out; }
 .fold-head { margin: 0; font-size: inherit; }
@@ -270,12 +396,14 @@ a { color: var(--accent); }
   }
   .side-body > .search, .side-body > .reset, .side-body > .also { grid-column: 1 / -1; }
   .side-body > .reset { justify-self: start; }
-  .main { padding: 20px 16px 60px; }
+  .main { --gut: 16px; padding: 20px var(--gut) 60px; }
+  .trk { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .map.mini .trk { grid-template-columns: 92px minmax(0, 1fr); }
   .title { font-size: 21px; }
   .about-row { grid-template-columns: 1fr; gap: 0; }
   .stepkey-pop { width: min(340px, calc(100vw - 48px)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card.flash, .fold.flash { animation: none; outline: 2px solid var(--flash); }
+  .card.flash, .fold.flash, .map.flash { animation: none; outline: 2px solid var(--flash); }
 }

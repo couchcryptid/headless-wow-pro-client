@@ -668,6 +668,11 @@
     "combos":{
       "Dwarf WARRIOR baseline":"Dwarf Warrior"
     },
+    "flags":{
+      "enter-over":"Entered above the guide's end level",
+      "enter-under":"Entered below the guide's start level",
+      "leave-under":"Left below the guide's end level"
+    },
     "folds":{
       "expected":"the client clicked off by design (notes, repair-or-restock stops, guide ends)",
       "harness":"gaps in this client's WoW API stubs, not guide bugs"

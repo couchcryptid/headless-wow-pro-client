@@ -253,6 +253,13 @@ report.FOLDS = {
   expected = "the client clicked off by design (notes, repair-or-restock stops, guide ends)",
 }
 
+-- The guide map's level-flag rules (spec §4.4), for the flag tooltips.
+report.FLAG_RULES = {
+  ["enter-under"] = "Entered below the guide's start level",
+  ["leave-under"] = "Left below the guide's end level",
+  ["enter-over"] = "Entered above the guide's end level",
+}
+
 ---------------------------------------------------------------------------
 -- The document
 ---------------------------------------------------------------------------
@@ -306,7 +313,7 @@ local function labels(header)
   local severities = {}
   for sev, s in pairs(text.SEVERITY) do severities[sev] = s.word end
   return { signals = text.SIGNALS, actions = text.VERBS, combos = combos, stops = text.STOPS,
-    severities = severities, folds = report.FOLDS }
+    severities = severities, folds = report.FOLDS, flags = report.FLAG_RULES }
 end
 
 local function finding_json(f, ctx)

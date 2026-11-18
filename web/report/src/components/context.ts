@@ -2,7 +2,6 @@
 // navigation actions. Display helpers only; no filtering, counting or sorting.
 import { createContext } from "preact";
 import type { FilterState } from "../logic/state";
-import { NO_FILE } from "../logic/state";
 import type { Finding, ReportDoc } from "../types";
 
 export type FoldKey = "harness" | "expected" | "about";
@@ -23,12 +22,10 @@ export const PageContext = createContext<Page>(null as unknown as Page);
 
 export const cardId = (id: string) => `card-${id}`;
 export const foldId = (k: FoldKey) => `fold-${k}`;
+/** Id of a guide file's section in Guide order. */
+export const fileSecId = (file: string) => `file-${file.replace(/[^\w-]/g, "_")}`;
 
-/** The guide file's short name: its basename without ".lua". */
-export function shortFile(p: string): string {
-  if (p === NO_FILE) return "Addon code";
-  return (p.split("/").pop() ?? p).replace(/\.lua$/, "");
-}
+export { shortFile } from "../logic/state";
 
 export function comboLabel(doc: ReportDoc, c: string): string {
   return doc.labels.combos[c] ?? c;

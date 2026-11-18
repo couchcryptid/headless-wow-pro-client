@@ -54,17 +54,20 @@ export interface GuideLevels {
   finished: boolean;
 }
 
+export type FlagRule = "enter-under" | "leave-under" | "enter-over";
+
 export interface GuideFlag {
   combo: string;
-  rule: "enter-under" | "leave-under" | "enter-over";
+  rule: FlagRule;
 }
 
 export interface GuideEntry {
   file: string;
   gid: string;
   last_line: number;
-  start_level: number;
-  end_level: number;
+  /** The guide's declared range; absent when the guide declares none. */
+  start_level?: number;
+  end_level?: number;
   levels: Record<string, GuideLevels>;
   flags: GuideFlag[];
 }
@@ -123,6 +126,8 @@ export interface Labels {
   severities: Record<string, string>;
   folds: Record<string, string>;
   stops: Record<string, string>;
+  /** Level-flag rule to its wording (the map's flag tooltips). */
+  flags: Record<string, string>;
 }
 
 export interface ReportDoc {

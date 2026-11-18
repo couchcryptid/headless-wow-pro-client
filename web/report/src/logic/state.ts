@@ -17,6 +17,12 @@ export const NO_FILE = "(no file)";
 
 export const SEVERITY_ORDER = ["high", "medium-high", "medium", "low"];
 
+/** The guide file's short name: its basename without ".lua". */
+export function shortFile(p: string): string {
+  if (p === NO_FILE) return "Addon code";
+  return (p.split("/").pop() ?? p).replace(/\.lua$/, "");
+}
+
 /** The file option a finding belongs to. */
 export function fileKey(f: Finding): string {
   return f.file ?? NO_FILE;

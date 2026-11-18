@@ -3,7 +3,7 @@ import { useContext } from "preact/hooks";
 import { guideSections, prioritySections } from "../logic/order";
 import type { Order } from "../logic/state";
 import { Card } from "./Card";
-import { PageContext, shortFile } from "./context";
+import { PageContext, fileSecId, shortFile } from "./context";
 
 export function OrderSwitch({ onOrder }: { onOrder: (o: Order) => void }) {
   const { s } = useContext(PageContext);
@@ -50,7 +50,13 @@ function GuideView() {
   return (
     <>
       {guideSections(doc, s).map((sec) => (
-        <section class="section file" key={sec.file ?? ""} aria-label={sec.file ? shortFile(sec.file) : "Addon code"}>
+        <section
+          class="section file"
+          key={sec.file ?? ""}
+          id={sec.file ? fileSecId(sec.file) : undefined}
+          tabIndex={-1}
+          aria-label={sec.file ? shortFile(sec.file) : "Addon code"}
+        >
           <h2 class="section-head sticky">
             <span class="section-name">{sec.file ? shortFile(sec.file) : "Addon code"}</span>
             {sec.file && <span class="section-path mono">{sec.file}</span>}
