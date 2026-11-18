@@ -130,4 +130,21 @@ function kills.grind_to(player, target_level)
   return n, total, levels
 end
 
+-- Grinds same-level generic mobs until the player passes `level`, or is at `level` with
+-- at least `point` XP (the WoWPro LVL check, WoWPro_Broker.lua:2597-2645). Never moves back.
+-- Returns kills, xp, levels.
+function kills.grind_to_point(player, level, point)
+  level = math.min(level, xp.CAP_LEVEL)
+  local n, total, levels = 0, 0, 0
+  while player.level < level or (player.level == level and player.xp < point
+      and player.level < xp.CAP_LEVEL) do
+    local gained = math.floor(xp.mob_xp(player.level, player.level, false, 1))
+    total = total + gained
+    levels = levels + player:add_xp(gained)
+    n = n + 1
+  end
+  if n > 0 then player._record("grind", { to = level, kills = n, xp = point }) end
+  return n, total, levels
+end
+
 return kills

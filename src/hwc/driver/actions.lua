@@ -44,6 +44,7 @@
 -- (alternatives such as 5926^5927^5928 are race/class variants); C/K/T act on the
 -- first listed id in the log (qids[1] when none is).
 local kills = require("hwc.world.kills")
+local xp = require("hwc.world.xp")
 local stubs_core = require("hwc.stubs.core")
 
 local actions = {}
@@ -701,15 +702,25 @@ local function perform_trash(ctx, step, out)
   fire(ctx, out, "BAG_UPDATE", 0)
 end
 
+-- LVL is `level` or `level;offset` (WoWPro_Broker.lua:2597-2645): a positive offset is an XP
+-- point at that level, a negative one is that many XP short of the next level. The character
+-- ends at max(check, actual): grind only when below the check point.
 local function perform_level(ctx, step, out)
   local w = ctx.world
-  local want = tonumber(tostring(step.tags and step.tags.level or ""):match("%d+"))
-  if not want or w.player.level >= want then return end
-  local n, _, levels = kills.grind_to(w.player, want)
+  local tag = tostring(step.tags and step.tags.level or "")
+  local want = tonumber(tag:match("^%s*(%d+)"))
+  if not want then return end
+  local offset = tonumber(tag:match(";%s*(-?%d+)")) or 0
+  local p = w.player
+  local point = offset >= 0 and offset or math.max(0, xp.to_next(math.min(want, xp.CAP_LEVEL)) + offset)
+  if p.level > want or (p.level == want and p.xp >= point) then return end
+  local n, _, levels = kills.grind_to_point(p, want, point)
   out.kind = "acted"
-  out.grind = { kills = n, to = want }
+  out.grind = { kills = n, to = want, point = point }
   out.levels = out.levels + levels
-  after_levels(ctx, levels)
+  -- The addon has no XP handler either: an XP-only grind (no ding) still needs the guide
+  -- re-evaluated, or the L step's own check never runs.
+  ctx.engine:update_guide()
 end
 
 -- The tags every step can carry, applied after the step's own rule.

@@ -372,6 +372,50 @@ describe("actions.perform: level and training", function()
     assert.are.equal(0, E.updates)
   end)
 
+  it("LVL|2;-650 at level 2 with 900 to go grinds to within 650 of the next level", function()
+    local ctx, _, w = setup()
+    w.player.level, w.player.xp = 2, 0
+    local o = actions.perform(ctx, step("L", {}, { level = "2;-650" }))
+    assert.are.equal("acted", o.kind)
+    assert.is_true(o.grind.kills > 0)
+    assert.are.equal(2, o.grind.to)
+    assert.is_true(w.player.level == 3 or w.player:xp_max() - w.player.xp <= 650)
+  end)
+
+  it("LVL|2;-650 with 400 to go does not grind", function()
+    local ctx, _, w = setup()
+    w.player.level = 2
+    w.player.xp = w.player:xp_max() - 400
+    local o = actions.perform(ctx, step("L", {}, { level = "2;-650" }))
+    assert.is_nil(o.grind)
+    assert.are.equal("noop", o.kind)
+  end)
+
+  it("LVL|2;-650 at level 3 does not grind", function()
+    local ctx, _, w = setup()
+    w.player.level, w.player.xp = 3, 0
+    local o = actions.perform(ctx, step("L", {}, { level = "2;-650" }))
+    assert.is_nil(o.grind)
+    assert.are.equal(3, w.player.level)
+  end)
+
+  it("LVL|5;300 at level 5 with 100 XP grinds to at least 300 XP", function()
+    local ctx, E, w = setup()
+    w.player.level, w.player.xp = 5, 100
+    local o = actions.perform(ctx, step("L", {}, { level = "5;300" }))
+    assert.is_true(o.grind.kills > 0)
+    assert.is_true(w.player.level > 5 or w.player.xp >= 300)
+    assert.is_true(E.updates >= 1)
+  end)
+
+  it("a non-L step carrying LVL|2;-650 applies the same check", function()
+    local ctx, _, w = setup()
+    w.player.level, w.player.xp = 2, 0
+    local o = actions.perform(ctx, step("N", {}, { level = "2;-650" }))
+    assert.is_true(o.grind.kills > 0)
+    assert.is_true(w.player.level == 3 or w.player:xp_max() - w.player.xp <= 650)
+  end)
+
   it("= with a P tag trains the profession, firing SKILL_LINES_CHANGED and SPELLS_CHANGED", function()
     local ctx, E, w = setup()
     local o = actions.perform(ctx, step("=", {}, { prof = "Engineering;202" }))
