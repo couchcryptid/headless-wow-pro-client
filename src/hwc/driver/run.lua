@@ -404,7 +404,7 @@ function Driver:wrong_race_class(cur)
     local quest = W.catalog and W.catalog:quest(q)
     local reason
     if quest then
-      if quest.races and not contains(quest.races, p.race_token) then reason = "race"
+      if quest.races and not contains(quest.races, p.race_key) then reason = "race"
       elseif quest.classes and not contains(quest.classes, p.class_token) then reason = "class" end
     end
     if not reason then return end

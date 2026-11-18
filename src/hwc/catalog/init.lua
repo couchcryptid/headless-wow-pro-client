@@ -15,11 +15,18 @@ Catalog.__index = Catalog
 
 local TWO32 = 4294967296
 
--- WoW race and class bits (Classic); masks decode to sorted token lists.
-local RACE_BITS = { Human = 1, Orc = 2, Dwarf = 4, NightElf = 8, Undead = 16, Tauren = 32, Gnome = 64, Troll = 128 }
+-- QuestieDB requiredRaces bits (QuestieDB src/corrections/enum/expansions.lua:11-29,
+-- Forever ChrRaces build 1.60.1.69893): masks decode to sorted Player.RACES keys.
+-- Keys, not client tokens: both Skyborne races answer the token "Skyborne".
+local RACE_BITS = {
+  Human = 1, Orc = 2, Dwarf = 4, NightElf = 8, Undead = 16, Tauren = 32, Gnome = 64, Troll = 128,
+  SkyborneAlliance = 4294967296, SkyborneHorde = 8589934592,
+}
 local CLASS_BITS = { WARRIOR = 1, PALADIN = 2, HUNTER = 4, ROGUE = 8, PRIEST = 16, SHAMAN = 64, MAGE = 128, WARLOCK = 256, DRUID = 1024 }
--- QuestieDB masks that mean "any race" (sim.py:205-209).
-local ANY_RACES = { [0] = true, [4294967373] = true, [77] = true, [2047] = true }
+-- QuestieDB masks that mean "any race" (sim.py:205-209). The faction masks
+-- (77 classic Alliance, 4294967373 Forever Alliance with Skyborne) used to be
+-- here too; they decode now, so a Horde character can't take an Alliance quest.
+local ANY_RACES = { [0] = true, [2047] = true }
 
 -- Quest fields a supplement entry may set.
 local SUPPLEMENT_FIELDS = {
@@ -33,11 +40,11 @@ local function nz(v)
   return v
 end
 
+-- Whole-number arithmetic, not the 32-bit bit library: Skyborne sits on bits 32/33.
 local function mask_to_list(mask, bits)
-  local low = mask % TWO32
   local out = {}
   for token, bit in pairs(bits) do
-    if math.floor(low / bit) % 2 == 1 then out[#out + 1] = token end
+    if math.floor(mask / bit) % 2 == 1 then out[#out + 1] = token end
   end
   table.sort(out)
   return out

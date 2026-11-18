@@ -5,25 +5,82 @@ local PROFESSION_SPELLS = require("hwc.world.profession_spells")
 local Player = {}
 Player.__index = Player
 
--- Alliance races in scope (Plan 2 carry-over): race key -> { client display name, race token }.
--- Horde races are rejected by config.load until Horde is in scope.
+-- Races in scope: race key -> {
+--   name     client display name (UnitRace first return),
+--   token    client file token (UnitRace second return; the engine keys
+--            ForeverStartGuides by it, WoWPro_Leveling.lua:49-59, so Undead is Scourge),
+--   faction  UnitFactionGroup,
+--   classes  sorted class tokens the race can play in Forever,
+--   start    { zone, uiMapID, x, y } where a new character spawns }.
+-- Classes: Blizzard, "Create the Hero You Want to Be in World of Warcraft: Forever",
+-- https://worldofwarcraft.blizzard.com/news/24304075/ (race/class tables, read 2026-11-18);
+-- Gnome Priest also confirmed in game by the user (2026-11-17, 2026-11-18).
+-- Start: the race's starting zone and its client uiMapID. x, y approximate the
+-- starting area (its first quest giver, where the start guide's first M tag puts
+-- them); only the first event sees them, because the driver moves the player to
+-- each step's own M coordinates before acting.
+-- Skyborne is two races in the client (ChrRaces 95 SKYBORNE_ALLIANCE and 96
+-- SKYBORNE_HORDE, QuestieDB src/corrections/enum/expansions.lua:27-28), picked at
+-- character creation, with different classes and display names. Both answer the
+-- token "Skyborne" (user, in game 2026-11-18: UnitRace gives "High Order Skyborne",
+-- "Skyborne", 95 and "Windshaper Skyborne", "Skyborne", 96):
+-- the engine's single ForeverStartGuides key (WoWPro_Leveling.lua:58) loads a
+-- start guide for either, and RegisterGuide's faction check
+-- (WoWPro_GuideRegistry.lua:266) picks the Alliance or Horde Zephras Isle file.
 Player.RACES = {
-  Human = { name = "Human", token = "Human" },
-  Dwarf = { name = "Dwarf", token = "Dwarf" },
-  Gnome = { name = "Gnome", token = "Gnome" },
-  NightElf = { name = "Night Elf", token = "NightElf" },
+  Dwarf = { name = "Dwarf", token = "Dwarf", faction = "Alliance",
+    classes = { "HUNTER", "PALADIN", "PRIEST", "ROGUE", "SHAMAN", "WARRIOR" },
+    start = { "Dun Morogh", 1426, 0.3, 0.7 } },
+  Gnome = { name = "Gnome", token = "Gnome", faction = "Alliance",
+    classes = { "MAGE", "PRIEST", "ROGUE", "WARLOCK", "WARRIOR" },
+    start = { "Dun Morogh", 1426, 0.3, 0.7 } },
+  Human = { name = "Human", token = "Human", faction = "Alliance",
+    classes = { "HUNTER", "MAGE", "PALADIN", "PRIEST", "ROGUE", "WARLOCK", "WARRIOR" },
+    start = { "Elwynn Forest", 1429, 0.48, 0.42 } },
+  NightElf = { name = "Night Elf", token = "NightElf", faction = "Alliance",
+    classes = { "DRUID", "HUNTER", "PRIEST", "ROGUE", "WARRIOR" },
+    start = { "Teldrassil", 1438, 0.59, 0.44 } },
+  Orc = { name = "Orc", token = "Orc", faction = "Horde",
+    classes = { "HUNTER", "MAGE", "ROGUE", "SHAMAN", "WARLOCK", "WARRIOR" },
+    start = { "Durotar", 1411, 0.43, 0.69 } },
+  Tauren = { name = "Tauren", token = "Tauren", faction = "Horde",
+    classes = { "DRUID", "HUNTER", "SHAMAN", "WARRIOR" },
+    start = { "Mulgore", 1412, 0.44, 0.77 } },
+  Troll = { name = "Troll", token = "Troll", faction = "Horde",
+    classes = { "HUNTER", "MAGE", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "WARRIOR" },
+    start = { "Durotar", 1411, 0.43, 0.69 } },
+  Undead = { name = "Undead", token = "Scourge", faction = "Horde",
+    classes = { "MAGE", "PALADIN", "PRIEST", "ROGUE", "WARLOCK", "WARRIOR" },
+    start = { "Tirisfal Glades", 1420, 0.30, 0.71 } },
+  SkyborneAlliance = { name = "High Order Skyborne", token = "Skyborne", faction = "Alliance",
+    classes = { "DRUID", "HUNTER", "MAGE", "ROGUE", "WARRIOR" },
+    start = { "Zephras Isle", 2521, 0.43, 0.23 } },
+  SkyborneHorde = { name = "Windshaper Skyborne", token = "Skyborne", faction = "Horde",
+    classes = { "DRUID", "HUNTER", "ROGUE", "SHAMAN", "WARRIOR" },
+    start = { "Zephras Isle", 2521, 0.43, 0.23 } },
 }
+
+-- Can the race play the class (an upper-case token) in Forever?
+function Player.can_play(race, class)
+  local r = Player.RACES[race]
+  if not r then return false end
+  for _, c in ipairs(r.classes) do
+    if c == class then return true end
+  end
+  return false
+end
 
 local function titlecase(s) return (s:sub(1, 1):upper() .. s:sub(2):lower()) end
 
 -- record(kind, fields) appends a world-change record; supplied by the World.
 function Player.new(cfg, record)
   local race = assert(Player.RACES[cfg.race], "hwc: race not in scope: " .. tostring(cfg.race))
+  local start = race.start
   return setmetatable({
-    name = "Hwc", realm = "HwcRealm", race = race.name, race_token = race.token,
+    name = "Hwc", realm = "HwcRealm", race = race.name, race_token = race.token, race_key = cfg.race,
     class = titlecase(cfg.class), class_token = cfg.class:upper(),
-    faction = cfg.faction, sex = cfg.sex,
-    level = 1, xp = 0, zone = "Dun Morogh", subzone = "", map_id = 1426, x = 0.3, y = 0.7,
+    faction = cfg.faction or race.faction, sex = cfg.sex,
+    level = 1, xp = 0, zone = start[1], subzone = "", map_id = start[2], x = start[3], y = start[4],
     bind = nil, flight_points = {}, skills = {}, spells = {}, bags = {},
     _record = record or function() end,
   }, Player)

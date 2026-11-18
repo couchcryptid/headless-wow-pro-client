@@ -108,7 +108,8 @@ end
 function Engine:source_index()
   local path = self.result.addon and self.result.addon.path
   if not path then return nil end
-  self._index = self._index or guide_source.index(path)
+  local character = self:character()
+  self._index = self._index or guide_source.index(path, nil, character and character.faction)
   return self._index
 end
 

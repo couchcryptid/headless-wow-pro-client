@@ -29,8 +29,11 @@ Commands:
 
 Options:
   -h, --help    Show this help
-  --race RACE   Player race (boot default Human; run default Dwarf; repeatable for matrix)
-  --class CLASS Player class token, e.g. WARRIOR (default WARRIOR)
+  --race RACE   Player race (boot default Human; run default Dwarf; repeatable for matrix):
+                Dwarf, Gnome, Human, NightElf, SkyborneAlliance (Alliance);
+                Orc, Tauren, Troll, Undead, SkyborneHorde (Horde)
+  --class CLASS Player class token, e.g. WARRIOR (default WARRIOR); must be one the
+                race can play in Forever
   --json        Print the boot result as JSON
   --variant V   Profession variant: baseline, secondary, alch-herb, bs-mining, lw-skin,
                 eng-ench, tailoring (default baseline)
@@ -384,8 +387,13 @@ local function play(combos, scope, opts, out, err)
 end
 
 -- Usage-level validation shared by run and matrix: nil, or a message for exit 2.
-local function check_race(race)
-  if not require("hwc.world.player").RACES[race] then return "race not in scope: " .. tostring(race) end
+-- With a class, also that the race can play it in Forever (Player.RACES).
+local function check_race(race, class)
+  local Player = require("hwc.world.player")
+  if not Player.RACES[race] then return "race not in scope: " .. tostring(race) end
+  if class and not Player.can_play(race, class:upper()) then
+    return race .. " can't be a " .. class:upper() .. " in Forever"
+  end
 end
 
 -- "-filtered" marks output that played only part of the chain.
@@ -400,17 +408,22 @@ local function run_run(opts, out, err)
 end
 
 local function run_matrix(races, opts, out, err)
-  local combos = require("hwc.driver.matrix").combos(opts.root, races)
+  local combos = require("hwc.driver.matrix").combos(races)
   -- Nothing to play: no findings file (it would carry an "Addon: nil" header).
   if #combos == 0 then
-    err:write("hwc: matrix: no combos for ", table.concat(races, ","),
-      " (the start guide names no class for these races)\n")
+    err:write("hwc: matrix: no combos for ", table.concat(races, ","), "\n")
     return 2
   end
-  local names = {}
-  for i, r in ipairs(races) do names[i] = r:lower() end
+  -- forever-<faction>-<races> when every race is on one side, else forever-<races>.
+  local RACES = require("hwc.world.player").RACES
+  local names, faction = {}, RACES[races[1]].faction
+  for i, r in ipairs(races) do
+    names[i] = r:lower()
+    if RACES[r].faction ~= faction then faction = nil end
+  end
+  local prefix = faction and ("forever-" .. faction:lower() .. "-") or "forever-"
   opts.matrix = true
-  return play(combos, scoped("forever-alliance-" .. table.concat(names, "-"), opts), opts, out, err)
+  return play(combos, scoped(prefix .. table.concat(names, "-"), opts), opts, out, err)
 end
 
 local function strip(msg) return (tostring(msg):gsub("^hwc: ", "")) end
@@ -644,7 +657,7 @@ function M.main(args, out, err, env)
         if not require("hwc.driver.matrix").professions(o.variant or "baseline") then
           return nil, nil, "unknown variant: " .. o.variant
         end
-        local bad = check_race(o.race or "Dwarf")
+        local bad = check_race(o.race or "Dwarf", o.class)
         if bad then return nil, nil, bad end
         return o
       end,
