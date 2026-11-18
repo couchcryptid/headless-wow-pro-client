@@ -17,5 +17,7 @@
   "92009": {"name": "Fixture Human Level Three", "level": 3, "required_level": 3, "xp": 50, "races": ["Human"], "objectives": [], "source": "invented fixture"},
   "92010": {"name": "Fixture Ribs And Malt", "level": 1, "required_level": 1, "xp": 50,
             "objectives": [{"kind": "item", "ids": [5010], "count": 6, "text": "Fixture Rib"},
-                           {"kind": "item", "ids": [5011], "count": 1, "text": "Fixture Malt"}], "source": "invented fixture"}
+                           {"kind": "item", "ids": [5011], "count": 1, "text": "Fixture Malt"}], "source": "invented fixture"},
+  "92011": {"name": "Fixture Find The Body", "level": 1, "required_level": 1, "xp": 50,
+            "objectives": [{"kind": "npc", "ids": [2003], "count": 1, "text": "Fixture Body"}], "source": "invented fixture"}
  }}

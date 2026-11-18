@@ -486,11 +486,24 @@ end
 
 -- Sets out.explained when it records a signal that says why the step was refused:
 -- the driver then clicks the step off without a did-not-advance as well.
+-- A prerequisite refusal names the prerequisites that aren't done (QuestLog:refusal)
+-- and their names, keyed by the id as a string, so the finding can say which quest is
+-- missing and the linker can attach it under that quest's own failure.
+function Driver:missing_prerequisites(sig, missing)
+  local ids, names = {}, {}
+  for i, id in ipairs(missing) do
+    ids[i] = id
+    names[tostring(id)] = self:quest_name(id)
+  end
+  sig.missing, sig.missing_names = ids, names
+end
+
 function Driver:refusals(cur, out)
   if out.kind == "refused" then
     local r = out.reason
     if REFUSAL_SIGNALS[r] then
       local sig = self:signal(REFUSAL_SIGNALS[r], cur, { qid = out.qid, reason = r, outcome = out.kind })
+      if r == "prerequisite" and out.missing then self:missing_prerequisites(sig, out.missing) end
       if r == "reputation" then self:reputation_refusal(sig) end
       out.explained = true
     elseif r == "not-in-log" and (cur.action == "T" or cur.action == "C") then

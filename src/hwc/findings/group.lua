@@ -76,7 +76,8 @@ local function new_finding(s, key)
     id = "F-" .. group.fnv1a32(key), signal = s.signal, file = s.file, line = s.line, gid = s.gid,
     action = s.action, name = s.name, qid = s.qid, why = s.why, before = s.before, after = s.after,
     qname = s.qname, grind = s.grind, use = s.use, loot = s.loot, level = s.level, log = s.log, confidence = s.confidence, rep = s.rep,
-    faction = s.faction, faction_name = s.faction_name, tag_faction = s.tag_faction, combos = {}, causes = {}, reasons = {},
+    faction = s.faction, faction_name = s.faction_name, tag_faction = s.tag_faction,
+    missing = s.missing, missing_names = s.missing_names, combos = {}, causes = {}, reasons = {},
   }
   if s.signal == "lua-error" then
     f.name, f.message, f.stack = s.message, s.message, s.stack
@@ -131,7 +132,9 @@ end
 --     (WoWPro hides the U step until its L items are in bags, so the quest never completes);
 --   * a never-shown-accept -> what blocks its unmet prerequisite N, in order of
 --     preference: a refusal of N, a hidden-use-step of N, an incomplete turn-in of N,
---     a never-shown-accept of N.
+--     a never-shown-accept of N;
+--   * a prerequisite accept-refused that names its missing prerequisites -> what blocks
+--     the first of them, in the same order.
 -- Lowest id breaks ties; a link that would close a cycle is refused.
 local function link_roots(findings)
   local by_id = {}
@@ -150,6 +153,10 @@ local function link_roots(findings)
       on_line[at(f)] = on_line[at(f)] or {}
       table.insert(on_line[at(f)], f)
     end
+  end
+  -- What keeps quest n from being done, in order of preference.
+  local function blocker(n)
+    return pick(refusals[n]) or pick(hidden_use[n]) or pick(incomplete_turnin[n]) or pick(hidden[n])
   end
   for _, f in ipairs(findings) do
     if f.qid and FOLLOWS_REFUSAL[f.signal] then
@@ -172,7 +179,10 @@ local function link_roots(findings)
       -- "NextStep:PRE&(%s): A mandatory prereq was not met: %s". Only the id after
       -- "not met:" counts; a why without that phrase links nothing.
       local n = tonumber(f.why:match("not met:%s*(%d+)"))
-      local target = n and (pick(refusals[n]) or pick(hidden_use[n]) or pick(incomplete_turnin[n]) or pick(hidden[n]))
+      local target = n and blocker(n)
+      if target and target ~= f then link(f, target, by_id) end
+    elseif f.signal == "accept-refused" and has(f.reasons, "prerequisite") and f.missing and f.missing[1] then
+      local target = blocker(f.missing[1])
       if target and target ~= f then link(f, target, by_id) end
     end
   end

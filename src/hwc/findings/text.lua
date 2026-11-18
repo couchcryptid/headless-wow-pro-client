@@ -363,6 +363,15 @@ local function clauses(f, ctx)
       local label = label_for(f, ctx, kind)
       return "The guide shows this accept, but the quest data says " .. article(label) .. label .. " can't take quest " .. q .. "."
     end
+    if f.missing and f.missing[1] then
+      local names, list = f.missing_names or {}, {}
+      for i, id in ipairs(f.missing) do
+        local nm = names[tostring(id)]
+        list[i] = "quest " .. tostring(id) .. ((nm and nm ~= "") and (" (" .. nm .. ")") or "")
+      end
+      return "The guide shows this accept, but the quest data says it needs " .. table.concat(list, " and ")
+        .. ", which " .. (#list > 1 and "aren't" or "isn't") .. " done yet."
+    end
     return "The guide shows this accept, but the quest data says a prerequisite of quest " .. q .. " isn't done yet."
   elseif s == "log-full" then
     return "The guide shows this accept while the quest log is already full."

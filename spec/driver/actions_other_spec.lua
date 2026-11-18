@@ -110,6 +110,53 @@ describe("actions.perform: travel", function()
   end)
 end)
 
+-- A run-to step that names a quest objective (01_12_Dun_Morogh.lua:158, R Secure the
+-- Mountain|ACTIVE|98319|QO|1|): in game, reaching the place credits the objective.
+-- Progress only, no kill XP: the NPC objective is a body or person to find.
+describe("actions.perform: R credits its QO objectives", function()
+  it("credits the named NPC objective of a quest in the log, with no XP", function()
+    local ctx, E, w = setup()
+    actions.perform(ctx, step("A", { 92011 }))
+    local xp, level = w.player.xp, w.player.level
+    E.fired = {}
+    local o = actions.perform(ctx, step("R", { 92011 }, { zone = "1426; Dun Morogh", questtext = "1" }, "Body"))
+    assert.are.equal("acted", o.kind)
+    assert.are.same({ 1 }, w.log:haves(92011))
+    assert.is_true(w.log:is_complete(92011))
+    assert.are.same({ xp, level }, { w.player.xp, w.player.level })
+    assert.are.equal(0, o.levels)
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "QUEST_LOG_UPDATE" }, names(E))
+  end)
+
+  it("progresses only up to what the QO part asks, and an item objective through the bags", function()
+    local ctx, _, w = setup()
+    actions.perform(ctx, step("A", { 92003 }))
+    actions.perform(ctx, step("R", { 92003 }, { questtext = "2>3" }))
+    assert.are.same({ 0, 3 }, w.log:haves(92003))
+    actions.perform(ctx, step("A", { 92008 }))
+    actions.perform(ctx, step("R", { 92008 }, { questtext = "1>3" }))
+    assert.are.same({ 3 }, w.log:haves(92008))
+    assert.are.equal(3, w.player.bags[5002])
+  end)
+
+  it("credits nothing without a QO", function()
+    local ctx, E, w = setup()
+    actions.perform(ctx, step("A", { 92011 }))
+    E.fired = {}
+    actions.perform(ctx, step("R", { 92011 }, { zone = "1426; Dun Morogh" }, "Body"))
+    assert.are.same({ 0 }, w.log:haves(92011))
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
+  end)
+
+  it("credits nothing, without error, for a quest not in the log", function()
+    local ctx, E, w = setup()
+    local o = actions.perform(ctx, step("R", { 92011 }, { zone = "1426; Dun Morogh", questtext = "1" }, "Body"))
+    assert.are.equal("acted", o.kind)
+    assert.is_nil(w.log:get(92011))
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
+  end)
+end)
+
 -- Travel-location fix (spec §5.1 "position = the step's M coordinate when it has
 -- one"): a player walks to every step's Z/M, so a non-travel step with a Z or M
 -- moves the player there before acting. Without this a later travel step to the

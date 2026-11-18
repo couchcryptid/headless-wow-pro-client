@@ -204,14 +204,15 @@ end
 -- Picks the id to accept from a multi-QID A step (any-of, as the engine's own
 -- QIDsInTable test at WoWPro_Events.lua:709): the first id acceptable now, else
 -- the first id whose only refusal is below-level (acceptable after a grind).
--- Returns qid, opts, needs_grind; or nil, first id's reason when every id is refused.
+-- Returns qid, opts, needs_grind; or nil, first id's reason, its missing prerequisite
+-- ids (QuestLog:refusal, for "prerequisite") when every id is refused.
 local function choose_accept(w, qids, qo)
-  local first_reason, grind_qid, grind_opts
+  local first_reason, first_missing, grind_qid, grind_opts
   for _, qid in ipairs(qids) do
     local opts = accept_opts(w, qid, qo)
-    local reason = w.log:refusal(qid, opts)
+    local reason, missing = w.log:refusal(qid, opts)
     if not reason then return qid, opts, false end
-    first_reason = first_reason or reason
+    if not first_reason then first_reason, first_missing = reason, missing end
     if reason == "below-level" and not grind_qid then
       local other = w.log:refusal(qid, { placeholder_qo = opts and opts.placeholder_qo, ignore_level = true })
       if not other then grind_qid, grind_opts = qid, opts end
@@ -222,9 +223,10 @@ local function choose_accept(w, qids, qo)
   -- quest the player can't take even once levelled).
   if first_reason == "below-level" then
     local o = accept_opts(w, qids[1], qo)
-    first_reason = w.log:refusal(qids[1], { placeholder_qo = o and o.placeholder_qo, ignore_level = true }) or first_reason
+    local other, missing = w.log:refusal(qids[1], { placeholder_qo = o and o.placeholder_qo, ignore_level = true })
+    if other then first_reason, first_missing = other, missing end
   end
-  return nil, first_reason
+  return nil, first_reason, first_reason == "prerequisite" and first_missing or nil
 end
 
 local function perform_accept(ctx, step, out)
@@ -241,9 +243,9 @@ local function perform_accept(ctx, step, out)
   end
   local qid, opts, needs_grind = choose_accept(w, step.qids, qo)
   if not qid then
-    local reason = opts
+    local reason, missing = opts, needs_grind -- the refused shape: nil, reason, missing
     out.qid = step.qids[1]
-    out.kind, out.reason = "refused", reason
+    out.kind, out.reason, out.missing = "refused", reason, missing
     return
   end
   out.qid = qid
@@ -512,6 +514,39 @@ local function walk_to_step(ctx, step, out)
   fire(ctx, out, "ZONE_CHANGED")
 end
 
+-- An R step with a QO tag for a quest in the log (01_12_Dun_Morogh.lua:158, R Secure
+-- the Mountain|ACTIVE|98319|QO|1|: find Mountaineer Cornelius' body): in game, reaching
+-- the place credits the named objectives. The engine fills a QO step's QID from ACTIVE
+-- (WoWPro_Parser.lua:834-836), so step.qids holds it. Progress only, up to what each QO
+-- part asks: no kill XP (credit_objective's), since such an NPC objective is a body or
+-- person found, not a kill. Item objectives go through the bags.
+local function credit_arrival(ctx, step, out)
+  local w = ctx.world
+  local parts = parse_qo(step.tags and step.tags.questtext)
+  local qid = parts and in_log_qid(w, step.qids)
+  local entry = qid and w.log:get(qid)
+  if not entry then return end
+  out.qid = qid
+  local changed, items = false, false
+  for _, part in ipairs(parts) do
+    local obj = entry.quest.objectives[part.index]
+    if obj then
+      local have = w.log:have(qid, part.index)
+      local delta = wanted(obj, have, part) - have
+      if delta > 0 and obj.kind == "item" and obj.ids and obj.ids[1] then
+        add_item(ctx, out, obj.ids[1], delta)
+        changed, items = true, true
+      elseif delta > 0 then
+        w.log:progress(qid, part.index, delta)
+        changed = true
+      end
+    end
+  end
+  if not changed then return end
+  fire(ctx, out, "QUEST_LOG_UPDATE")
+  if items then fire(ctx, out, "BAG_UPDATE", 0) end
+end
+
 local function perform_travel(ctx, step, out)
   local p = ctx.world.player
   local tags = step.tags or {}
@@ -532,6 +567,7 @@ local function perform_travel(ctx, step, out)
   out.kind = "acted"
   fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
   fire(ctx, out, "ZONE_CHANGED")
+  if step.action == "R" then credit_arrival(ctx, step, out) end
 end
 
 local function perform_flight_point(ctx, step, out)

@@ -142,7 +142,7 @@ local function scripted_engine(guides, script, start, world)
     E.pending = { gid = E.cur_gid, index = step.index }
     local o = s.outcome or { kind = "acted" }
     local out = { kind = o.kind, reason = o.reason, qid = (step.qids or {})[1], events = {}, levels = 0,
-      grind = o.grind, elite = false, abstracted_turnin = o.abstracted_turnin }
+      grind = o.grind, elite = false, abstracted_turnin = o.abstracted_turnin, missing = o.missing }
     out.settle = E:settle()
     return out
   end

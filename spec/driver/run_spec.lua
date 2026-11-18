@@ -691,6 +691,19 @@ describe("driver.run", function()
     assert.same({ "G1:1", "G1:2", "G1:3", "G1:5" }, E.manual)
   end)
 
+  it("carries the missing prerequisites and their names on a prerequisite accept-refused", function()
+    local steps = {
+      { action = "A", name = "The Reports", qids = { 291 },
+        outcome = { kind = "refused", reason = "prerequisite", missing = { 98323, 99999 } } },
+    }
+    local log = drive(one_guide(steps), {}, {}, fx.fake_world({ [98323] = { name = "Secure the Mountain" } }))
+    local ar = signals(log, "accept-refused")
+    assert.equal(1, #ar)
+    assert.equal("prerequisite", ar[1].reason)
+    assert.same({ 98323, 99999 }, ar[1].missing)
+    assert.same({ ["98323"] = "Secure the Mountain" }, ar[1].missing_names)
+  end)
+
   it("turns a reputation refusal into an unverified accept-refused naming the gate", function()
     local ReputationState = require("hwc.world.reputation_state")
     -- The catalog calls the quest verified: the refusal's own confidence wins.

@@ -162,6 +162,14 @@ describe("QuestLog", function()
     assert.is_true(w.log:accept(185))
   end)
 
+  it("names the missing prerequisites with a prerequisite refusal, sorted", function()
+    local _, _, w = setup()
+    assert.same({ "prerequisite", { 179, 181 } }, { w.log:refusal(184) }) -- pre_single: none done
+    assert.same({ "prerequisite", { 179, 181 } }, { w.log:refusal(185) })
+    w.log.history[179] = true
+    assert.same({ "prerequisite", { 181 } }, { w.log:refusal(185) }) -- pre_group: the undone ones
+  end)
+
   it("refuses an already completed quest", function()
     local _, _, w = setup()
     w.log.history[179] = true
