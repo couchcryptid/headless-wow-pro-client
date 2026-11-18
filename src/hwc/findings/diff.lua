@@ -77,7 +77,7 @@ local function before(a, b)
   return tostring(a.id) < tostring(b.id)
 end
 
-local function side(doc)
+local function run_identity(doc)
   local a = doc.header and doc.header.addon or {}
   return { branch = a.branch, commit = a.commit, dirty = a.dirty, git = a.git, version = a.version }
 end
@@ -162,7 +162,7 @@ function diff.compare(old, new)
   local o, n = index(old, shared_set), index(new, shared_set)
   local warnings, stopped_early = warnings_for(old, new, shared_set, shared)
   local r = {
-    runs = { old = side(old), new = side(new) },
+    runs = { old = run_identity(old), new = run_identity(new) },
     shared = shared,
     warnings = warnings,
     stopped_early = stopped_early,
