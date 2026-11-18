@@ -112,7 +112,12 @@ end)
 
 -- A run-to step that names a quest objective (01_12_Dun_Morogh.lua:158, R Secure the
 -- Mountain|ACTIVE|98319|QO|1|): in game, reaching the place credits the objective.
--- Progress only, no kill XP: the NPC objective is a body or person to find.
+-- Progress only, no kill XP: the NPC objective is a body or person to find. Most
+-- `R ...|QO|n` steps instead mean "head there; stay up until objective n is done", with
+-- later steps doing the work (01_12_Dun_Morogh.lua:209 Shimmer Ridge before the C step
+-- that loots Shimmerweed; :214 Frostmane Hold before the C steps that kill
+-- Headhunters). So arrival credits an objective only when it is not an item objective
+-- and no other step of the loaded guide works on it.
 describe("actions.perform: R credits its QO objectives", function()
   it("credits the named NPC objective of a quest in the log, with no XP", function()
     local ctx, E, w = setup()
@@ -125,18 +130,81 @@ describe("actions.perform: R credits its QO objectives", function()
     assert.is_true(w.log:is_complete(92011))
     assert.are.same({ xp, level }, { w.player.xp, w.player.level })
     assert.are.equal(0, o.levels)
+    assert.are.same({ 1 }, o.arrivals)
     assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "QUEST_LOG_UPDATE" }, names(E))
   end)
 
-  it("progresses only up to what the QO part asks, and an item objective through the bags", function()
+  it("credits Mountaineer Cornelius (npc 278166, quest 98319) when no other step covers it", function()
+    -- 01_12_Dun_Morogh.lua:153/158/161: A, R ...|ACTIVE|98319|QO|1|, T; nothing else works on 98319.
+    local guide = {
+      { index = 1, action = "A", name = "Secure the Mountain", qids = { 98319 }, tags = {} },
+      { index = 2, action = "C", name = "Flintfire's Shipment", qids = { 98321 }, tags = {} },
+      { index = 3, action = "R", name = "Secure the Mountain", qids = { 98319 },
+        tags = { active = "98319", questtext = "1" } },
+      { index = 4, action = "T", name = "Secure the Mountain", qids = { 98319 }, tags = {} },
+    }
+    local ctx, _, w = setup(nil, guide)
+    actions.perform(ctx, guide[1])
+    local o = actions.perform(ctx, guide[3])
+    assert.are.same({ 1 }, w.log:haves(98319))
+    assert.are.same({ 1 }, o.arrivals)
+  end)
+
+  it("progresses only up to what the QO part asks", function()
     local ctx, _, w = setup()
     actions.perform(ctx, step("A", { 92003 }))
     actions.perform(ctx, step("R", { 92003 }, { questtext = "2>3" }))
     assert.are.same({ 0, 3 }, w.log:haves(92003))
+  end)
+
+  it("does not credit an item objective: arrival loots nothing", function()
+    local ctx, E, w = setup()
     actions.perform(ctx, step("A", { 92008 }))
-    actions.perform(ctx, step("R", { 92008 }, { questtext = "1>3" }))
-    assert.are.same({ 3 }, w.log:haves(92008))
-    assert.are.equal(3, w.player.bags[5002])
+    E.fired = {}
+    local o = actions.perform(ctx, step("R", { 92008 }, { questtext = "1>3" }))
+    assert.are.same({ 0 }, w.log:haves(92008))
+    assert.is_nil(w.player.bags[5002])
+    assert.are.same({}, o.arrivals)
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
+  end)
+
+  -- The R step under test is index 1 of the loaded guide; `other` is index 2.
+  local function covered(other, qid, qo)
+    local r = { index = 1, action = "R", name = "There", qids = { qid },
+      tags = { active = tostring(qid), questtext = qo or "1" } }
+    other.index = 2
+    other.tags = other.tags or {}
+    local ctx, _, w = setup(nil, { r, other })
+    actions.perform(ctx, step("A", { qid }))
+    local o = actions.perform(ctx, r)
+    return w.log:haves(qid), o
+  end
+
+  for _, action in ipairs({ "C", "K", "U", "l", "B" }) do
+    it("does not credit an objective when a " .. action .. " step of the guide has that QID, whatever its QO", function()
+      local haves, o = covered({ action = action, name = "Work", qids = { 92011 }, tags = { questtext = "2" } }, 92011)
+      assert.are.same({ 0 }, haves)
+      assert.are.same({}, o.arrivals)
+    end)
+  end
+
+  it("does not credit an objective another ACTIVE step names by QO", function()
+    local haves = covered({ action = "L", name = "Grind", qids = { 92011 },
+      tags = { active = "92011", questtext = "1" } }, 92011)
+    assert.are.same({ 0 }, haves)
+  end)
+
+  it("does not credit an objective of a quest another step is ACTIVE on without a QO", function()
+    -- 01_12_Dun_Morogh.lua:219 L Level 10|ACTIVE|319|: an ACTIVE-only step stays up for the whole quest.
+    local haves = covered({ action = "L", name = "Grind", qids = {}, tags = { active = "92011" } }, 92011)
+    assert.are.same({ 0 }, haves)
+  end)
+
+  it("still credits an objective when another ACTIVE step names only other objectives", function()
+    local haves, o = covered({ action = "L", name = "Grind", qids = { 92003 },
+      tags = { active = "92003", questtext = "1" } }, 92003, "2")
+    assert.are.same({ 0, 6 }, haves)
+    assert.are.same({ 2 }, o.arrivals)
   end)
 
   it("credits nothing without a QO", function()

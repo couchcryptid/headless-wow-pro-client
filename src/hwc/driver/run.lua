@@ -574,7 +574,12 @@ end
 -- of its quest is short, in a guide with a U step for that quest that the engine never
 -- showed (info.seen), holds back for missing items (why has run.HIDDEN_USE_WHY,
 -- WoWPro_Broker.lua:2182) and whose L tag names a short item. In game the player
--- combines the item themselves and turns in. Returns the lowest such U index, or nil.
+-- combines the item themselves and turns in. The player can only use an item they
+-- hold: the U step's use item (U|<id>|, its first id) must be in the bags, and the
+-- harness never supplies it (perform_use adds a missing use item, so without this
+-- check the off-guide use would invent its reagent). A U step already performed
+-- off-guide is not performed again (a second T for the quest after a failed retry).
+-- Returns the lowest such U index, or nil.
 function Driver:hidden_use_for(step, out, info)
   if step.action ~= "T" or out.kind ~= "refused" or out.reason ~= "incomplete" then return nil end
   if info.retried[step.index] then return nil end -- one retry per T step
@@ -584,8 +589,10 @@ function Driver:hidden_use_for(step, out, info)
   for _, i in ipairs(info.uses) do
     local s = info.steps[i]
     local why = info.why[i]
-    if not info.seen[i] and contains(s.qids, qid) and type(why) == "string"
-      and why:find(run.HIDDEN_USE_WHY, 1, true) then
+    local use_id = tonumber(tostring(s.use):match("%d+"))
+    if not info.seen[i] and not info.offguide[i] and contains(s.qids, qid) and type(why) == "string"
+      and why:find(run.HIDDEN_USE_WHY, 1, true)
+      and use_id and self.W.player:item_count(use_id) > 0 then
       for _, it in ipairs(actions.parse_loot(s.loot)) do
         if short[it.id] then return i end
       end
@@ -610,6 +617,15 @@ function Driver:perform_offguide(step, i, info)
   return self.E:gid() == self.gid
 end
 
+-- An R step's arrival credits (actions credit_arrival's out.arrivals): one
+-- log.arrivals record per objective credited.
+function Driver:record_arrivals(step, out, info)
+  local a = self.log.arrivals
+  for _, index in ipairs(out.arrivals or {}) do
+    a[#a + 1] = { gid = step.gid or self.gid, file = info.file, line = step.line, qid = out.qid, objective = index }
+  end
+end
+
 -- Performs one shown step: before/after bookkeeping, wrong-race-class, the action,
 -- its snapshot, settle-limit and refusal signals. Returns the outcome and snapshot.
 -- A turn-in refused for an item a hidden U step makes gets that U step performed
@@ -625,14 +641,22 @@ function Driver:act(step, rows, info)
   self.acting = { gid = step.gid, index = step.index, why = why }
   local out = self.perform(self.ctx, step)
   local use = self:hidden_use_for(step, out, info)
+  local checked = false -- whether out.settle was already checked
   if use then
     info.retried[step.index] = true
     self:check_settle(out.settle, step)
-    if self:perform_offguide(step, use, info) then out = self.perform(self.ctx, step) end
+    checked = true
+    if self:perform_offguide(step, use, info) then
+      out = self.perform(self.ctx, step)
+      checked = false
+    end
   end
   if step.index > info.max_acted then info.max_acted = step.index end
+  self:record_arrivals(step, out, info)
   local snap = self:snapshot(step, why, rows, out)
-  self:check_settle(out.settle, step)
+  -- The first turn-in's settle is checked before the off-guide use; it is checked here
+  -- only when no retry replaced it.
+  if not checked then self:check_settle(out.settle, step) end
   self:refusals(step, out)
   return out, snap
 end
@@ -812,6 +836,9 @@ function run.drive(ctx, opts)
     -- Actions the player takes off-guide: { gid, file, line, qid, action = "U",
     -- for_line = <the T step's line>, events, levels } (Driver:perform_offguide).
     offguide = {},
+    -- Objectives an R step's arrival credited: { gid, file, line, qid, objective = index }
+    -- (Driver:record_arrivals).
+    arrivals = {},
     steps = {}, signals = {}, guides = {}, guide_levels = {},
     jumps = {}, -- { from, passed = {gid...}, to (nil: end of chain), level_before, level_after }
   }

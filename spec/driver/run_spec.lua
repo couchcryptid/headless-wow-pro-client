@@ -415,7 +415,8 @@ describe("driver.run", function()
       local w = fx.fake_world()
       local quest = { objectives = objectives }
       local order = { 1016 }
-      w.player.bags = {}
+      -- The U steps' use item (U|5456|) is in the bags: the player can use it.
+      w.player.bags = { [5456] = 1 }
       w.log = {
         history = {},
         entries = function() local out = {} for i, q in ipairs(order) do out[i] = { id = q, quest = quest } end return out end,
@@ -440,14 +441,15 @@ describe("driver.run", function()
     -- perform stand-in over the scripted engine: U puts its step's `gives` items in
     -- the bags and fires BAG_UPDATE (with `levels` levels); T turns 1016 in or is
     -- refused "incomplete" while an item objective is short.
-    local function drive_items(steps, script, w, opts)
-      local E = fx.scripted_engine(one_guide(steps), script, "G1", w)
+    local function drive_items(steps, script, w, opts, guides)
+      local E = fx.scripted_engine(guides or one_guide(steps), script, "G1", w)
       E.fired_events = {}
       function E:fire(event) self.fired_events[#self.fired_events + 1] = event end
       opts = opts or {}
       opts.perform = function(ctx, step)
+        local s = E.guides[E.cur_gid].steps[step.index] -- before E.perform's settle may switch guides
+        if s.before then s.before() end
         local out = E.perform(ctx, step)
-        local s = E.guides[E.cur_gid].steps[step.index]
         if s.action == "U" then
           for _, id in ipairs(s.gives or {}) do w.player.bags[id] = (w.player.bags[id] or 0) + 1 end
           ctx.engine:fire("BAG_UPDATE", 0)
@@ -457,7 +459,9 @@ describe("driver.run", function()
             out.levels = s.levels
           end
         elseif s.action == "T" then
-          if not w.turn_in(1016) then
+          if s.refuse then
+            out.kind, out.reason = "refused", s.refuse
+          elseif not w.turn_in(1016) then
             out.kind, out.reason = "refused", "incomplete"
           else
             -- The engine skips a done quest's steps with this why (WoWPro_Broker.lua:2042).
@@ -603,6 +607,101 @@ describe("driver.run", function()
       for _, e in ipairs(events) do if e.kind == "level" then levels[#levels + 1] = e.level end end
       assert.same({ 2 }, levels)
       assert.same({}, signals(log, "did-not-advance"))
+    end)
+    it("does not use the U step off-guide when its use item is not in the bags", function()
+      local w = item_world(SCROLL)
+      w.player.bags[5456] = nil
+      local steps = {
+        { action = "R", name = "a" },
+        hidden_use(5455),
+        { action = "T", name = "Q", qids = { 1016 } },
+      }
+      local log, E = drive_items(steps, { G1 = { { complete = { 1 } }, nil, nil,
+        { complete = { 4 }, done = true } } }, w)
+      assert.same({}, log.offguide)
+      assert.equal(0, count(E.acted, "G1:2"))
+      assert.is_nil(w.player.bags[5456])
+      assert.equal(1, #signals(log, "did-not-advance"))
+    end)
+
+    it("does not perform the U step again for a second turn-in of the quest after a failed retry", function()
+      local w = item_world({ { kind = "item", ids = { 5455 }, count = 1 }, { kind = "item", ids = { 7777 }, count = 1 } })
+      local steps = {
+        { action = "R", name = "a" },
+        hidden_use(5455),
+        { action = "T", name = "Q", qids = { 1016 } },
+        -- 5455 is short again at the second turn-in (as if the combined item were lost).
+        { action = "T", name = "Q", qids = { 1016 }, before = function() w.player.bags[5455] = nil end },
+      }
+      local log, E = drive_items(steps, { G1 = { { complete = { 1 } }, nil, nil, nil,
+        { complete = { 5 }, done = true } } }, w)
+      assert.equal(1, #log.offguide)
+      assert.equal(1, count(E.acted, "G1:2"))
+      assert.equal(1, count(E.acted, "G1:4"))
+    end)
+
+    it("does not use the U step off-guide for a refusal other than incomplete", function()
+      local w = item_world(SCROLL)
+      local steps = {
+        { action = "R", name = "a" },
+        hidden_use(5455),
+        { action = "T", name = "Q", qids = { 1016 }, refuse = "not-in-log" },
+      }
+      local log, E = drive_items(steps, { G1 = { { complete = { 1 } }, nil, nil,
+        { complete = { 4 }, done = true } } }, w)
+      assert.same({}, log.offguide)
+      assert.equal(0, count(E.acted, "G1:2"))
+      assert.equal(1, count(E.acted, "G1:3"))
+    end)
+
+    it("does not use a U step off-guide whose why is not the missing-items why", function()
+      local w = item_world(SCROLL)
+      local steps = {
+        { action = "R", name = "a" },
+        hidden_use(5455, { why = "NextStep(): skipped by the player" }),
+        { action = "T", name = "Q", qids = { 1016 } },
+      }
+      local log, E = drive_items(steps, { G1 = { { complete = { 1 } }, nil, nil,
+        { complete = { 4 }, done = true } } }, w)
+      assert.same({}, log.offguide)
+      assert.equal(0, count(E.acted, "G1:2"))
+      assert.equal(1, #signals(log, "did-not-advance"))
+    end)
+
+    it("checks a turn-in's settle once when the off-guide U step leaves the guide", function()
+      local w = item_world(SCROLL)
+      local steps = {
+        { action = "R", name = "a" },
+        hidden_use(5455),
+        { action = "T", name = "Q", qids = { 1016 } },
+      }
+      local guides = one_guide(steps)
+      guides.G1.next_gid = nil
+      guides.G2 = { startlevel = 1, file = "g2.lua", steps = { { action = "D", name = "Done" } } }
+      local log = drive_items(steps, { G1 = { { complete = { 1 } }, { switch = "G2" }, { hit_limit = true } },
+        G2 = { { complete = { 1 }, done = true } } }, w, nil, guides)
+      local limits = {}
+      for _, s in ipairs(signals(log, "stuck")) do
+        if s.reason == "settle-limit" and s.line == 103 then limits[#limits + 1] = s end
+      end
+      assert.equal(1, #limits)
+    end)
+  end)
+
+  describe("arrival credits", function()
+    it("records each objective an arrival credited in log.arrivals", function()
+      local steps = {
+        { action = "R", name = "Secure the Mountain", qids = { 98319 },
+          outcome = { kind = "acted", arrivals = { 1 } } },
+      }
+      local log = drive(one_guide(steps), { G1 = { { complete = { 1 } }, { complete = { 2 }, done = true } } })
+      assert.same({ { gid = "G1", file = "g1.lua", line = 101, qid = 98319, objective = 1 } }, log.arrivals)
+    end)
+
+    it("has an empty arrivals list when no arrival credited anything", function()
+      local log = drive(one_guide({ { action = "R", name = "a" } }), { G1 = { { complete = { 1 } },
+        { complete = { 2 }, done = true } } })
+      assert.same({}, log.arrivals)
     end)
   end)
 
