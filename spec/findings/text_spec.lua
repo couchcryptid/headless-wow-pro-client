@@ -197,6 +197,41 @@ describe("text.title and text.sentence (design spec §4.7)", function()
         missing = { 1029 }, missing_names = { ["1029"] = "Raene's Cleansing" }, missing_chain = { ["1029"] = { part = 8, total = 11 } } })
       assert.matches('needs quest 1029 "Raene\'s Cleansing" (8/11), which', text.sentence(f, ONE), 1, true)
     end)
+    describe("missing_outcome endings", function()
+      local function sent(extra)
+        local f = { signal = "accept-refused", name = "Next", qid = 5, reasons = { "prerequisite" } }
+        for k, v in pairs(extra) do f[k] = v end
+        return text.sentence(F(f), ONE)
+      end
+      local P = "The guide shows this accept, but the quest data says it needs "
+      it("a single quest ends with which is never accepted", function()
+        assert.equal(P .. 'quest 98387 "Blackrock Blockade", which is never accepted.',
+          sent({ missing = { 98387 }, missing_names = { ["98387"] = "Blackrock Blockade" },
+            missing_outcome = { ["98387"] = "never-accepted" } }))
+      end)
+      it("a single quest that is done only later", function()
+        assert.equal(P .. "quest 7, which isn't done until later in the run.",
+          sent({ missing = { 7 }, missing_outcome = { ["7"] = "completed-later" } }))
+      end)
+      it("all-of with mixed outcomes joins with , and ", function()
+        assert.equal(P .. "quest 7, which is never accepted, and quest 8, which is never completed.",
+          sent({ missing = { 7, 8 }, missing_outcome = { ["7"] = "never-accepted", ["8"] = "never-completed" } }))
+      end)
+      it("any-of with a shared outcome", function()
+        assert.equal(P .. "one of quest 7 or quest 8, none of which is ever accepted.",
+          sent({ missing = { 7, 8 }, missing_any = true, missing_outcome = { ["7"] = "never-accepted", ["8"] = "never-accepted" } }))
+        assert.equal(P .. "one of quest 7 or quest 8, none of which is ever completed.",
+          sent({ missing = { 7, 8 }, missing_any = true, missing_outcome = { ["7"] = "never-completed", ["8"] = "never-completed" } }))
+      end)
+      it("mixed any-of joins with , or ", function()
+        assert.equal(P .. "quest 7, which is never accepted, or quest 8, which is never completed.",
+          sent({ missing = { 7, 8 }, missing_any = true, missing_outcome = { ["7"] = "never-accepted", ["8"] = "never-completed" } }))
+      end)
+      it("a quest with no outcome keeps today's wording", function()
+        assert.equal(P .. "quest 7, which isn't done yet.", sent({ missing = { 7 } }))
+        assert.equal(P .. "quest 7, which isn't done yet.", sent({ missing = { 7 }, missing_outcome = {} }))
+      end)
+    end)
     it("the finding's own quest is named in sentences, and plain without a name", function()
       local named = F({ signal = "orphan-turnin", action = "T", qid = 1045, qname = "Raene's Cleansing", chain = { part = 10, total = 11 } })
       assert.matches('turn in quest 1045 "Raene\'s Cleansing" (10/11), but', text.sentence(named, ONE), 1, true)
