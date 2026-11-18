@@ -1,0 +1,18 @@
+local quest_color = require("hwc.world.quest_color")
+local xp = require("hwc.world.xp")
+
+describe("quest_color.of", function()
+  it("grades a quest by its level against the character's", function()
+    assert.equal("red", quest_color.of(32, 37))
+    assert.equal("orange", quest_color.of(32, 35))
+    assert.equal("yellow", quest_color.of(32, 34))
+    assert.equal("yellow", quest_color.of(32, 30))
+    assert.equal("green", quest_color.of(32, 29))
+    assert.equal("grey", quest_color.of(32, xp.gray_level(32)))
+  end)
+
+  it("is nil when either level is missing", function()
+    assert.is_nil(quest_color.of(nil, 5))
+    assert.is_nil(quest_color.of(5, nil))
+  end)
+end)

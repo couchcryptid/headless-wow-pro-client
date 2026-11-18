@@ -9,6 +9,7 @@
 local dkjson = require("dkjson")
 local lfs = require("lfs")
 local source = require("hwc.questie.source")
+local kills = require("hwc.world.kills")
 
 local Catalog = {}
 Catalog.__index = Catalog
@@ -237,6 +238,8 @@ local function build_quest(self, id)
   -- Reputation (design 2026-11-18-reputation §4.3): the rewards a turn-in gives and the
   -- standing an accept needs, on QuestieDB's cumulative scale.
   quest.reputation_reward = rep_rewards(q.reputationReward)
+  -- QuestieDB zoneOrSort: a zone id, or a negative sort id (-364 Darkmoon Faire).
+  quest.zone_or_sort = type(q.zoneOrSort) == "number" and q.zoneOrSort or nil
   quest.min_rep = rep_gate(q.requiredMinRep)
   quest.max_rep = rep_gate(q.requiredMaxRep)
 
@@ -292,6 +295,35 @@ function Catalog:quest(id)
   if not id then return nil end
   if self._quests[id] == nil then self._quests[id] = build_quest(self, id) or false end
   return self._quests[id] or nil
+end
+
+-- Faction ids whose rewards mark a quest as a non-combat activity.
+local COMMERCE_FACTION = 2586 -- Azeroth Commerce Authority
+local DARKMOON_FACTION = 909 -- Darkmoon Faire
+local DARKMOON_SORT = -364
+
+-- Is the quest something the player does without fighting (design 2026-11-18-quest-color)?
+-- true, reason: "commerce" / "darkmoon" (QuestieDB marks it a non-combat activity), or
+-- "no-combat-objective" (no kill objective and no item objective whose item a mob drops).
+-- false for a quest with a combat objective, or one not in the catalog.
+function Catalog:noncombat(qid)
+  local quest = self:quest(qid)
+  if not quest then return false end
+  for _, r in ipairs(quest.reputation_reward or {}) do
+    if r.faction == COMMERCE_FACTION then return true, "commerce" end
+    if r.faction == DARKMOON_FACTION then return true, "darkmoon" end
+  end
+  if quest.zone_or_sort == DARKMOON_SORT then return true, "darkmoon" end
+  for _, o in ipairs(quest.objectives or {}) do
+    if o.kind == "npc" then
+      local npc = self:npc(o.ids and o.ids[1])
+      if npc and not kills.talk_to(npc, quest) then return false end
+    elseif o.kind == "item" then
+      local it = self.questie and self.questie:item(o.ids and o.ids[1])
+      if it and #(it.npcDrops or {}) > 0 then return false end
+    end
+  end
+  return true, "no-combat-objective"
 end
 
 -- The part and total of a quest in a chain whose parts share one name (design

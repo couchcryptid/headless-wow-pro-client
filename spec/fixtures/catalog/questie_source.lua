@@ -47,6 +47,19 @@ QUESTS[1123] = { name = "Fixture Fork", preQuestSingle = { 1121 } }
 QUESTS[1141] = { name = "Fixture Loop", nextQuestInChain = 1142 }
 QUESTS[1142] = { name = "Fixture Loop", preQuestSingle = { 1141 }, nextQuestInChain = 1143 }
 QUESTS[1143] = { name = "Fixture Loop", preQuestSingle = { 1142 }, nextQuestInChain = 1142 }
+-- Non-combat test (quest_color): objective groups are { creatures, objects, items }.
+QUESTS[1201] = { name = "Fixture Talk", questLevel = 30, startedBy = { { 2001 } }, finishedBy = { { 2002 } },
+  objectives = { { { 2002 } } } }
+QUESTS[1202] = { name = "Fixture Kill", questLevel = 30, objectives = { { { 2003 } } } }
+QUESTS[1203] = { name = "Fixture Drop", questLevel = 30, objectives = { nil, nil, { { 5001 } } } }
+QUESTS[1204] = { name = "Fixture Gather", questLevel = 30, objectives = { nil, nil, { { 5003 } } } }
+QUESTS[1205] = { name = "Fixture Writ", questLevel = 60, reputationReward = { { 2586, 75 } },
+  objectives = { nil, nil, { { 5001 } } } }
+QUESTS[1206] = { name = "Fixture Faire Rep", questLevel = 30, reputationReward = { { 909, 25 } },
+  objectives = { nil, nil, { { 5001 } } } }
+QUESTS[1207] = { name = "Fixture Faire Zone", questLevel = 30, zoneOrSort = -364, objectives = { { { 2003 } } } }
+QUESTS[1208] = { name = "Fixture Talk And Kill", questLevel = 30, startedBy = { { 2001 } }, finishedBy = { { 2002 } },
+  objectives = { { { 2002 }, { 2003 } } } }
 QUESTS[1131] = { name = "Fixture Solo" }
 QUESTS[1132] = { name = "Fixture Solo", preQuestSingle = { 1105 } }
 
