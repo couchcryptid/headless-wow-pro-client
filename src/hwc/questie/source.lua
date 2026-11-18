@@ -2,8 +2,8 @@
 -- QuestieDB's own field names, quest XP and the item id list.
 local lfs = require("lfs")
 local addon = require("hwc.questie.addon")
+local home = require("hwc.questie.home")
 local tocmeta = require("hwc.questie.tocmeta")
-local dkjson = require("dkjson")
 
 local M = {}
 
@@ -64,13 +64,23 @@ function M.from_lib(lib, info)
   return setmetatable({ _lib = lib, _fields = {}, info = info }, Source)
 end
 
-local function read_release(version_dir)
-  local f = io.open(version_dir .. "/.hwc-release.json", "rb")
-  if not f then return {} end
-  local text = f:read("*a")
-  f:close()
-  local rel = dkjson.decode(text)
-  return type(rel) == "table" and rel or {}
+local function basename(path) return path:match("([^/]+)/*$") or path end
+
+-- {path, tag, build, sha256} for a version dir whose TOC exists. tag and
+-- sha256 come from .hwc-release.json; without a readable one (or outside the
+-- <root>/questie/<tag> layout) tag is the dir's basename and sha256 is nil.
+function M.info(questie_dir)
+  local rel
+  local root, tag = questie_dir:match("^(.*)/questie/([^/]+)/*$")
+  if root then
+    local ok, r = pcall(home.read_release, root, tag)
+    rel = ok and r or nil
+  end
+  rel = rel or {}
+  return {
+    path = questie_dir, tag = rel.tag or basename(questie_dir),
+    build = tocmeta.header(questie_dir .. "/" .. TOC)["X-BUILD-COMMIT"], sha256 = rel.sha256,
+  }
 end
 
 -- questie_dir is a version dir, <root>/questie/<tag>. The reasons match
@@ -79,14 +89,11 @@ function M.open(questie_dir, character)
   if not questie_dir then return nil, "none installed" end
   local toc_path = questie_dir .. "/" .. TOC
   if lfs.attributes(toc_path, "mode") ~= "file" then
-    return nil, "broken: " .. (questie_dir:match("([^/]+)/*$") or questie_dir)
+    return nil, "broken: " .. basename(questie_dir)
   end
-  local rel = read_release(questie_dir)
+  local info = M.info(questie_dir)
   local lib, sb = addon.load(questie_dir, character)
-  local src = M.from_lib(lib, {
-    path = questie_dir, tag = rel.tag, build = tocmeta.header(toc_path)["X-BUILD-COMMIT"],
-    sha256 = rel.sha256,
-  })
+  local src = M.from_lib(lib, info)
   src.sandbox = sb
   return src
 end

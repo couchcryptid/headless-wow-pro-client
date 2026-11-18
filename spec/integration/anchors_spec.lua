@@ -2,7 +2,7 @@
 -- from the addon's own history, on pinned addon worktrees made by
 -- tools/addon-worktree.sh under local/addon/ (never ~/Projects/WoW-Pro-Guides,
 -- whose branch the game's AddOns folder follows). Each anchor is pending while its
--- worktree or the pinned catalog is absent.
+-- worktree or an installed QuestieDB is absent.
 -- Slow (full Dwarf Warrior runs to level 25): busted --tags=slow spec/integration/anchors_spec.lua
 --
 -- Facts cited from the worktrees (main = 9851a40f2, fix/forever-prereq-gates =
@@ -34,14 +34,14 @@ local RED_ORDER = { 400, 98321, 96392 }
 
 local function exists(p) return lfs.attributes(p, "mode") ~= nil end
 
--- nil when the worktree and the pinned catalog are present, else why the anchor pends.
+-- nil when the worktree and an installed QuestieDB are present, else why the anchor pends.
 local function absent(slug)
   local path = ROOT .. slug
   if not exists(path .. "/WoWPro/WoWPro.toc") then
     return "addon worktree absent at " .. path .. " (tools/addon-worktree.sh)"
   end
-  local cfg = config.load({ addon_path = path })
-  if not exists(cfg.catalog.questie_dir) then return "catalog absent at " .. cfg.catalog.questie_dir end
+  local home = require("hwc.questie.home")
+  if not home.active_dir(home.root()) then return "no QuestieDB installed: run hwc init" end
   return nil
 end
 

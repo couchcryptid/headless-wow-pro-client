@@ -113,7 +113,11 @@ function M.run(cfg)
   local env = sb.env
   -- World facts come from the catalog (design spec §6); absent sources are
   -- recorded in catalog.sources, never fatal.
-  sb.world = World.new(cfg, catalog.load(cfg), sb.clock)
+  local cat = catalog.load(cfg)
+  if not cat.sources.questie.present then
+    io.stderr:write("hwc: no QuestieDB installed (", tostring(cat.sources.questie.reason), "); run hwc init\n")
+  end
+  sb.world = World.new(cfg, cat, sb.clock)
   stubs.install(sb, cfg)
   env.math = seeded_math(cfg.seed)
   local function phase(name)

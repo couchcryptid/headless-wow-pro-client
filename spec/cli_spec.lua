@@ -181,8 +181,9 @@ describe("cli", function()
     assert.matches("race not in scope", etext())
   end)
 
-  local PIN_DIR = "local/questie/d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc"
-  if present and lfs.attributes(PIN_DIR, "mode") == "directory" then
+  local qhome = require("hwc.questie.home")
+  local installed = qhome.active_dir(qhome.root()) ~= nil
+  if present and installed then
     it("quest prints the quest and its sources as sorted JSON", function()
       local out, text = capture()
       assert.equal(0, cli.main({ "quest", "282" }, out))
@@ -200,7 +201,7 @@ describe("cli", function()
       assert.matches("777777", etext())
     end)
   else
-    pending("quest command needs the addon checkout and pinned QuestieDB")
+    pending(installed and "quest command needs the addon checkout" or "no QuestieDB installed: run hwc init")
   end
 
   it("quest takes no --addon", function()

@@ -50,4 +50,35 @@ describe("questie source adapter", function()
     s, why = source.open("/nonexistent/questie/v9.9.9", { class = "WARRIOR", faction = "Alliance" })
     assert.is_nil(s); assert.are.equal("broken: v9.9.9", why)
   end)
+
+  describe("info", function()
+    local root, dir
+    local function write(path, text)
+      local f = assert(io.open(path, "w"))
+      f:write(text)
+      f:close()
+    end
+    before_each(function()
+      root = os.tmpname()
+      os.remove(root)
+      dir = root .. "/questie/v2.0.0"
+      os.execute("mkdir -p '" .. dir .. "/QuestieDB'")
+      write(dir .. "/QuestieDB/QuestieDB_Forever.toc", "## Title: QuestieDB\n## X-BUILD-COMMIT: abc1234\n")
+    end)
+    after_each(function() os.execute("rm -rf '" .. root .. "'") end)
+
+    it("takes tag and sha256 from .hwc-release.json and build from the TOC", function()
+      write(dir .. "/.hwc-release.json", '{"tag": "v2.0.0", "sha256": "ff00"}')
+      assert.are.same({ path = dir, tag = "v2.0.0", build = "abc1234", sha256 = "ff00" }, source.info(dir))
+    end)
+
+    it("falls back to the dir's basename for the tag when .hwc-release.json is missing", function()
+      assert.are.same({ path = dir, tag = "v2.0.0", build = "abc1234" }, source.info(dir))
+    end)
+
+    it("falls back to the dir's basename for the tag when .hwc-release.json is corrupt", function()
+      write(dir .. "/.hwc-release.json", "{not json")
+      assert.are.same({ path = dir, tag = "v2.0.0", build = "abc1234" }, source.info(dir))
+    end)
+  end)
 end)

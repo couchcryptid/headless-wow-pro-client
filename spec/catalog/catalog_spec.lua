@@ -1,20 +1,22 @@
 local catalog = require("hwc.catalog")
+local home = require("hwc.questie.home")
 local json = require("hwc.json")
 local lfs = require("lfs")
 
 local FIX = "spec/fixtures/catalog"
-local PIN = "d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc"
 
+-- questie_source = false drops the fixture Source, so questie_dir is opened.
 local function fixture_cfg(over)
   local c = {
-    questie_dir = FIX .. "/questie",
+    questie_source = dofile(FIX .. "/questie_source.lua"),
     wh_json = FIX .. "/wh.json",
     objs_json = FIX .. "/objs.json",
     rate_overrides = FIX .. "/rate_overrides.json",
     supplement = FIX .. "/supplement.json",
   }
   for k, v in pairs(over or {}) do c[k] = v end
-  return { catalog = c }
+  if c.questie_source == false then c.questie_source = nil end
+  return { catalog = c, class = "WARRIOR", faction = "Alliance" }
 end
 
 local function has_note(q, needle)
@@ -29,7 +31,9 @@ describe("catalog (fixtures)", function()
 
   it("records every source with presence and provenance", function()
     assert.is_true(cat.sources.questie.present)
-    assert.are.equal(64, #cat.sources.questie.sha256["foreverQuestDB.lua"])
+    assert.are.equal("v0.0.0", cat.sources.questie.tag)
+    assert.are.equal("fixture", cat.sources.questie.build)
+    assert.are.equal(FIX .. "/questie_source.lua", cat.sources.questie.path)
     assert.is_true(cat.sources.wh_json.present)
     assert.is_true(cat.sources.supplement.present)
     assert.matches("^%x+$", cat.sources.wh_json.sha256)
@@ -37,26 +41,36 @@ describe("catalog (fixtures)", function()
 
   it("records missing sources as absent and still loads", function()
     local c = catalog.load(fixture_cfg {
-      questie_dir = FIX .. "/nope", wh_json = FIX .. "/nope.json", objs_json = FIX .. "/nope2.json",
+      questie_source = false, wh_json = FIX .. "/nope.json", objs_json = FIX .. "/nope2.json",
       rate_overrides = FIX .. "/nope3.json", supplement = FIX .. "/nope4.json" })
     assert.is_false(c.sources.questie.present)
     assert.are.equal(FIX .. "/nope.json", c.sources.wh_json.path)
     assert.is_false(c.sources.wh_json.present)
     assert.is_nil(c:quest(1001))
     assert.is_nil(c:item_id("Fixture Pelt"))
+    assert.are.same({}, c:quest_rewards(179))
+    assert.is_nil(c:npc(2001))
+    assert.is_nil(c:item(5001))
     assert.are.equal(2, #c:placeholder(1001, 2).objectives)
   end)
 
-  it("partial questie dir records present = 'partial'", function()
+  it("records no install as absent, with the reason 'none installed'", function()
+    local c = catalog.load(fixture_cfg { questie_source = false })
+    assert.are.same({ present = false, reason = "none installed" }, c.sources.questie)
+  end)
+
+  -- Review Focus 4: a version dir without its TOC is a broken install, not an error.
+  it("records a questie_dir without the TOC as absent and broken, without raising", function()
     local dir = os.tmpname()
     os.remove(dir)
-    os.execute("mkdir -p '" .. dir .. "' && cp " .. FIX .. "/questie/* '" .. dir .. "/' && rm '" .. dir .. "/foreverItemDB.lua'")
-    local c = catalog.load(fixture_cfg { questie_dir = dir })
-    os.execute("rm -rf '" .. dir .. "'")
-    assert.are.equal("partial", c.sources.questie.present)
-    assert.are.same({ "foreverItemDB.lua" }, c.sources.questie.missing)
-    assert.are.equal("Fixture Wolves", c:quest(1001).name)
-    assert.is_nil(c.questie.items[5001])
+    assert(lfs.mkdir(dir))
+    local ok, c = pcall(catalog.load, fixture_cfg { questie_source = false, questie_dir = dir })
+    lfs.rmdir(dir)
+    assert.is_true(ok, tostring(c))
+    assert.is_false(c.sources.questie.present)
+    assert.are.equal(dir, c.sources.questie.path)
+    assert.matches("^broken", c.sources.questie.reason)
+    assert.is_nil(c:npc(2001))
   end)
 
   it("marks a supplement objective without a count as assumed and unverified", function()
@@ -269,16 +283,20 @@ describe("catalog (fixtures)", function()
   end)
 end)
 
-describe("catalog (pinned data)", function()
-  local dir = "local/questie/" .. PIN
-  local home = os.getenv("HOME") .. "/Projects/wow-pro-leveling/sim/data/"
-  if lfs.attributes(dir, "mode") ~= "directory" or lfs.attributes(home .. "wh.json", "mode") ~= "file" then
-    pending("pinned QuestieDB or wow-pro-leveling data absent")
+describe("catalog (installed QuestieDB)", function()
+  local root = home.root()
+  local sim = os.getenv("HOME") .. "/Projects/wow-pro-leveling/sim/data/"
+  if not home.active_dir(root) then
+    pending("no QuestieDB installed: run hwc init")
+    return
+  end
+  if lfs.attributes(sim .. "wh.json", "mode") ~= "file" then
+    pending("wow-pro-leveling data absent")
     return
   end
 
   local config = require("hwc.config")
-  local cfg = { catalog = config.load({ addon_path = os.getenv("HOME") .. "/Projects/WoW-Pro-Guides" }).catalog }
+  local cfg = config.load({ addon_path = os.getenv("HOME") .. "/Projects/WoW-Pro-Guides" })
   local cat = catalog.load(cfg)
 
   it("loads quest 282 with prerequisite, starter and ender", function()
@@ -315,12 +333,15 @@ describe("catalog (pinned data)", function()
     assert.is_true(found)
   end)
 
-  it("records the pinned file hashes", function()
-    local f = assert(io.popen("cd '" .. dir .. "' && shasum -a 256 foreverQuestDB.lua"))
-    local out = f:read("*a")
-    f:close()
-    assert.are.equal(out:match("^(%x+)"), cat.sources.questie.sha256["foreverQuestDB.lua"])
-    assert.are.equal(PIN, cat.sources.questie.commit)
+  it("records the installed release", function()
+    local tag = home.active(root)
+    local rel = home.read_release(root, tag)
+    local q = cat.sources.questie
+    assert.is_true(q.present)
+    assert.are.equal(home.version_dir(root, tag), q.path)
+    assert.are.equal(rel.tag, q.tag)
+    assert.are.equal(rel.sha256, q.sha256)
+    assert.matches("^%x+$", q.build)
   end)
 end)
 

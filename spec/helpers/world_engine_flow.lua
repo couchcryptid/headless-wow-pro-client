@@ -16,12 +16,12 @@ local lfs = require("lfs")
 
 local function exists(path) return lfs.attributes(path, "mode") ~= nil end
 
--- nil when both the addon checkout and the pinned Questie catalog are present,
+-- nil when both the addon checkout and an installed QuestieDB are present,
 -- otherwise the reason the integration specs are pending.
 function M.absent()
   if not exists(M.ADDON .. "/WoWPro/WoWPro.toc") then return "addon checkout absent at " .. M.ADDON end
-  local cfg = require("hwc.config").load({ addon_path = M.ADDON })
-  if not exists(cfg.catalog.questie_dir) then return "catalog absent at " .. cfg.catalog.questie_dir end
+  local home = require("hwc.questie.home")
+  if not home.active_dir(home.root()) then return "no QuestieDB installed: run hwc init" end
   return nil
 end
 

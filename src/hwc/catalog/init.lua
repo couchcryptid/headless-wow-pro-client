@@ -1,5 +1,6 @@
 -- The quest catalog: world facts (design spec §6) merged per field from the
--- Wowhead extract, pinned QuestieDB Forever and a hand-checked supplement.
+-- Wowhead extract, the installed QuestieDB Forever release (run per character
+-- through hwc.questie.source) and a hand-checked supplement.
 -- World facts never come from guide lines; the only guide-derived values are
 -- in `placeholder`, which is marked unverified.
 --
@@ -7,7 +8,7 @@
 -- the config and every source is optional (absent ones are recorded).
 local dkjson = require("dkjson")
 local lfs = require("lfs")
-local questie = require("hwc.catalog.questie")
+local source = require("hwc.questie.source")
 
 local Catalog = {}
 Catalog.__index = Catalog
@@ -68,8 +69,6 @@ local function sorted_values(t)
   return out
 end
 
-local function basename(path) return path:match("([^/]+)/*$") end
-
 local function shell_quote(s) return "'" .. s:gsub("'", "'\\''") .. "'" end
 
 local function file_sha256(path)
@@ -96,17 +95,17 @@ function Catalog.load(cfg)
   local c = (cfg and cfg.catalog) or {}
   local self = setmetatable({ sources = {}, _quests = {}, _npcs = {}, _items = {} }, Catalog)
 
-  local qdir = c.questie_dir
-  local present = qdir ~= nil and exists(qdir, "directory")
-  self.sources.questie = { path = qdir, present = present }
-  if present then
-    self.questie = questie.load(qdir)
-    self.sources.questie.sha256 = self.questie.sha256
-    self.sources.questie.commit = basename(qdir)
-    if #self.questie.missing > 0 then
-      self.sources.questie.present = "partial"
-      self.sources.questie.missing = self.questie.missing
-    end
+  -- c.questie_source (a ready Source, used by specs) bypasses opening questie_dir.
+  local src, reason = c.questie_source, nil
+  if not src then
+    src, reason = source.open(c.questie_dir, { class = cfg.class, faction = cfg.faction })
+  end
+  if src then
+    self.questie = src
+    local info = src.info
+    self.sources.questie = { path = info.path, present = true, tag = info.tag, build = info.build, sha256 = info.sha256 }
+  else
+    self.sources.questie = { path = c.questie_dir, present = false, reason = reason }
   end
 
   local function json_source(name, path, default)
@@ -133,10 +132,16 @@ end
 -- ---------- objectives ----------
 
 local function name_of(self, kind, id)
-  local qd = self.questie
-  if not qd then return nil end
-  local pool = (kind == "npc" and qd.npcs) or (kind == "item" and qd.items) or qd.objects
-  local rec = pool[id]
+  local src = self.questie
+  if not src then return nil end
+  local rec
+  if kind == "npc" then
+    rec = src:npc(id)
+  elseif kind == "item" then
+    rec = src:item(id)
+  else
+    rec = src:object(id)
+  end
   return rec and rec.name
 end
 
@@ -204,11 +209,11 @@ local function starter_of(list)
 end
 
 local function build_quest(self, id)
-  local qd = self.questie
-  local q = qd and qd.quests[id]
+  local src = self.questie
+  local q = src and src:quest(id)
   local wh = self.wh_quests[tostring(id)]
   local sup = self.supplement[tostring(id)]
-  local xpr = qd and qd.xp[id]
+  local xpr = src and src:xp(id)
   local has_objs = self.objs[tostring(id)] ~= nil
   if not (q or wh or sup or xpr or has_objs) then return nil end
   q, wh = q or {}, wh or {}
@@ -361,7 +366,7 @@ function Catalog:npc(id)
   id = tonumber(id)
   if not id then return nil end
   if self._npcs[id] == nil then
-    local n = self.questie and self.questie.npcs[id]
+    local n = self.questie and self.questie:npc(id)
     self._npcs[id] = n and {
       id = id, name = n.name, level_min = n.minLevel, level_max = n.maxLevel, rank = n.rank,
       spawns = n.spawns or {}, zone_id = n.zoneID,
@@ -377,7 +382,7 @@ function Catalog:item(id)
   id = tonumber(id)
   if not id then return nil end
   if self._items[id] == nil then
-    local it = self.questie and self.questie.items[id]
+    local it = self.questie and self.questie:item(id)
     local wh = self.wh_items[tostring(id)]
     if not (it or wh) then
       self._items[id] = false
@@ -404,16 +409,16 @@ end
 function Catalog:quest_rewards(qid)
   if not self._rewards then
     local by_quest = {}
-    local qd = self.questie
-    local idx = qd and qd.keys.item.questRewards
-    if idx then
-      for id, row in pairs(qd.rows.item) do
-        for _, q in ipairs(type(row[idx]) == "table" and row[idx] or {}) do
+    local src = self.questie
+    if src then
+      -- item_ids is ascending, so each quest's list is built sorted.
+      for _, id in ipairs(src:item_ids()) do
+        local rewards = src:item(id).questRewards
+        for _, q in ipairs(type(rewards) == "table" and rewards or {}) do
           by_quest[q] = by_quest[q] or {}
           table.insert(by_quest[q], id)
         end
       end
-      for _, list in pairs(by_quest) do table.sort(list) end
     end
     self._rewards = by_quest
   end
@@ -424,12 +429,12 @@ end
 function Catalog:item_id(name)
   if not self._item_ids then
     local ids = {}
-    local qd = self.questie
-    if qd then
-      local name_idx = qd.keys.item.name
-      for id, row in pairs(qd.rows.item) do
-        local n = row[name_idx]
-        if n and (ids[n] == nil or id < ids[n]) then ids[n] = id end
+    local src = self.questie
+    if src then
+      -- item_ids is ascending, so the first id seen for a name is the lowest.
+      for _, id in ipairs(src:item_ids()) do
+        local n = src:item(id).name
+        if n and ids[n] == nil then ids[n] = id end
       end
     end
     self._item_ids = ids
