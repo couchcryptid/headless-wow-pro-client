@@ -111,6 +111,10 @@ local function flags_of(g)
       if r.fires(g, g.levels[combo]) then flags[#flags + 1] = { combo = combo, rule = r.rule } end
     end
   end
+  table.sort(flags, function(a, b)
+    if a.combo ~= b.combo then return a.combo < b.combo end
+    return a.rule < b.rule
+  end)
   return flags
 end
 

@@ -265,6 +265,14 @@ describe("report.guides", function()
       { combo = B, rule = "enter-under" }, { combo = B, rule = "leave-under" } }, g[2].flags)
   end)
 
+  it("sorts one combo's flags by rule name", function()
+    local g = report.guides({ { combo = A, guide_levels = {
+      gl("G", { start_level = 5, end_level = 10, enter = 11, leave = 9 }),
+    } } })
+    -- enter-over fires; leave-under fires (finished, 9 < 10): rule names sort enter-over first.
+    assert.same({ { combo = A, rule = "enter-over" }, { combo = A, rule = "leave-under" } }, g[1].flags)
+  end)
+
   it("encodes empty flags as an array", function()
     local g = report.guides({ { combo = A, guide_levels = { gl("G", { enter = 3, leave = 4 }) } } })
     assert.truthy(json.encode(g):find('"flags"%s*:%s*%[%s*%]'))
