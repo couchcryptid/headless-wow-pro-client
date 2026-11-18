@@ -63,14 +63,14 @@ describe("Player.RACES", function()
   end)
 
   -- ChrRaces 95/96 (QuestieDB src/corrections/enum/expansions.lua:27-28): two races with
-  -- one client token, told apart by faction and class list.
+  -- one client token. UnitRace in game (user, 2026-11-18): "High Order Skyborne",
+  -- "Skyborne", 95 and "Windshaper Skyborne", "Skyborne", 96.
   it("has Skyborne as two races sharing the token Skyborne", function()
     for _, r in ipairs({ "SkyborneAlliance", "SkyborneHorde" }) do
       assert.equal("Skyborne", Player.RACES[r].token)
-      assert.equal("Skyborne", Player.RACES[r].name)
     end
-    assert.equal("Skyborne (Alliance)", Player.RACES.SkyborneAlliance.label)
-    assert.equal("Skyborne (Horde)", Player.RACES.SkyborneHorde.label)
+    assert.equal("High Order Skyborne", Player.RACES.SkyborneAlliance.name)
+    assert.equal("Windshaper Skyborne", Player.RACES.SkyborneHorde.name)
     assert.is_true(Player.can_play("SkyborneHorde", "SHAMAN"))
     assert.is_false(Player.can_play("SkyborneAlliance", "SHAMAN"))
     assert.is_true(Player.can_play("SkyborneAlliance", "MAGE"))

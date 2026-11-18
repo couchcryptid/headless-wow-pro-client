@@ -21,11 +21,12 @@ Player.__index = Player
 -- each step's own M coordinates before acting.
 -- Skyborne is two races in the client (ChrRaces 95 SKYBORNE_ALLIANCE and 96
 -- SKYBORNE_HORDE, QuestieDB src/corrections/enum/expansions.lua:27-28), picked at
--- character creation, with different classes. Both answer the token "Skyborne":
+-- character creation, with different classes and display names. Both answer the
+-- token "Skyborne" (user, in game 2026-11-18: UnitRace gives "High Order Skyborne",
+-- "Skyborne", 95 and "Windshaper Skyborne", "Skyborne", 96):
 -- the engine's single ForeverStartGuides key (WoWPro_Leveling.lua:58) loads a
 -- start guide for either, and RegisterGuide's faction check
 -- (WoWPro_GuideRegistry.lua:266) picks the Alliance or Horde Zephras Isle file.
--- `label` names the race in findings where the token alone is ambiguous.
 Player.RACES = {
   Dwarf = { name = "Dwarf", token = "Dwarf", faction = "Alliance",
     classes = { "HUNTER", "PALADIN", "PRIEST", "ROGUE", "SHAMAN", "WARRIOR" },
@@ -51,12 +52,10 @@ Player.RACES = {
   Undead = { name = "Undead", token = "Scourge", faction = "Horde",
     classes = { "MAGE", "PALADIN", "PRIEST", "ROGUE", "WARLOCK", "WARRIOR" },
     start = { "Tirisfal Glades", 1420, 0.30, 0.71 } },
-  SkyborneAlliance = { name = "Skyborne", token = "Skyborne", faction = "Alliance",
-    label = "Skyborne (Alliance)",
+  SkyborneAlliance = { name = "High Order Skyborne", token = "Skyborne", faction = "Alliance",
     classes = { "DRUID", "HUNTER", "MAGE", "ROGUE", "WARRIOR" },
     start = { "Zephras Isle", 2521, 0.43, 0.23 } },
-  SkyborneHorde = { name = "Skyborne", token = "Skyborne", faction = "Horde",
-    label = "Skyborne (Horde)",
+  SkyborneHorde = { name = "Windshaper Skyborne", token = "Skyborne", faction = "Horde",
     classes = { "DRUID", "HUNTER", "ROGUE", "SHAMAN", "WARRIOR" },
     start = { "Zephras Isle", 2521, 0.43, 0.23 } },
 }

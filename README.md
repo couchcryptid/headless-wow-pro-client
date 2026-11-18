@@ -35,8 +35,9 @@ guide lines.
   | `Undead` | Horde | Tirisfal Glades |
   | `SkyborneHorde` | Horde | Zephras Isle |
 
-  Skyborne is two races in the client (ChrRaces 95 and 96), picked at character
-  creation, with different classes. Dwarf and Gnome are the most tested, so
+  Skyborne is two races in the client, picked at character creation, with
+  different classes: High Order Skyborne (Alliance, race 95) and Windshaper
+  Skyborne (Horde, race 96). Both have the client token `Skyborne`. Dwarf and Gnome are the most tested, so
   `matrix` defaults to `--races Dwarf,Gnome`.
 - **Next:** the `/triage` skill.
 - **Data gaps:** listed in every findings file's header.
