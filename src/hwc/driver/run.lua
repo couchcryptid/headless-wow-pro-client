@@ -141,6 +141,22 @@ function Driver:signal(kind, step, fields)
   return s
 end
 
+-- Reports a progress event to opts.on_progress (optional; the driver never prints).
+function Driver:emit(event)
+  local cb = self.opts.on_progress
+  if cb then cb(event) end
+end
+
+-- Emits a level event when the player's level differs from the last one seen.
+-- The first value seen is the starting level and is not emitted.
+function Driver:check_level()
+  local level = self.W.player.level
+  if self.last_level ~= nil and level ~= self.last_level then
+    self:emit({ kind = "level", level = level })
+  end
+  self.last_level = level
+end
+
 function Driver:stop(reason)
   self.stopped = reason
 end
@@ -183,6 +199,7 @@ function Driver:open(gid)
     end
   end
   self.log.guides[#self.log.guides + 1] = gid
+  self:emit({ kind = "guide", gid = gid, file = g.file, index = #self.log.guides })
   if self.opts.max_guides and #self.log.guides >= self.opts.max_guides then return self:stop("max-guides") end
   self:refresh_why()
 end
@@ -209,11 +226,14 @@ function Driver:jump(from)
   self.log.jumps[#self.log.jumps + 1] = jump
   if to == nil then
     jump.level_after = p.level
+    self:emit({ kind = "jump", from = from, to = nil, passed = copy_array(passed) })
     return self:stop("no-next-guide")
   end
   local start = #self.log.guides == 0 and E:guide(to).startlevel or 0
   while p.level < start and p.level < xp.CAP_LEVEL do p:add_xp(xp.to_next(p.level)) end
   jump.level_after = p.level
+  self:emit({ kind = "jump", from = from, to = to, passed = copy_array(passed) })
+  self:check_level()
   local _, err = E:load_guide(to)
   if E:gid() ~= to then
     self:signal("stuck", nil, { gid = to, reason = "load-guide-failed", message = err })
@@ -666,6 +686,7 @@ function run.drive(ctx, opts)
     is_harness_error = o.is_harness_error or require("hwc.boot").is_harness_error,
   }, Driver)
 
+  d.last_level = W.player.level -- the starting level: recorded, not emitted
   local gid = d.E:gid()
   if gid == nil then
     d:signal("stuck", nil, { reason = "no-guide-loaded" })
@@ -673,7 +694,10 @@ function run.drive(ctx, opts)
   else
     d:open(gid)
   end
-  while not d.stopped do d:iterate() end
+  while not d.stopped do
+    d:iterate()
+    d:check_level()
+  end
   d:finish()
   return log
 end
