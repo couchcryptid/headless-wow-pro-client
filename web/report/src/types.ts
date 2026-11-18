@@ -13,7 +13,8 @@ export interface Finding {
   signal: string;
   title: string;
   sentence: string;
-  severity: Severity;
+  /** Absent on expected findings. */
+  severity?: Severity;
   confidence?: "verified" | "unverified";
   action?: string;
   name?: string;
