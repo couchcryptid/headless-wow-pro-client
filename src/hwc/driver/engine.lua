@@ -170,6 +170,9 @@ function Engine:step(i)
   local step = {
     index = i, gid = gid, action = W.action and W.action[i], name = W.step and W.step[i],
     qid = W.QID and W.QID[i], qids = qids, tags = tags,
+    -- The raw REP tag, "<name>;<factionID>;<band range>[;...]" (WoWPro_Parser.lua:551,
+    -- split at WoWPro_Broker.lua:2807).
+    rep = W.rep and W.rep[i],
   }
   local index = self:source_index()
   local file = index and index[gid]

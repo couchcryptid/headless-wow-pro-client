@@ -519,6 +519,47 @@ describe("driver.run", function()
     assert.is_nil(log.reputation)
   end)
 
+  -- Design 2026-11-18-reputation §4.5, §6: REP|Gelkis Clan Centaur;91;... (Galak) at
+  -- 30_41_Alliance.lua:544. The stub was asked for 91 and the character never met it.
+  describe("rep-faction-unmet", function()
+    local ReputationState = require("hwc.world.reputation_state")
+    local function rep_run(prepare)
+      local world = fx.fake_world({ [1382] = { name = "Strange Alliance", confidence = "verified" } })
+      world.reputation = ReputationState.new("Dwarf", "Alliance", {})
+      prepare(world.reputation)
+      local steps = {
+        { action = "R", name = "Go" },
+        { action = "C", name = "Strange Alliance", qids = { 1382 }, rep = "Gelkis Clan Centaur;91;hated-neutral", hidden = true },
+      }
+      return drive(one_guide(steps), { G1 = completes(1) }, {}, world)
+    end
+
+    it("reports a REP step whose faction the stub was asked for and the character never met", function()
+      local log = rep_run(function(r) r.lookups[91] = true end)
+      local u = signals(log, "rep-faction-unmet")
+      assert.equal(1, #u)
+      assert.equal(91, u[1].faction)
+      assert.equal("unverified", u[1].confidence)
+      assert.equal("G1", u[1].gid)
+      assert.equal("g1.lua", u[1].file)
+      assert.equal(102, u[1].line)
+      assert.equal("C", u[1].action)
+      assert.equal("Strange Alliance", u[1].name)
+      assert.equal(1382, u[1].qid)
+      assert.equal("Faction 91", u[1].faction_name)
+    end)
+
+    it("reports nothing once the character knows the faction", function()
+      local log = rep_run(function(r) r.lookups[91] = true; r:gain(91, 0) end)
+      assert.same({}, signals(log, "rep-faction-unmet"))
+    end)
+
+    it("reports nothing when the stub was never asked for the faction", function()
+      local log = rep_run(function() end)
+      assert.same({}, signals(log, "rep-faction-unmet"))
+    end)
+  end)
+
   -- Review Focus 5: changes in turn-in order, assumptions sorted; identical JSON twice.
   it("carries the world's reputation changes and assumptions into the log, deterministically", function()
     local ReputationState = require("hwc.world.reputation_state")

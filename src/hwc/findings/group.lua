@@ -34,6 +34,7 @@ local SEVERITY = {
   ["wrong-race-class"] = "high", ["log-full"] = "high",
   ["lua-error"] = "high", ["below-level"] = "medium-high",
   ["did-not-advance"] = "medium", stuck = "medium", ["manual-completion"] = "medium",
+  ["rep-faction-unmet"] = "medium",
   ["leftover-quests"] = "low", ["missing-global"] = "low",
 }
 local SEVERITY_ORDER = { "high", "medium-high", "medium", "low" }
@@ -74,7 +75,8 @@ local function new_finding(s, key)
   local f = {
     id = "F-" .. group.fnv1a32(key), signal = s.signal, file = s.file, line = s.line, gid = s.gid,
     action = s.action, name = s.name, qid = s.qid, why = s.why, before = s.before, after = s.after,
-    qname = s.qname, grind = s.grind, use = s.use, loot = s.loot, level = s.level, log = s.log, confidence = s.confidence, rep = s.rep, combos = {}, causes = {}, reasons = {},
+    qname = s.qname, grind = s.grind, use = s.use, loot = s.loot, level = s.level, log = s.log, confidence = s.confidence, rep = s.rep,
+    faction = s.faction, faction_name = s.faction_name, combos = {}, causes = {}, reasons = {},
   }
   if s.signal == "lua-error" then
     f.name, f.message, f.stack = s.message, s.message, s.stack

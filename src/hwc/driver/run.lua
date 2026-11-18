@@ -194,7 +194,8 @@ function Driver:open(gid)
     if s then
       info.steps[i] = { action = s.action, name = s.name, qids = copy_array(s.qids), line = s.line,
         ordinal = s.ordinal, dungeon = s.tags and s.tags.dungeon ~= nil, prof = s.tags and s.tags.prof,
-        use = s.tags and s.tags.use, loot = s.tags and s.tags.lootitem, optional = s.tags and s.tags.optional }
+        use = s.tags and s.tags.use, loot = s.tags and s.tags.lootitem, optional = s.tags and s.tags.optional,
+        rep = s.rep }
       if s.action == "A" then info.accepts[#info.accepts + 1] = i end
       if s.action == "U" and s.tags and s.tags.use and s.tags.lootitem then info.uses[#info.uses + 1] = i end
     end
@@ -253,7 +254,7 @@ function Driver:level_passing(info, i)
 end
 
 -- Appends the signal for step i of a guide the engine never showed, with the
--- fields every such signal carries; `extra` adds the signal's own fields.
+-- fields every such signal carries; `extra` adds the signal's own fields. Returns the signal.
 function Driver:record_hidden_step(gid, info, i, signal, extra)
   local s = info.steps[i]
   local prev, nxt = info.steps[i - 1], info.steps[i + 1]
@@ -268,6 +269,7 @@ function Driver:record_hidden_step(gid, info, i, signal, extra)
   sig.qname = self:quest_name(sig.qid)
   sig.confidence = self:confidence(sig.qid)
   self.log.signals[#self.log.signals + 1] = sig
+  return sig
 end
 
 -- Closes a guide: unshown accepts and the quests left in the log. A guide the
@@ -311,6 +313,26 @@ function Driver:close(gid, full)
     local s = info.steps[i]
     if unshown(i) and not s.optional and info.why[i] and info.why[i]:find(run.HIDDEN_USE_WHY, 1, true) then
       self:record_hidden_step(gid, info, i, "hidden-use-step", { use = s.use, loot = s.loot })
+    end
+  end
+  self:unmet_factions(gid, info)
+end
+
+-- REP steps whose faction the character never met (design 2026-11-18-reputation §4.5),
+-- in step order, one per step. Detected from the C_Reputation stub: it records every
+-- faction id WoWPro asks for (ReputationState.lookups) and returns nil for one the
+-- character doesn't know, after which WoWPro logs "Bad Faction number" and skips the step
+-- (WoWPro_Broker.lua:2882-2885; :2807 splits the tag, whose second field is the faction id).
+-- Unverified: kill and encounter reputation isn't modelled, so a real player may have met it.
+function Driver:unmet_factions(gid, info)
+  local rep = self.W.reputation
+  if not rep then return end
+  for i = 1, table.maxn(info.steps) do
+    local s = info.steps[i]
+    local id = s and type(s.rep) == "string" and tonumber(s.rep:match("^[^;]*;([^;]*)"))
+    if id and rep.lookups[id] and not rep:known(id) then
+      local sig = self:record_hidden_step(gid, info, i, "rep-faction-unmet", { faction = id, faction_name = rep:name(id) })
+      sig.confidence = "unverified"
     end
   end
 end
@@ -403,7 +425,7 @@ end
 function Driver:addon_error_count()
   local errs = self.ctx.errors or {}
   for i = self.err_cursor + 1, #errs do
-    if not self.is_harness_error(errs[i]) then self.addon_errors = self.addon_errors + 1 end
+    if not self.is_harness_error(errs[i], self.ctx.missing) then self.addon_errors = self.addon_errors + 1 end
   end
   self.err_cursor = #errs
   return self.addon_errors
@@ -654,7 +676,7 @@ function Driver:finish()
   self:leftovers()
   for _, e in ipairs(self.ctx.errors or {}) do
     local sig = { signal = "lua-error", message = e.msg, stack = first_stack_line(e.stack), level = W.player.level }
-    if self.is_harness_error(e) then sig.reason = "harness" end
+    if self.is_harness_error(e, self.ctx.missing) then sig.reason = "harness" end
     log.signals[#log.signals + 1] = sig
   end
   local seen = {}
@@ -671,7 +693,7 @@ function Driver:finish()
   if rep then log.reputation = { changes = rep.changes, assumptions = rep:assumptions() } end
 end
 
--- ctx = { engine, world, cfg, errors = sb.errors, missing_order = sb.missing_order,
+-- ctx = { engine, world, cfg, errors = sb.errors, missing_order = sb.missing_order, missing = sb.missing,
 -- addon = {path, git, branch, commit, dirty, version} } (boot.run's addon identity;
 -- git = false marks a folder with no git, named by its TOC version). opts as run.DEFAULTS, plus opts.perform
 -- (default actions.perform; the fake-engine specs pass a scripted one) and
@@ -701,7 +723,8 @@ function run.drive(ctx, opts)
     jumps = {}, -- { from, passed = {gid...}, to (nil: end of chain), level_before, level_after }
   }
   local d = setmetatable({
-    ctx = { engine = ctx.engine, world = W, cfg = cfg, errors = ctx.errors, missing_order = ctx.missing_order },
+    ctx = { engine = ctx.engine, world = W, cfg = cfg, errors = ctx.errors, missing_order = ctx.missing_order,
+      missing = ctx.missing },
     E = ctx.engine, W = W, opts = o, log = log, info = {}, awaiting = {}, race_class_seen = {},
     iter = 0, repeats = 0, err_cursor = 0, addon_errors = 0,
     perform = o.perform or actions.perform,
@@ -732,7 +755,8 @@ function run.character(cfg, opts)
   local result = boot.run(cfg)
   return run.drive({
     engine = Engine.new(result), world = result.world, cfg = cfg,
-    errors = result.sb.errors, missing_order = result.sb.missing_order, addon = result.addon,
+    errors = result.sb.errors, missing_order = result.sb.missing_order, missing = result.sb.missing,
+    addon = result.addon,
   }, opts)
 end
 

@@ -84,6 +84,24 @@ describe("report.build", function()
     assert.is_nil(h.warnings)
   end)
 
+  it("appends the run's assumptions to the gaps without changing report.GAPS", function()
+    local before = #report.GAPS
+    local doc = report.build({}, { assumptions = { "x" } })
+    local gaps = doc.header.gaps
+    assert.equal(before + 1, #gaps)
+    assert.equal("x", gaps[#gaps])
+    assert.equal(before, #report.GAPS)
+    assert.is_nil(doc.header.assumptions)
+  end)
+
+  it("lists quest-reward-only reputation as a static gap", function()
+    local found = false
+    for _, g in ipairs(report.GAPS) do
+      if g == "reputation is gained from quest rewards only (no kills, item turn-ins or encounters)" then found = true end
+    end
+    assert.is_true(found)
+  end)
+
   it("writes format 2", function()
     assert.equal(2, report.build({}, {}).format)
   end)

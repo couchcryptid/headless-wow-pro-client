@@ -28,6 +28,19 @@ describe("boot.is_harness_error", function()
     assert.is_false(boot.is_harness_error({ msg = ".../WoWPro/WoWPro.lua:606: boom",
       stack = "stack traceback:\n\t.../WoWPro/WoWPro.lua:606: in f\n\t.../src/hwc/boot.lua:1: in run" }))
   end)
+
+  -- Design 2026-11-18-reputation §4.7: indexing or calling a global the sandbox
+  -- recorded as missing is a harness gap, not an addon bug.
+  it("counts indexing or calling a missing global as a harness error", function()
+    local idx = { msg = ".../WoWPro/WoWPro_CompatUtil.lua:243: attempt to index field 'C_Reputation' (a nil value)" }
+    assert.is_true(boot.is_harness_error(idx, { C_Reputation = true }))
+    assert.is_false(boot.is_harness_error(idx, {}))
+    assert.is_false(boot.is_harness_error(idx))
+    local call = { msg = ".../WoWPro/A.lua:9: attempt to call global 'GetFactionInfoByID' (a nil value)" }
+    assert.is_true(boot.is_harness_error(call, { GetFactionInfoByID = true }))
+    local field = { msg = ".../WoWPro/A.lua:9: attempt to call field 'GetFactionDataByID' (a nil value)" }
+    assert.is_true(boot.is_harness_error(field, { ["C_Reputation.GetFactionDataByID"] = true }))
+  end)
 end)
 
 local function boot(race, class)

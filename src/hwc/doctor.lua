@@ -106,7 +106,7 @@ local function check_addon(env, deps)
   local harness = #boot.harness_errors(r)
   local addon_errs = {}
   for _, e in ipairs(r.errors) do
-    if not boot.is_harness_error(e) then addon_errs[#addon_errs + 1] = e end
+    if not boot.is_harness_error(e, r.missing) then addon_errs[#addon_errs + 1] = e end
   end
   if #addon_errs > 0 then
     return check("addon", "fail", #addon_errs .. " addon Lua errors", "first error: " .. first_line(addon_errs[1].msg))

@@ -71,7 +71,7 @@ local function scripted_engine(guides, script, start, world)
     local s = steps()[i]
     if not s then return nil end
     return { index = i, gid = self.cur_gid, action = s.action, name = s.name, qids = s.qids or {},
-      tags = s.tags or {}, line = 100 + i }
+      tags = s.tags or {}, rep = s.rep, line = 100 + i }
   end
   function E:num_steps() return #steps() end
   function E:completed(i, gid) return self.comp[gid or self.cur_gid][i] == true end

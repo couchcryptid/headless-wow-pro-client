@@ -59,6 +59,7 @@ text.SIGNALS = {
   ["leftover-quests"] = "Left in log",
   ["lua-error"] = "Lua error",
   ["missing-global"] = "Missing global",
+  ["rep-faction-unmet"] = "REP faction never met",
 }
 
 -- Why a character's run stopped early: every stop reason driver/run.lua passes
@@ -302,6 +303,9 @@ function text.title(f)
     if f.qname and f.qname ~= "" then which = "Quest " .. quoted(f.qname) .. " (" .. tostring(f.qid) .. ")" end
     if (f.reasons or {})[1] == "not-turned-in" then return which .. " is not turned in within scope" end
     return which .. " is left in the log"
+  elseif s == "rep-faction-unmet" then
+    return "REP step checks " .. (f.faction_name or ("Faction " .. tostring(f.faction)))
+      .. ", which this character never met"
   elseif s == "lua-error" then
     local first = tostring(f.message or f.name or ""):match("^[^\n]*")
     if #first > 80 then first = first:sub(1, 80) .. "…" end
@@ -408,6 +412,10 @@ local function clauses(f, ctx)
     local which = q
     if f.qname and f.qname ~= "" then which = quoted(f.qname) .. " (" .. q .. ")" end
     return "The run passed this turn-in step, but quest " .. which .. " was still in the log when the run ended."
+  elseif s == "rep-faction-unmet" then
+    return "WoWPro asks for reputation with faction " .. tostring(f.faction)
+      .. ", but this character has never met that faction, so the step is skipped.",
+      "Reputation from kills and encounters isn't modelled; if the guide meant another faction, the id is wrong."
   elseif s == "lua-error" then
     return "WoWPro raised an error during the run.", "The message and stack are in the detail below."
   end

@@ -82,10 +82,30 @@ end
 -- A harness bug is an error raised in harness code: its message location or
 -- the innermost Lua frame of its stack is under src/hwc. (Every stack passes
 -- through src/hwc on the way in, so "the stack mentions src/hwc" is not it.)
+-- It is also one when the addon indexes or calls a global the sandbox recorded as
+-- missing (`missing`, the sandbox's set; design 2026-11-18-reputation §4.7): the
+-- harness never defined it. The bare name matches a "ns.field" key on its last
+-- part, so an addon bug on a same-named field would match too (accepted as rare).
 local HARNESS = "src/hwc/"
-function M.is_harness_error(e)
+
+local function names_missing(msg, missing)
+  if not missing then return false end
+  local name = msg:match("attempt to index field '([^']+)' %(a nil value%)")
+    or msg:match("attempt to index global '([^']+)' %(a nil value%)")
+    or msg:match("attempt to call field '([^']+)' %(a nil value%)")
+    or msg:match("attempt to call global '([^']+)' %(a nil value%)")
+  if not name then return false end
+  if missing[name] then return true end
+  for key in pairs(missing) do
+    if type(key) == "string" and key:match("%.([^.]+)$") == name then return true end
+  end
+  return false
+end
+
+function M.is_harness_error(e, missing)
   local where = e.msg:match("^(.-):%d+:")
   if where and where:find(HARNESS, 1, true) then return true end
+  if names_missing(e.msg, missing) then return true end
   for line in (e.stack or ""):gmatch("[^\n]+") do
     local file = line:match("^%s*(.-):%d+:")
     if file then return file:find(HARNESS, 1, true) ~= nil end
@@ -96,7 +116,7 @@ end
 function M.harness_errors(result)
   local out = {}
   for _, e in ipairs(result.errors) do
-    if M.is_harness_error(e) then out[#out + 1] = e end
+    if M.is_harness_error(e, result.missing) then out[#out + 1] = e end
   end
   return out
 end
@@ -135,7 +155,7 @@ function M.run(cfg)
     addon = { path = cfg.addon_path, git = info.git, branch = info.branch, commit = info.commit,
       dirty = info.dirty, version = info.version },
     files_loaded = 0, files_failed = {}, skipped = {},
-    errors = sb.errors, missing_order = sb.missing_order, standin_calls = sb.standin_calls,
+    errors = sb.errors, missing_order = sb.missing_order, missing = sb.missing, standin_calls = sb.standin_calls,
     sb = sb, world = sb.world,
   }
   result.addon_events = {}

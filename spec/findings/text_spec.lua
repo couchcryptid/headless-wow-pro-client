@@ -32,6 +32,7 @@ describe("text constants", function()
       ["leftover-quests"] = "Left in log",
       ["lua-error"] = "Lua error",
       ["missing-global"] = "Missing global",
+      ["rep-faction-unmet"] = "REP faction never met",
     }, text.SIGNALS)
   end)
   it("labels every early stop reason, and not the normal end", function()
@@ -266,6 +267,17 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     assert.equal('"Pre" can\'t be taken: reputation too low/high', t)
     assert.equal("The quest data needs a reputation standing this character doesn't have. "
       .. "Reputation from kills, item turn-ins and encounters isn't modelled, so a real player may have it.", s)
+  end)
+  it("rep-faction-unmet with no faction name", function()
+    local t, s = both(F({ signal = "rep-faction-unmet", action = "C", name = "Strange Alliance", qid = 1382, faction = 91 }))
+    assert.equal("REP step checks Faction 91, which this character never met", t)
+    assert.equal("WoWPro asks for reputation with faction 91, but this character has never met that faction, "
+      .. "so the step is skipped. Reputation from kills and encounters isn't modelled; if the guide meant "
+      .. "another faction, the id is wrong.", s)
+  end)
+  it("rep-faction-unmet names a known faction", function()
+    local t = both(F({ signal = "rep-faction-unmet", name = "x", faction = 92, faction_name = "Gelkis Clan Centaur" }))
+    assert.equal("REP step checks Gelkis Clan Centaur, which this character never met", t)
   end)
   it("log-full", function()
     local t, s = both(F({ signal = "log-full", name = "Pre", qid = 7 }))

@@ -272,6 +272,7 @@ describe("group.findings", function()
       { signal = "manual-completion", gid = "G", file = "f", line = 5, action = "H", name = "h", expected = true },
       { signal = "lua-error", message = "boom", stack = "x.lua:1" },
       { signal = "missing-global", global = "FooBar" },
+      { signal = "rep-faction-unmet", gid = "G", file = "f", line = 6, action = "C", name = "r", qid = 3, faction = 91 },
     }
     local fs = group.findings({ runlog("Dwarf", "WARRIOR", sigs) })
     local sev = {}
@@ -280,7 +281,7 @@ describe("group.findings", function()
     assert.same({
       "below-level:medium-high:nil", "leftover-quests:low:nil", "lua-error:high:nil",
       "manual-completion:medium:nil", "manual-completion:nil:true", "missing-global:low:nil",
-      "stuck:medium:nil",
+      "rep-faction-unmet:medium:nil", "stuck:medium:nil",
     }, sev)
   end)
 

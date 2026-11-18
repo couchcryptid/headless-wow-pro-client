@@ -25,6 +25,8 @@ report.GAPS = {
   "quest rewards give one of each item QuestieDB lists, choice rewards included",
   -- Subzones (Anvilmar, Kharanos, ...) come only from R steps; IZ-gated class-training notes may stay hidden.
   "subzones are known only from R steps; steps gated on a subzone by IZ may stay hidden",
+  -- Design 2026-11-18-reputation §3, §4.5: no kill, item turn-in or encounter reputation.
+  "reputation is gained from quest rewards only (no kills, item turn-ins or encounters)",
 }
 
 local NOT_REPRODUCIBLE = "uncommitted changes; this run may not be reproducible from its commit."
@@ -360,7 +362,13 @@ function report.build(findings, header)
   for _, f in ipairs(findings) do out[#out + 1] = finding_json(f, ctx) end
   local h = {}
   for k, v in pairs(header) do h[k] = v end
-  h.gaps = report.GAPS
+  -- The run's own assumptions (header.assumptions, e.g. inferred starting reputation)
+  -- follow the static gaps in a fresh list; report.GAPS is never changed.
+  local gaps = {}
+  for i, g in ipairs(report.GAPS) do gaps[i] = g end
+  for _, g in ipairs(header.assumptions or {}) do gaps[#gaps + 1] = g end
+  h.gaps = gaps
+  h.assumptions = nil
   h.warnings = report.warnings(header, findings)
   h.notes = report.notes(header)
   return { format = report.FORMAT, header = h, labels = labels(header), summary = summarize(findings), findings = out }
