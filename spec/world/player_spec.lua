@@ -101,8 +101,8 @@ describe("config race scope", function()
   end)
 end)
 
--- Learning a profession teaches its spell (each Wowhead Forever spell page has a
--- "Learn Skill (<profession>)" effect), which the guides' SPELL|...; Flip tags test.
+-- Learning a profession teaches its spell (a "Learn Skill (<profession>)" effect),
+-- which the guides' SPELL|...; Flip tags test.
 describe("professions teach their spell", function()
   local Player = require("hwc.world.player")
   it("learn_skill on a profession also learns its spell", function()

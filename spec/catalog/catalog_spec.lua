@@ -9,9 +9,6 @@ local FIX = "spec/fixtures/catalog"
 local function fixture_cfg(over)
   local c = {
     questie_source = dofile(FIX .. "/questie_source.lua"),
-    wh_json = FIX .. "/wh.json",
-    objs_json = FIX .. "/objs.json",
-    rate_overrides = FIX .. "/rate_overrides.json",
     supplement = FIX .. "/supplement.json",
   }
   for k, v in pairs(over or {}) do c[k] = v end
@@ -34,18 +31,16 @@ describe("catalog (fixtures)", function()
     assert.are.equal("v0.0.0", cat.sources.questie.tag)
     assert.are.equal("fixture", cat.sources.questie.build)
     assert.are.equal(FIX .. "/questie_source.lua", cat.sources.questie.path)
-    assert.is_true(cat.sources.wh_json.present)
     assert.is_true(cat.sources.supplement.present)
-    assert.matches("^%x+$", cat.sources.wh_json.sha256)
+    assert.matches("^%x+$", cat.sources.supplement.sha256)
   end)
 
   it("records missing sources as absent and still loads", function()
     local c = catalog.load(fixture_cfg {
-      questie_source = false, wh_json = FIX .. "/nope.json", objs_json = FIX .. "/nope2.json",
-      rate_overrides = FIX .. "/nope3.json", supplement = FIX .. "/nope4.json" })
+      questie_source = false, supplement = FIX .. "/nope.json" })
     assert.is_false(c.sources.questie.present)
-    assert.are.equal(FIX .. "/nope.json", c.sources.wh_json.path)
-    assert.is_false(c.sources.wh_json.present)
+    assert.are.equal(FIX .. "/nope.json", c.sources.supplement.path)
+    assert.is_false(c.sources.supplement.present)
     assert.is_nil(c:quest(1001))
     assert.is_nil(c:item_id("Fixture Pelt"))
     assert.are.same({}, c:quest_rewards(179))
@@ -93,17 +88,15 @@ describe("catalog (fixtures)", function()
     assert.are.equal(1, q.objectives[1].count)
     assert.is_true(q.objectives[1].count_assumed)
     assert.are.equal("unverified", q.confidence)
-    assert.is_nil(cat:quest(1001).objectives[1].count_assumed)
+    assert.is_true(cat:quest(1001).objectives[1].count_assumed)
   end)
 
-  it("takes level from Wowhead over QuestieDB, with a note on disagreement", function()
+  it("takes level and required level from QuestieDB, xp from QuestXP", function()
     local q = cat:quest(1001)
     assert.are.equal("Fixture Wolves", q.name)
-    assert.are.equal(20, q.level)
+    assert.are.equal(18, q.level)
     assert.are.equal(3, q.required_level)
-    assert.are.equal(900, q.xp)
-    assert.are.equal("verified", q.confidence)
-    assert.is_true(has_note(q, "level"))
+    assert.are.equal(700, q.xp)
     assert.are.same({ 1000 }, q.pre_single)
     assert.are.same({}, q.pre_group)
     assert.are.equal(2001, q.starter)
@@ -112,8 +105,8 @@ describe("catalog (fixtures)", function()
     assert.is_nil(q.classes)
   end)
 
-  it("takes required level from Wowhead, then QuestieDB, defaulting to 1", function()
-    assert.are.equal(7, cat:quest(1003).required_level)
+  it("takes required level from QuestieDB, defaulting to 1", function()
+    assert.are.equal(5, cat:quest(1003).required_level)
     assert.are.equal(1, cat:quest(1006).required_level)
   end)
 
@@ -133,11 +126,11 @@ describe("catalog (fixtures)", function()
 
   -- Ruling AB: name-based rules (Camping 101) cannot apply to a quest no source names.
   it("marks a quest with no name in any source unverified, with a note", function()
-    local q = cat:quest(90002)
+    local q = cat:quest(1006)
     assert.is_nil(q.name)
     assert.are.equal("unverified", q.confidence)
     assert.is_true(has_note(q, "no name in any source; name-based rules (Camping 101) cannot apply"))
-    assert.are.equal("verified", cat:quest(90001).confidence) -- named by the supplement
+    assert.are.equal("verified", cat:quest(90009).confidence) -- named by the supplement
   end)
 
   -- 77 is classic Alliance; 4294967373 adds Skyborne (Alliance), bit 32
@@ -156,26 +149,19 @@ describe("catalog (fixtures)", function()
     assert.are.same({ "SHAMAN" }, q.classes)
   end)
 
-  it("notes a race disagreement between sources below 90000", function()
-    local q = cat:quest(1007)
-    assert.are.same({ "Human" }, q.races)
-    assert.is_true(has_note(q, "race"))
+  it("decodes a single-race QuestieDB mask", function()
+    assert.are.same({ "Human" }, cat:quest(1007).races)
   end)
 
-  it("ignores a Wowhead race mask of 2^32 or more on a Forever quest, with a note", function()
+  it("serves a supplement-only Forever quest with its starter and ender", function()
     local q = cat:quest(90001)
     assert.is_nil(q.races)
-    assert.is_true(has_note(q, "race"))
     assert.are.equal("Fixture Forever Quest", q.name)
     assert.are.equal(2001, q.starter)
     assert.are.equal(2002, q.ender)
   end)
 
-  it("uses a usable Wowhead race mask on a Forever quest", function()
-    assert.are.same({ "NightElf" }, cat:quest(90002).races)
-  end)
-
-  it("carries requires_skill from the supplement, and ignores Wowhead class for Camping 101", function()
+  it("carries requires_skill from the supplement", function()
     local q = cat:quest(1002)
     assert.are.equal("Camping 101: First Aid", q.name)
     assert.are.equal("First Aid", q.requires_skill)
@@ -218,12 +204,10 @@ describe("catalog (fixtures)", function()
     assert.are.equal("Fishing", c:quest(1009).completed_by_training)
   end)
 
-  it("takes objectives from objs.json (keeping from_db_only as a note), then QuestieDB", function()
+  it("takes objectives from QuestieDB, none when it lists none", function()
     local q = cat:quest(1001)
     assert.are.equal(1, #q.objectives)
-    assert.are.same({ kind = "item", ids = { 5001 }, count = 4, text = "Fixture Pelt" }, q.objectives[1])
-    assert.is_true(has_note(q, "from_db_only"))
-    -- explicit empty objs.json entry means no objectives
+    assert.are.same({ kind = "item", ids = { 5001 }, count = 1, count_assumed = true, text = "Fixture Pelt" }, q.objectives[1])
     assert.are.same({}, cat:quest(1003).objectives)
     local d = cat:quest(1004)
     assert.are.equal("npc", d.objectives[1].kind)
@@ -260,19 +244,12 @@ describe("catalog (fixtures)", function()
     assert.is_nil(cat:npc(1))
   end)
 
-  it("builds items with Wowhead drops and rate overrides", function()
+  it("builds items with QuestieDB drop rates, else npcDrops with a nil rate", function()
     local i = cat:item(5001)
     assert.are.equal("Fixture Pelt", i.name)
-    assert.are.same({ { npc = 2003, rate = 0.25 }, { npc = 2001, rate = 0.5 } }, i.drops)
-    local f = cat:item(5002)
-    assert.are.same({ { npc = 2001, rate = 0.15 }, { npc = 2002, rate = 0.15 } }, f.drops)
-    assert.is_true(f.notes[1]:find("invented fixture note", 1, true) ~= nil)
+    assert.are.same({ { npc = 2001, rate = 0.5 }, { npc = 2003, rate = 0.25 } }, i.drops)
+    assert.are.same({ { npc = 2001 }, { npc = 2002 } }, cat:item(5002).drops)
     assert.is_nil(cat:item(1))
-  end)
-
-  it("falls back to QuestieDB drops with a nil rate", function()
-    local c = catalog.load(fixture_cfg { wh_json = FIX .. "/none.json", rate_overrides = FIX .. "/none.json" })
-    assert.are.same({ { npc = 2003 } }, c:item(5001).drops)
   end)
 
   it("resolves item names to ids (lowest id wins), nil when unknown", function()
@@ -290,13 +267,8 @@ end)
 
 describe("catalog (installed QuestieDB)", function()
   local root = home.root()
-  local sim = os.getenv("HOME") .. "/Projects/wow-pro-leveling/sim/data/"
   if not home.active_dir(root) then
     pending("no QuestieDB installed: run hwc init")
-    return
-  end
-  if lfs.attributes(sim .. "wh.json", "mode") ~= "file" then
-    pending("wow-pro-leveling data absent")
     return
   end
 
@@ -311,12 +283,18 @@ describe("catalog (installed QuestieDB)", function()
     assert.are.equal(1965, q.ender)
   end)
 
-  it("loads quest 179 with Wowhead xp and the objs.json objective", function()
+  it("loads quest 179 with its QuestieDB item objective", function()
     local q = cat:quest(179)
-    assert.are.equal(80, q.xp)
     assert.are.equal("item", q.objectives[1].kind)
     assert.are.same({ 750 }, q.objectives[1].ids)
-    assert.are.equal(8, q.objectives[1].count)
+  end)
+
+  it("gives item 750 at least one drop with a numeric rate", function()
+    local found = false
+    for _, d in ipairs(cat:item(750).drops) do
+      if type(d.rate) == "number" then found = true end
+    end
+    assert.is_true(found)
   end)
 
   it("loads Vagash as a level 11 elite", function()
@@ -328,14 +306,6 @@ describe("catalog (installed QuestieDB)", function()
 
   it("carries QuestieDB npcFlags: Tognus Flintfire (1241) is a gossip/questgiver/trainer NPC", function()
     assert.are.equal(19, cat:npc(1241).flags)
-  end)
-
-  it("gives item 750 at least one drop with a numeric rate", function()
-    local found = false
-    for _, d in ipairs(cat:item(750).drops) do
-      if type(d.rate) == "number" then found = true end
-    end
-    assert.is_true(found)
   end)
 
   it("records the installed release", function()

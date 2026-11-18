@@ -1,6 +1,6 @@
 -- The quest catalog: world facts (design spec §6) merged per field from the
--- Wowhead extract, the installed QuestieDB Forever release (run per character
--- through hwc.questie.source) and a hand-checked supplement.
+-- installed QuestieDB Forever release (run per character through
+-- hwc.questie.source) and a hand-checked supplement.
 -- World facts never come from guide lines; the only guide-derived values are
 -- in `placeholder`, which is marked unverified.
 --
@@ -12,8 +12,6 @@ local source = require("hwc.questie.source")
 
 local Catalog = {}
 Catalog.__index = Catalog
-
-local TWO32 = 4294967296
 
 -- QuestieDB requiredRaces bits (QuestieDB src/corrections/enum/expansions.lua:11-29,
 -- Forever ChrRaces build 1.60.1.69893): masks decode to sorted Player.RACES keys.
@@ -55,13 +53,6 @@ local function races_from_mask(mask)
   local list = mask_to_list(mask, RACE_BITS)
   return #list > 0 and list or nil
 end
-
-local function same_list(a, b)
-  if a == nil or b == nil then return a == b end
-  return table.concat(a, ",") == table.concat(b, ",")
-end
-
-local function fmt_list(l) return l and table.concat(l, "/") or "any" end
 
 local function copy_array(t)
   local out = {}
@@ -122,10 +113,6 @@ function Catalog.load(cfg)
     self.sources[name].sha256 = file_sha256(path)
     return read_json(path)
   end
-  local wh = json_source("wh_json", c.wh_json, {})
-  self.wh_quests, self.wh_items = wh.quest or {}, wh.item or {}
-  self.objs = json_source("objs_json", c.objs_json, {})
-  self.rate_overrides = json_source("rate_overrides", c.rate_overrides, {})
   local sup = json_source("supplement", c.supplement, {})
   self.supplement = sup.quests or {}
   for id, entry in pairs(self.supplement) do
@@ -176,25 +163,7 @@ local function questie_objectives(self, ob)
   return out
 end
 
-local function objectives_for(self, id, qrec, notes)
-  local entry = self.objs[tostring(id)]
-  if entry ~= nil then
-    local has_tooltip = false
-    for _, o in ipairs(entry) do
-      if not o.from_db_only then has_tooltip = true end
-    end
-    local out = {}
-    for i, o in ipairs(entry) do
-      if o.from_db_only then
-        notes[#notes + 1] = "objective " .. i .. " is from_db_only (not in the Wowhead tooltip)" ..
-          (has_tooltip and "; dropped" or "; kept")
-      end
-      if not (has_tooltip and o.from_db_only) then
-        out[#out + 1] = { kind = o.kind, ids = copy_array(o.ids), count = o.count, text = o.text }
-      end
-    end
-    return out
-  end
+local function objectives_for(self, qrec, notes)
   if qrec and type(qrec.objectives) == "table" then
     local out = questie_objectives(self, qrec.objectives)
     if #out > 0 then notes[#notes + 1] = "objective counts are not in QuestieDB (assumed 1)" end
@@ -218,88 +187,40 @@ end
 local function build_quest(self, id)
   local src = self.questie
   local q = src and src:quest(id)
-  local wh = self.wh_quests[tostring(id)]
   local sup = self.supplement[tostring(id)]
   local xpr = src and src:xp(id)
-  local has_objs = self.objs[tostring(id)] ~= nil
-  if not (q or wh or sup or xpr or has_objs) then return nil end
-  q, wh = q or {}, wh or {}
+  if not (q or sup or xpr) then return nil end
+  q = q or {}
 
   local notes = {}
   local function note(s) notes[#notes + 1] = s end
   local quest = { id = id, name = q.name or (sup and sup.name) }
 
-  -- level / required_level: Wowhead, then QuestieDB, then QuestXP (sim.py:205-212, no guide data).
-  local wl, ql, xl = nz(wh.level), nz(q.questLevel), xpr and nz(xpr[1])
-  quest.level = wl or ql or xl
-  if wl and ql and wl ~= ql then note("level: wowhead " .. wl .. " vs questie " .. ql .. " (wowhead used)") end
-  local wr, qr = nz(wh.reqlevel), nz(q.requiredLevel)
-  quest.required_level = wr or qr or 1
-  if wr and qr and wr ~= qr then note("required_level: wowhead " .. wr .. " vs questie " .. qr .. " (wowhead used)") end
+  -- level / required_level: QuestieDB, then QuestXP (sim.py:205-212, no guide data).
+  quest.level = nz(q.questLevel) or (xpr and nz(xpr[1]))
+  quest.required_level = nz(q.requiredLevel) or 1
 
-  -- xp: Wowhead, then QuestXP, then 0 (unverified).
+  -- xp: QuestXP, then 0 (unverified).
   local xp_known = false
-  if wh.xp ~= nil then
-    quest.xp, xp_known = wh.xp, true
-    if xpr and xpr[2] and xpr[2] ~= wh.xp then note("xp: wowhead " .. wh.xp .. " vs questxp " .. xpr[2] .. " (wowhead used)") end
-  elseif xpr and xpr[2] ~= nil then
+  if xpr and xpr[2] ~= nil then
     quest.xp, xp_known = xpr[2], true
   else
     quest.xp = 0
   end
 
-  -- races (sim.py:804-817 reasoning): Wowhead's mask is unreliable on Forever-added
-  -- (>= 90000) quests, so there it is used only when below 2^32; below 90000 QuestieDB decides.
-  local wmask = nz(wh.reqrace)
-  if id < 90000 then
-    local have_row = next(q) ~= nil
-    quest.races = races_from_mask(q.requiredRaces)
-    if wmask and wmask < TWO32 then
-      local wl_races = races_from_mask(wmask)
-      if have_row and not same_list(wl_races, quest.races) then
-        note("race: wowhead " .. fmt_list(wl_races) .. " vs questie " .. fmt_list(quest.races) .. " (questie used)")
-      elseif not have_row then
-        note("race: wowhead mask " .. wmask .. " not used (quest not in QuestieDB)")
-      end
-    end
-  else
-    if wmask and wmask < TWO32 then
-      quest.races = races_from_mask(wmask)
-    elseif wmask then
-      note("race: wowhead mask " .. string.format("%.0f", wmask) .. " ignored (2^32 or more, unreliable on Forever quests)")
-    end
-  end
-
-  -- classes: QuestieDB, else a single-class Wowhead mask (not for Camping 101 profession quests).
+  quest.races = races_from_mask(q.requiredRaces)
   local qclasses = nz(q.requiredClasses) and mask_to_list(q.requiredClasses, CLASS_BITS) or nil
-  if qclasses and #qclasses == 0 then qclasses = nil end
-  local wclass
-  local rc = nz(wh.reqclass)
-  if rc then
-    for token, bit in pairs(CLASS_BITS) do
-      if bit == rc then wclass = token end
-    end
-  end
-  local camping = (quest.name or ""):sub(1, 11) == "Camping 101"
-  if qclasses then
-    quest.classes = qclasses
-    if wclass and not camping and not (#qclasses == 1 and qclasses[1] == wclass) then
-      note("class: wowhead " .. wclass .. " vs questie " .. table.concat(qclasses, "/") .. " (questie used)")
-    end
-  elseif wclass and not camping then
-    quest.classes = { wclass }
-  end
+  if qclasses and #qclasses > 0 then quest.classes = qclasses end
 
   quest.pre_single = sorted_values(q.preQuestSingle)
   quest.pre_group = sorted_values(q.preQuestGroup)
-  quest.objectives = objectives_for(self, id, q, notes)
+  quest.objectives = objectives_for(self, q, notes)
   quest.starter, quest.starter_kind = starter_of(q.startedBy)
   quest.ender, quest.ender_kind = starter_of(q.finishedBy)
   -- QuestieDB sourceItemId: "item provided by quest starter" (the client puts it in the bags on accept).
   quest.source_item = nz(q.sourceItemId)
 
-  -- Camping 101 profession quests (design spec §3, the user in game 2026-11-11;
-  -- Wowhead progress text): "Camping 101: <Prof>" ends at the trainer and gates
+  -- Camping 101 profession quests (design spec §3, the user in game 2026-11-11): "Camping 101: <Prof>" ends at the trainer and gates
   -- on knowing <Prof>, except Cooking, whose turn-in is completed by training
   -- Cooking. The supplement below may override either field, and a
   -- supplement-set name is taken into account.
@@ -390,21 +311,16 @@ function Catalog:item(id)
   if not id then return nil end
   if self._items[id] == nil then
     local it = self.questie and self.questie:item(id)
-    local wh = self.wh_items[tostring(id)]
-    if not (it or wh) then
+    if not it then
       self._items[id] = false
     else
-      local drops, notes = {}, {}
-      for _, r in ipairs(wh and wh.drops or {}) do drops[#drops + 1] = { npc = r[1], rate = r[2] } end
-      if #drops == 0 and it then
+      -- QuestieDB drop tables give rates; without them, npcDrops gives droppers only.
+      local drops = self.questie.drops and self.questie:drops(id)
+      if not drops then
+        drops = {}
         for _, npc in ipairs(it.npcDrops or {}) do drops[#drops + 1] = { npc = npc } end
       end
-      local override = self.rate_overrides[tostring(id)]
-      if override then
-        for _, d in ipairs(drops) do d.rate = override.rate end
-        notes[#notes + 1] = "drop rate override: " .. tostring(override.source)
-      end
-      self._items[id] = { id = id, name = it and it.name, drops = drops, notes = notes }
+      self._items[id] = { id = id, name = it.name, drops = drops, notes = {} }
     end
   end
   return self._items[id] or nil

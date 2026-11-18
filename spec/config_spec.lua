@@ -77,16 +77,13 @@ describe("config.load", function()
     local tag = store.active(qroot)
     assert.are.equal(tag and store.version_dir(qroot, tag) or nil, c.questie_dir)
     assert.are.equal(root .. "/local/catalog/supplement.json", c.supplement)
-    assert.are.equal(home .. "/Projects/wow-pro-leveling/sim/data/wh.json", c.wh_json)
-    assert.are.equal(home .. "/Projects/wow-pro-leveling/sim/data/objs.json", c.objs_json)
-    assert.are.equal(home .. "/Projects/wow-pro-leveling/sim/data/rate_overrides.json", c.rate_overrides)
     os.execute("rm -rf '" .. dir .. "'")
   end)
 
   it("keeps absolute catalog paths and resolves relative overrides against the repo root", function()
     local dir = fake_addon()
-    local c = config.load({ addon_path = dir, catalog = { wh_json = "/abs/wh.json", supplement = "x/s.json" } }).catalog
-    assert.are.equal("/abs/wh.json", c.wh_json)
+    local c = config.load({ addon_path = dir, catalog = { questie_dir = "/abs/questie", supplement = "x/s.json" } }).catalog
+    assert.are.equal("/abs/questie", c.questie_dir)
     assert.are.equal(config.repo_root() .. "/x/s.json", c.supplement)
     os.execute("rm -rf '" .. dir .. "'")
   end)

@@ -35,12 +35,8 @@ end
 -- against the repo root.
 local function catalog_config(c)
   c = c or {}
-  local sim = (os.getenv("HOME") or "") .. "/Projects/wow-pro-leveling/sim/data/"
   return {
     questie_dir = c.questie_dir and resolve(c.questie_dir) or M.default_questie_dir(),
-    wh_json = resolve(c.wh_json or (sim .. "wh.json")),
-    objs_json = resolve(c.objs_json or (sim .. "objs.json")),
-    rate_overrides = resolve(c.rate_overrides or (sim .. "rate_overrides.json")),
     supplement = resolve(c.supplement or "local/catalog/supplement.json"),
   }
 end
