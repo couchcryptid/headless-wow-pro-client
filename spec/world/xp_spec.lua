@@ -27,7 +27,7 @@ describe("xp rules", function()
     assert.equal(209800, xp.to_next(59))
   end)
 
-  it("caps at level 60, the Classic and Forever maximum", function()
+  it("caps at level 60, the Classic maximum (unverified for Forever)", function()
     assert.equal(60, xp.CAP_LEVEL)
   end)
 

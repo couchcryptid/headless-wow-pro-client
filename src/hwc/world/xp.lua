@@ -1,17 +1,20 @@
 -- Classic XP rules (design spec §5). Pure functions; no player state.
+-- WoW Forever is not Classic: every rule below is unverified for Forever (Classic) except
+-- the level-29 row of the XP table, checked in game.
 -- Sources:
 --   XP to next level, levels 1-59: https://warcraft.wiki.gg/wiki/Experience_to_level (Vanilla / Classic table);
 --     levels 1-23 also match the old simulator's TNL (wow-pro-leveling/sim/sim.py:31).
 --     Forever, in game: level 29 UnitXPMax = 44300 (Human Warlock, 2026-11-18), matching the table.
---     The other rows are Classic values not yet checked against Forever.
---   Mob XP (base, grey level, zero difference, elite x2, party modifier):
+--     The other rows are Classic values, unverified for Forever (Classic).
+--   Mob XP (base, grey level, zero difference, elite x2, party modifier), unverified for
+--     Forever (Classic):
 --     https://warcraft.wiki.gg/wiki/Mob_experience (Azeroth formula, pre-4.03a, as used in Vanilla;
 --     zero difference and gray level bands to 60, the pre-TBC gray level 47 at 60);
 --     the multiplier rules for quests mirror sim.py:362 (qmult), mob XP mirrors sim.py:347-360.
 local xp = {}
 
--- Level at which XP stops accruing: 60, the Classic maximum, which the Forever guides
--- (up to 52_60/54_60) level to. add_xp can reach it; to_next is defined only below it.
+-- Level at which XP stops accruing: 60, the Classic maximum; unverified for Forever (Classic).
+-- add_xp can reach it; to_next is defined only below it.
 xp.CAP_LEVEL = 60
 
 local TO_NEXT = {
@@ -39,6 +42,7 @@ function xp.quest_xp(base, char_level, quest_level)
 end
 
 -- Grey level: mobs at or below it give no XP. Levels 40-60 use the second band (47 at 60).
+-- Unverified for Forever (Classic bands).
 function xp.gray_level(char_level)
   if char_level <= 5 then return 0 end
   if char_level >= 40 then return char_level - math.floor(char_level / 5) - 1 end
@@ -46,6 +50,7 @@ function xp.gray_level(char_level)
 end
 
 -- Zero-difference value (ZD) for the lower-level XP falloff, levels 1-60.
+-- Unverified for Forever (Classic bands).
 function xp.zero_diff(char_level)
   local c = char_level
   if c <= 7 then return 5 end
@@ -66,6 +71,7 @@ end
 local PARTY_MODIFIER = { [1] = 1.0, [2] = 1.0, [3] = 1.166, [4] = 1.3, [5] = 1.4 }
 
 -- XP for killing a mob of mob_level. elite doubles it; party_size divides it by the group modifier.
+-- The formula is unverified for Forever (Classic).
 -- Not floored: the caller decides rounding.
 function xp.mob_xp(char_level, mob_level, elite, party_size)
   local c, m = char_level, mob_level
