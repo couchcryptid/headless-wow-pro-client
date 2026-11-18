@@ -1,8 +1,17 @@
 -- Integration: the driver plays a Dwarf Warrior through Dun Morogh with the
 -- real, unmodified engine until the engine autoloads the next guide (design
--- spec §4.4, §10). Pending without the addon checkout or the pinned catalog.
--- Slow (a full guide): busted --tags=slow.
+-- spec §4.4, §10). Pending without the pinned addon worktree or an installed
+-- QuestieDB. Slow (a full guide): busted --tags=slow.
+--
+-- Runs against a pinned worktree made by tools/addon-worktree.sh, like the anchors,
+-- not ~/Projects/WoW-Pro-Guides: the Rhapsody Malt check below asserts a guide bug
+-- the addon later fixed (0640e4083 turned the C step into a B step), so it needs a
+-- fixed addon commit with that step reachable. fix/forever-prereq-gates
+-- (64fe6b36f) is one: it still has the C step (:112) and accepts the PRE chain
+-- 282 -> 420 that gates Beer Basted Boar Ribs. main (9851a40f2) has the C step but
+-- no A for 282 or 420, so 384 is never shown there and the C step is unreachable.
 local flow = dofile("spec/helpers/world_engine_flow.lua")
+local ADDON = require("hwc.config").repo_root() .. "/local/addon/fix-forever-prereq-gates"
 
 local function signals(log, name)
   local out = {}
@@ -14,6 +23,9 @@ end
 
 describe("driver.run against the real engine #slow", function()
   local why = flow.absent()
+  if not why and require("lfs").attributes(ADDON .. "/WoWPro/WoWPro.toc", "mode") == nil then
+    why = "addon worktree absent at " .. ADDON .. " (tools/addon-worktree.sh)"
+  end
   if why then
     pending(why)
     return
@@ -24,7 +36,7 @@ describe("driver.run against the real engine #slow", function()
   local log
   local function get()
     if log then return log end
-    local cfg = require("hwc.config").load({ addon_path = flow.ADDON, race = "Dwarf", class = "WARRIOR" })
+    local cfg = require("hwc.config").load({ addon_path = ADDON, race = "Dwarf", class = "WARRIOR" })
     log = require("hwc.driver.run").character(cfg, { max_guides = 2 })
     return log
   end
