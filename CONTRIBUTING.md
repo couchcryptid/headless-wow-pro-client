@@ -82,8 +82,8 @@ The anchors also need the pinned addon worktrees; see
   it.
 - **Write the failing spec first,** then the change. Keep the default suite
   fast; tag anything that plays whole guides `#slow`.
-- **If you change what the driver does,** re-run `bin/hwc matrix` on a pinned
-  worktree. Report the before and after signal counts in the pull request.
+- **If you change what the driver does,** re-run `bin/hwc run` for a few characters (the loop in the
+  README's "Running characters and findings") on a pinned worktree. Report the before and after signal counts in the pull request.
 - **Commits:** an imperative subject line (e.g. "Give quest reward items on
   turn-in"), and a body saying why when it isn't obvious.
 - **Pull requests** go into `main`, with a
