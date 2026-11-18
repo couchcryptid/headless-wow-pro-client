@@ -86,14 +86,20 @@ The anchors also need the pinned addon worktrees; see
   worktree. Report the before and after signal counts in the pull request.
 - **Commits:** an imperative subject line (e.g. "Give quest reward items on
   turn-in"), and a body saying why when it isn't obvious.
-- **Pull requests** go into `main` and are squash-merged, so the PR title
-  becomes the one commit on `main`. Write it as a
-  [Conventional Commit](https://www.conventionalcommits.org/) with a
+- **Pull requests** go into `main`, with a
+  [Conventional Commit](https://www.conventionalcommits.org/) title and a
   capitalised, imperative subject: `fix: Give quest reward items on turn-in`.
-  The `PR title` check enforces this.
+  The `PR title` check enforces it. semantic-release reads the subject lines of
+  the commits that land on `main`, not PR titles, so each PR must land at least
+  one Conventional Commit subject. Either:
+  - make one of the PR's own commits a Conventional Commit, and merge with a
+    merge commit or rebase; or
+  - when squash-merging, edit the squash commit's subject to the Conventional
+    Commit, e.g. the PR title. GitHub may fill in "Merge pull request #N"
+    instead, and then nothing releases.
 - **Releases are automatic.** Each merge into `main` runs CI again, then
-  [semantic-release](https://semantic-release.gitbook.io/) reads the merged
-  titles and decides the next version:
+  [semantic-release](https://semantic-release.gitbook.io/) reads the subject
+  line of each new commit on `main` and decides the next version:
 
   | Title type | Release |
   |---|---|
