@@ -176,6 +176,69 @@ describe("group.findings", function()
     end
   end)
 
+  describe("cross-signal root causes", function()
+    local function turnin(qid, line, gid)
+      return dna({ qid = qid, line = line, gid = gid or "G1", action = "T", reason = "incomplete" })
+    end
+    local function use_step(qid, line, gid)
+      return { signal = "hidden-use-step", gid = gid or "G1", file = "f.lua", line = line, action = "U",
+        name = "Use", qid = qid, use = 1, loot = 2 }
+    end
+    local function accept(qid, line, prereq)
+      return { signal = "never-shown-accept", gid = "G1", file = "f.lua", line = line, action = "A",
+        name = "Next", qid = qid, why = "NextStep:PRE&(" .. prereq .. "): A mandatory prereq was not met: " .. prereq }
+    end
+    local function refusal(qid, line)
+      return { signal = "accept-refused", gid = "G1", file = "f.lua", line = line, action = "A",
+        name = "Pre", qid = qid, reason = "prerequisite" }
+    end
+    local function hidden_accept(qid, line)
+      return { signal = "never-shown-accept", gid = "G1", file = "f.lua", line = line, action = "A", name = "Hid", qid = qid }
+    end
+    local function find(fs, sig, qid)
+      for _, f in ipairs(fs) do if f.signal == sig and f.qid == qid then return f end end
+    end
+
+    it("links a never-shown-accept to the incomplete turn-in of its prerequisite", function()
+      local fs = group.findings({ runlog("Dwarf", "WARRIOR", { turnin(95213, 40), accept(95214, 50, 95213) }) })
+      local t, a = find(fs, "did-not-advance", 95213), find(fs, "never-shown-accept", 95214)
+      assert.equal(t.id, a.caused_by)
+    end)
+
+    it("links a never-shown-accept to a hidden-use-step of its prerequisite", function()
+      local fs = group.findings({ runlog("Dwarf", "WARRIOR", { use_step(1016, 40), accept(1017, 50, 1016) }) })
+      local u, a = find(fs, "hidden-use-step", 1016), find(fs, "never-shown-accept", 1017)
+      assert.equal(u.id, a.caused_by)
+    end)
+
+    it("links an incomplete turn-in to a hidden-use-step for the same quest in the same guide", function()
+      local fs = group.findings({ runlog("Dwarf", "WARRIOR", { use_step(1016, 30), turnin(1016, 40) }) })
+      assert.equal(find(fs, "hidden-use-step", 1016).id, find(fs, "did-not-advance", 1016).caused_by)
+      local other = group.findings({ runlog("Dwarf", "WARRIOR", { use_step(1016, 30), turnin(1016, 40, "G2") }) })
+      assert.is_nil(find(other, "did-not-advance", 1016).caused_by)
+    end)
+
+    it("prefers refusal, then hidden-use-step, then incomplete turn-in, then hidden accept", function()
+      local function parent_signal(signals)
+        local fs = group.findings({ runlog("Dwarf", "WARRIOR", signals) })
+        local a = find(fs, "never-shown-accept", 50)
+        local by = {}
+        for _, f in ipairs(fs) do by[f.id] = f end
+        return a.caused_by and by[a.caused_by].signal
+      end
+      local function set(...)
+        local out = { accept(50, 90, 7) }
+        for _, s in ipairs({ ... }) do out[#out + 1] = s end
+        return out
+      end
+      local r, u, t, h = refusal(7, 10), use_step(7, 20), turnin(7, 30), hidden_accept(7, 40)
+      assert.equal("accept-refused", parent_signal(set(r, u, t, h)))
+      assert.equal("hidden-use-step", parent_signal(set(u, t, h)))
+      assert.equal("did-not-advance", parent_signal(set(t, h)))
+      assert.equal("never-shown-accept", parent_signal(set(h)))
+    end)
+  end)
+
   it("raises on an unknown signal", function()
     assert.has_error(function() group.findings({ runlog("Dwarf", "WARRIOR", { { signal = "bogus" } }) }) end)
   end)
