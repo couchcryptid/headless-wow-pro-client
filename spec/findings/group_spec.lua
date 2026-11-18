@@ -259,6 +259,8 @@ describe("group.findings", function()
       assert.equal("did-not-advance", parent_signal({ reports({ 7 }), t, h7 }))
       assert.equal("never-shown-accept", parent_signal({ reports({ 7 }), h7 }))
       assert.is_nil(parent_signal({ reports(nil), h7 }))
+      -- Any-of lists: the first missing id that has a failure, in order.
+      assert.equal("never-shown-accept", parent_signal({ reports({ 3, 7 }), h7 }))
     end)
 
     it("prefers refusal, then hidden-use-step, then incomplete turn-in, then hidden accept", function()

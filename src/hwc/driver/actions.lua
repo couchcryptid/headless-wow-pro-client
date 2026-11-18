@@ -205,14 +205,15 @@ end
 -- QIDsInTable test at WoWPro_Events.lua:709): the first id acceptable now, else
 -- the first id whose only refusal is below-level (acceptable after a grind).
 -- Returns qid, opts, needs_grind; or nil, first id's reason, its missing prerequisite
--- ids (QuestLog:refusal, for "prerequisite") when every id is refused.
+-- ids and whether they are any-of (QuestLog:refusal, for "prerequisite") when every id
+-- is refused.
 local function choose_accept(w, qids, qo)
-  local first_reason, first_missing, grind_qid, grind_opts
+  local first_reason, first_missing, first_any, grind_qid, grind_opts
   for _, qid in ipairs(qids) do
     local opts = accept_opts(w, qid, qo)
-    local reason, missing = w.log:refusal(qid, opts)
+    local reason, missing, any_of = w.log:refusal(qid, opts)
     if not reason then return qid, opts, false end
-    if not first_reason then first_reason, first_missing = reason, missing end
+    if not first_reason then first_reason, first_missing, first_any = reason, missing, any_of end
     if reason == "below-level" and not grind_qid then
       local other = w.log:refusal(qid, { placeholder_qo = opts and opts.placeholder_qo, ignore_level = true })
       if not other then grind_qid, grind_opts = qid, opts end
@@ -223,10 +224,11 @@ local function choose_accept(w, qids, qo)
   -- quest the player can't take even once levelled).
   if first_reason == "below-level" then
     local o = accept_opts(w, qids[1], qo)
-    local other, missing = w.log:refusal(qids[1], { placeholder_qo = o and o.placeholder_qo, ignore_level = true })
-    if other then first_reason, first_missing = other, missing end
+    local other, missing, any_of = w.log:refusal(qids[1], { placeholder_qo = o and o.placeholder_qo, ignore_level = true })
+    if other then first_reason, first_missing, first_any = other, missing, any_of end
   end
-  return nil, first_reason, first_reason == "prerequisite" and first_missing or nil
+  if first_reason ~= "prerequisite" then return nil, first_reason end
+  return nil, first_reason, first_missing, first_any
 end
 
 local function perform_accept(ctx, step, out)
@@ -241,11 +243,12 @@ local function perform_accept(ctx, step, out)
       return
     end
   end
-  local qid, opts, needs_grind = choose_accept(w, step.qids, qo)
+  local qid, opts, needs_grind, missing_any = choose_accept(w, step.qids, qo)
   if not qid then
-    local reason, missing = opts, needs_grind -- the refused shape: nil, reason, missing
+    local reason, missing = opts, needs_grind -- the refused shape: nil, reason, missing, any-of
     out.qid = step.qids[1]
     out.kind, out.reason, out.missing = "refused", reason, missing
+    out.missing_any = missing and missing_any or nil
     return
   end
   out.qid = qid

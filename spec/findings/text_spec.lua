@@ -258,6 +258,16 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     assert.equal("The guide shows this accept, but the quest data says it needs quest 5 and quest 6 (Six), "
       .. "which aren't done yet.", s)
   end)
+  it("accept-refused by an any-of (pre_single) prerequisite says one of them would do", function()
+    local s = text.sentence(F({ signal = "accept-refused", name = "X", qid = 9, reasons = { "prerequisite" },
+      missing = { 5, 6 }, missing_any = true, missing_names = { ["6"] = "Six" } }), ONE)
+    assert.equal("The guide shows this accept, but the quest data says it needs one of quest 5 or quest 6 (Six), "
+      .. "none of which is done yet.", s)
+    s = text.sentence(F({ signal = "accept-refused", name = "X", qid = 9, reasons = { "prerequisite" },
+      missing = { 98323 }, missing_any = true, missing_names = { ["98323"] = "Secure the Mountain" } }), ONE)
+    assert.equal("The guide shows this accept, but the quest data says it needs quest 98323 (Secure the Mountain), "
+      .. "which isn't done yet.", s)
+  end)
   it("accept-refused by reputation names the faction and both standings", function()
     local t, s = both(F({ signal = "accept-refused", name = "Pre", qid = 7, reasons = { "reputation" },
       rep = { faction = 72, name = "Stormwind", bound = "min", value = 3000, points = 2000 } }))

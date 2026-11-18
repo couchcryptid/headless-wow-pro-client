@@ -77,7 +77,7 @@ local function new_finding(s, key)
     action = s.action, name = s.name, qid = s.qid, why = s.why, before = s.before, after = s.after,
     qname = s.qname, grind = s.grind, use = s.use, loot = s.loot, level = s.level, log = s.log, confidence = s.confidence, rep = s.rep,
     faction = s.faction, faction_name = s.faction_name, tag_faction = s.tag_faction,
-    missing = s.missing, missing_names = s.missing_names, combos = {}, causes = {}, reasons = {},
+    missing = s.missing, missing_names = s.missing_names, missing_any = s.missing_any, combos = {}, causes = {}, reasons = {},
   }
   if s.signal == "lua-error" then
     f.name, f.message, f.stack = s.message, s.message, s.stack
@@ -134,7 +134,7 @@ end
 --     preference: a refusal of N, a hidden-use-step of N, an incomplete turn-in of N,
 --     a never-shown-accept of N;
 --   * a prerequisite accept-refused that names its missing prerequisites -> what blocks
---     the first of them, in the same order.
+--     the first of them, in list order, that has such a failure (same preference order).
 -- Lowest id breaks ties; a link that would close a cycle is refused.
 local function link_roots(findings)
   local by_id = {}
@@ -181,9 +181,12 @@ local function link_roots(findings)
       local n = tonumber(f.why:match("not met:%s*(%d+)"))
       local target = n and blocker(n)
       if target and target ~= f then link(f, target, by_id) end
-    elseif f.signal == "accept-refused" and has(f.reasons, "prerequisite") and f.missing and f.missing[1] then
-      local target = blocker(f.missing[1])
-      if target and target ~= f then link(f, target, by_id) end
+    elseif f.signal == "accept-refused" and has(f.reasons, "prerequisite") and f.missing then
+      -- An any-of list has no single culprit: the first id with a failure stands for it.
+      for _, n in ipairs(f.missing) do
+        local target = blocker(n)
+        if target and target ~= f then link(f, target, by_id); break end
+      end
     end
   end
 end

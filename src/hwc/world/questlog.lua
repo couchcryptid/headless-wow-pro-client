@@ -31,7 +31,8 @@ local function contains(list, v)
 end
 
 -- The refusal reason accept would give, or nil, quest when it would succeed. With
--- "prerequisite" the second value is the sorted list of prerequisite ids not done.
+-- "prerequisite" the second value is the sorted list of prerequisite ids not done and
+-- the third is true when that list is any-of (pre_single: one of them would do).
 -- opts.ignore_level skips the level check (the grind-then-accept path asks
 -- whether levelling alone would make the quest acceptable).
 function QuestLog:refusal(qid, opts)
@@ -50,7 +51,7 @@ function QuestLog:refusal(qid, opts)
   if quest.classes and not contains(quest.classes, player.class_token) then return "class" end
   -- A prerequisite refusal also returns the ids that aren't done, sorted: every
   -- pre_single id (any one would do, and none is done), else the undone pre_group ids.
-  local missing = {}
+  local missing, any_of = {}, false
   if quest.pre_single and #quest.pre_single > 0 then
     local any = false
     for _, p in ipairs(quest.pre_single) do
@@ -58,6 +59,7 @@ function QuestLog:refusal(qid, opts)
     end
     if not any then
       for i, p in ipairs(quest.pre_single) do missing[i] = p end
+      any_of = true
     end
   end
   if #missing == 0 then
@@ -67,7 +69,7 @@ function QuestLog:refusal(qid, opts)
   end
   if #missing > 0 then
     table.sort(missing)
-    return "prerequisite", missing
+    return "prerequisite", missing, any_of
   end
   -- Last, so level and prerequisites win (design §4.5): QuestieDB requiredMinRep/requiredMaxRep.
   if w.reputation and w.reputation:gate(quest) then return "reputation" end

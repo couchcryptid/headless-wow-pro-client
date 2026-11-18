@@ -67,6 +67,7 @@ describe("actions.perform: A", function()
     local pre = actions.perform(ctx, step("A", { 92007 }))
     assert.are.equal("prerequisite", pre.reason)
     assert.are.same({ 92004 }, pre.missing) -- the prerequisite that isn't done
+    assert.is_true(pre.missing_any) -- 92007's is a pre_single (any-of) list
     actions.perform(ctx, step("A", { 92004 }))
     actions.perform(ctx, step("T", { 92004 }))
     local o = actions.perform(ctx, step("A", { 92004 }))

@@ -369,8 +369,15 @@ local function clauses(f, ctx)
         local nm = names[tostring(id)]
         list[i] = "quest " .. tostring(id) .. ((nm and nm ~= "") and (" (" .. nm .. ")") or "")
       end
+      if #list == 1 then
+        return "The guide shows this accept, but the quest data says it needs " .. list[1] .. ", which isn't done yet."
+      elseif f.missing_any then
+        -- pre_single: any one of them would do.
+        return "The guide shows this accept, but the quest data says it needs one of " .. table.concat(list, " or ")
+          .. ", none of which is done yet."
+      end
       return "The guide shows this accept, but the quest data says it needs " .. table.concat(list, " and ")
-        .. ", which " .. (#list > 1 and "aren't" or "isn't") .. " done yet."
+        .. ", which aren't done yet."
     end
     return "The guide shows this accept, but the quest data says a prerequisite of quest " .. q .. " isn't done yet."
   elseif s == "log-full" then

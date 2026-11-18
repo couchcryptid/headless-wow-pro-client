@@ -694,7 +694,7 @@ describe("driver.run", function()
   it("carries the missing prerequisites and their names on a prerequisite accept-refused", function()
     local steps = {
       { action = "A", name = "The Reports", qids = { 291 },
-        outcome = { kind = "refused", reason = "prerequisite", missing = { 98323, 99999 } } },
+        outcome = { kind = "refused", reason = "prerequisite", missing = { 98323, 99999 }, missing_any = true } },
     }
     local log = drive(one_guide(steps), {}, {}, fx.fake_world({ [98323] = { name = "Secure the Mountain" } }))
     local ar = signals(log, "accept-refused")
@@ -702,6 +702,7 @@ describe("driver.run", function()
     assert.equal("prerequisite", ar[1].reason)
     assert.same({ 98323, 99999 }, ar[1].missing)
     assert.same({ ["98323"] = "Secure the Mountain" }, ar[1].missing_names)
+    assert.is_true(ar[1].missing_any)
   end)
 
   it("turns a reputation refusal into an unverified accept-refused naming the gate", function()
