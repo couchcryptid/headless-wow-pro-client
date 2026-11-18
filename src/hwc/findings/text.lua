@@ -399,9 +399,14 @@ end
 local function short(s) return tostring(s or "?"):sub(1, 7) end
 
 text.DIFF_WARNINGS = {
+  -- Same tag and build but a different archive: name the sha256s, else both sides read alike.
   questie = function(a)
+    local o, n = short(a.old_build), short(a.new_build)
+    if a.old_tag == a.new_tag and a.old_build == a.new_build then
+      o, n = o .. ", sha256 " .. short(a.old_sha256), n .. ", sha256 " .. short(a.new_sha256)
+    end
     return string.format("different QuestieDB: %s (%s) → %s (%s); changes may come from the data, not the guide",
-      tostring(a.old_tag), short(a.old_build), tostring(a.new_tag), short(a.new_build))
+      tostring(a.old_tag), o, tostring(a.new_tag), n)
   end,
   supplement = function()
     return "different supplement; changes may come from the data, not the guide"

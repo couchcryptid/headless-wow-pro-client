@@ -1,150 +1,14 @@
--- Command line entry point. Requirable: main(args, out, err) returns an exit
--- status; bin/hwc performs the exit.
-local USAGE = [[
-Usage: hwc [-h|--help]
-       hwc boot   [--race RACE] [--class CLASS] [--json]
-       hwc quest  <id>
-       hwc run    --class CLASS [--race RACE] [--variant V]
-                  [--include PATTERN]... [--exclude PATTERN]...
-                  [--date D] [--out DIR] [--relative-to DIR]
-       hwc matrix [--race RACE]... [--races LIST]
-                  [--include PATTERN]... [--exclude PATTERN]...
-                  [--date D] [--out DIR] [--relative-to DIR]
-       hwc diff   OLD.json NEW.json [--json]
-       hwc init
-       hwc doctor [--json]
-       hwc sync questie [--tag TAG]
+-- Command line entry point. Requirable: main(args, out, err, env) returns an
+-- exit status; bin/hwc performs the exit. Each command is a declaration plus a
+-- handler (src/hwc/cli/commands.lua); run still takes the legacy path below
+-- until it gets its own declaration.
 
-Headless WoW-Pro client: loads the real WoW-Pro addon under LuaJIT. Run it from
-the WoW-Pro folder (the one holding WoWPro/WoWPro.toc) or any folder below it.
-init, doctor and sync run from any folder.
-
-Commands:
-  boot          Boot the addon to the first shown steps and print them
-  quest         Print a quest from the catalog, with its sources, as JSON
-  run           Play one character along the guide chain; write findings and a run log
-  matrix        Play every race x class (and profession variant); write findings and run logs
-  diff          Compare two findings files: fixed, new, partly fixed (exit 1 if anything is new or a run stopped early)
-  init          Download QuestieDB (latest Forever release) into ~/.hwc and check the setup
-  doctor        Check LuaJIT, rocks, tools, the WoW-Pro folder, QuestieDB and the supplement
-  sync questie  Install the newest QuestieDB Forever release (or --tag TAG) and make it active
-
-Options:
-  -h, --help    Show this help
-  --race RACE   Player race (boot default Human; run default Dwarf; repeatable for matrix):
-                Dwarf, Gnome, Human, NightElf, SkyborneAlliance (Alliance);
-                Orc, Tauren, Troll, Undead, SkyborneHorde (Horde)
-  --class CLASS Player class token, e.g. WARRIOR (default WARRIOR); must be one the
-                race can play in Forever
-  --json        Print the boot result or the diff as JSON
-  --variant V   Profession variant: baseline, secondary, alch-herb, bs-mining, lw-skin,
-                eng-ench, tailoring (default baseline)
-  --races LIST  Comma list of races for matrix, merged with --race (default Dwarf,Gnome)
-  --include P / --exclude P  Glob filters on guide paths (repeatable; last match wins; default: all guides)
-                See README "Choosing guides" for the rules.
-  --date D      Findings date, YYYY-MM-DD (default today, host clock)
-  --out DIR     Findings directory (default ~/.hwc/findings)
-  --relative-to DIR  Every path in the output is written relative to DIR (default: current directory)
-]]
+-- The legacy run path's usage text, printed after its usage errors.
+local function usage()
+  return require("hwc.cli.help").command(require("hwc.cli.commands").find("run"))
+end
 
 local M = {}
-
-local function parse_boot(args, i)
-  local opts = {}
-  while i <= #args do
-    local a = args[i]
-    if a == "--json" then
-      opts.json = true
-      i = i + 1
-    elseif (a == "--race" or a == "--class") and args[i + 1] then
-      opts[a:sub(3)] = args[i + 1]
-      i = i + 2
-    else
-      return nil, "unknown or incomplete option: " .. a
-    end
-  end
-  return opts
-end
-
--- "a, b x2, c" in first-seen order
-local function tally(list)
-  local seen, order = {}, {}
-  for _, v in ipairs(list) do
-    if not seen[v] then seen[v] = 0; order[#order + 1] = v end
-    seen[v] = seen[v] + 1
-  end
-  local parts = {}
-  for _, v in ipairs(order) do parts[#parts + 1] = seen[v] > 1 and (v .. " x" .. seen[v]) or v end
-  return table.concat(parts, ", ")
-end
-
-local function json_result(r, boot)
-  local errors = {}
-  for i, e in ipairs(r.errors) do
-    errors[i] = { msg = e.msg, where = e.where, stack = e.stack, harness = boot.is_harness_error(e) }
-  end
-  local skipped = {}
-  for rel, reason in pairs(r.skipped) do skipped[#skipped + 1] = { rel = rel, reason = reason } end
-  table.sort(skipped, function(a, b) return a.rel < b.rel end)
-  local addon = require("hwc.addon_info").json_view(r.addon)
-  return {
-    addon = addon, files_loaded = r.files_loaded, files_failed = r.files_failed,
-    skipped = skipped, errors = errors, missing_order = r.missing_order,
-    standin_calls = r.standin_calls, guide = r.guide, steps = r.steps, settle = r.settle,
-  }
-end
-
-local function print_text(out, r, boot)
-  local a = r.addon
-  out:write("addon: ", a.path, "\n")
-  if a.git == false then
-    out:write("version: ", a.version or "unknown", "  (not a git folder)\n")
-  else
-    out:write("branch: ", a.branch, "  commit: ", a.commit, a.dirty and "  (dirty)" or "", "\n")
-  end
-  out:write("files: ", r.files_loaded, " loaded, ", #r.files_failed, " failed\n")
-  out:write(string.format("settle: %d timers run, now %.3f%s\n", r.settle.ran, r.settle.now,
-    r.settle.hit_limit and ", HIT LIMIT" or ""))
-  out:write("guide: ", tostring(r.guide.gid), "  loaded: ", tostring(r.guide.loaded),
-    "  active step: ", tostring(r.guide.active_step), "\n")
-  out:write("steps:\n")
-  for _, s in ipairs(r.steps) do
-    out:write(string.format("  %3d  %s %s%s\n", s.index, tostring(s.action), tostring(s.step),
-      s.qid and ("  [QID " .. s.qid .. "]") or ""))
-  end
-  local harness = #boot.harness_errors(r)
-  out:write("errors: ", #r.errors, " (", harness, " harness, ", #r.errors - harness, " addon)\n")
-  for _, e in ipairs(r.errors) do out:write("  ", e.msg, "\n") end
-  out:write("missing globals: ", #r.missing_order, "\n")
-  out:write("stand-ins called: ", #r.standin_calls > 0 and tally(r.standin_calls) or "none", "\n")
-end
-
-local function run_boot(opts, root, out)
-  local config = require("hwc.config")
-  local boot = require("hwc.boot")
-  local cfg = config.load({ addon_path = root, race = opts.race, class = opts.class })
-  local r = boot.run(cfg)
-  if opts.json then
-    out:write(require("hwc.json").encode(json_result(r, boot), { indent = true }), "\n")
-  else
-    print_text(out, r, boot)
-  end
-  return 0
-end
-
-local function run_quest(id, out, err)
-  local config = require("hwc.config")
-  local catalog = require("hwc.catalog")
-  local cfg = config.load({})
-  local cat = catalog.load(cfg)
-  local quest = cat:quest(id)
-  if not quest then
-    err:write("hwc: quest ", id, " is in no catalog source\n")
-    return 1
-  end
-  out:write(require("hwc.json").encode({ quest = quest, sources = cat.sources }, { indent = true }), "\n")
-  return 0
-end
 
 -- Options for run/matrix: every option takes a value. allowed[name] is true for
 -- a single value (the last one wins) or "list" for a repeatable option, kept as an
@@ -414,145 +278,7 @@ local function run_run(opts, out, err)
     opts, out, err)
 end
 
-local function run_matrix(races, opts, out, err)
-  local combos = require("hwc.driver.matrix").combos(races)
-  -- Nothing to play: no findings file (it would carry an "Addon: nil" header).
-  if #combos == 0 then
-    err:write("hwc: matrix: no combos for ", table.concat(races, ","), "\n")
-    return 2
-  end
-  -- forever-<faction>-<races> when every race is on one side, else forever-<races>.
-  local RACES = require("hwc.world.player").RACES
-  local names, faction = {}, RACES[races[1]].faction
-  for i, r in ipairs(races) do
-    names[i] = r:lower()
-    if RACES[r].faction ~= faction then faction = nil end
-  end
-  local prefix = faction and ("forever-" .. faction:lower() .. "-") or "forever-"
-  opts.matrix = true
-  return play(combos, scoped(prefix .. table.concat(names, "-"), opts), opts, out, err)
-end
-
 local function strip(msg) return (tostring(msg):gsub("^hwc: ", "")) end
-
-local function print_skipped(out, res)
-  for _, tag in ipairs(res.skipped or {}) do out:write("skipped ", tag, ": no Forever build\n") end
-end
-
-local function sync_line(res)
-  if res.already then return "QuestieDB " .. res.to .. " already installed; active\n" end
-  return "QuestieDB " .. (res.from or "none") .. " \226\134\146 " .. res.to .. " (build " .. tostring(res.build):sub(1, 7) .. ")\n"
-end
-
--- hwc diff OLD.json NEW.json [--json]: needs no WoW-Pro folder. Exit 0 when
--- nothing is new, 1 when something is, 2 when the input can't be compared.
-local function run_diff(args, out, err)
-  local function fail(msg)
-    err:write("hwc: ", msg, "\nsee hwc --help\n")
-    return 2
-  end
-  local paths, as_json = {}, false
-  for i = 2, #args do
-    if args[i] == "--json" then as_json = true else paths[#paths + 1] = args[i] end
-  end
-  if #paths ~= 2 then return fail("diff needs two findings files: hwc diff OLD.json NEW.json [--json]") end
-  local docs = {}
-  for i, path in ipairs(paths) do
-    if path:match("%.html$") then return fail(path .. " is the report page; use the .json beside it") end
-    local f = io.open(path, "r")
-    if not f then return fail("cannot read " .. path) end
-    local text = f:read("*a")
-    f:close()
-    local ok, decoded = pcall(require("dkjson").decode, text)
-    if not ok or type(decoded) ~= "table" then return fail(path .. " is not valid JSON") end
-    docs[i] = decoded
-  end
-  local diff = require("hwc.findings.diff")
-  -- A format-2 file with a malformed body must not crash into a traceback.
-  local ok, result, cerr, text, code = pcall(function()
-    local r, e = diff.compare(docs[1], docs[2])
-    if not r then return nil, e end
-    local body = as_json and (require("hwc.json").encode(r, { indent = true }) .. "\n") or diff.render(r)
-    return r, nil, body, diff.exit_code(r)
-  end)
-  if not ok then
-    local first = tostring(result):match("^[^\n]*"):gsub("^[^:]*:%d+: ", "")
-    return fail("not valid findings files: " .. first)
-  end
-  if not result then return fail(cerr) end
-  out:write(text)
-  return code
-end
-
--- hwc init / doctor / sync questie: they work on ~/.hwc, so they need no WoW-Pro
--- folder. Returns an exit status.
-local function run_store(cmd, args, out, err, env)
-  local home = require("hwc.questie.home")
-  local install = require("hwc.questie.install")
-  local doctor = require("hwc.doctor")
-  local tag, json
-  if cmd == "sync" then
-    local i = 3
-    if args[2] ~= "questie" then
-      err:write("hwc: sync needs a source: questie\n", USAGE)
-      return 2
-    end
-    while i <= #args do
-      if args[i] == "--tag" and args[i + 1] then
-        tag = args[i + 1]
-        i = i + 2
-      else
-        err:write("hwc: unknown or incomplete option: ", args[i], "\n", USAGE)
-        return 2
-      end
-    end
-  elseif cmd == "doctor" then
-    for i = 2, #args do
-      if args[i] == "--json" then
-        json = true
-      else
-        err:write("hwc: unknown option: ", args[i], "\n", USAGE)
-        return 2
-      end
-    end
-  elseif #args > 1 then
-    err:write("hwc: init takes no options\n", USAGE)
-    return 2
-  end
-  local root, herr = home.root({ hwc_home = env.hwc_home, home = env.home })
-  if not root then
-    err:write(herr, "\n", USAGE)
-    return 2
-  end
-  if cmd == "sync" then
-    local res, serr = install.sync(root, { tag = tag })
-    if not res then
-      err:write("hwc: ", strip(serr), "\n")
-      return 1
-    end
-    out:write(sync_line(res))
-    print_skipped(out, res)
-    return 0
-  elseif cmd == "init" then
-    local res, ierr = install.init(root)
-    if not res then
-      err:write("hwc: ", strip(ierr), "\n")
-      return 1
-    end
-    if res.already then
-      out:write("QuestieDB ", tostring(home.active(root)), " already installed\n")
-    else
-      out:write(sync_line(res.sync_result))
-      print_skipped(out, res.sync_result)
-    end
-    local report = doctor.run(env)
-    out:write(doctor.text(report))
-    return 0
-  end
-  local report = doctor.run(env)
-  out:write(json and (doctor.json(report) .. "\n") or doctor.text(report))
-  return report.failed and 1 or 0
-end
 
 -- The WoW-Pro folder hwc runs in: root and start, or nil and a usage message.
 local function locate(env)
@@ -625,7 +351,7 @@ local function command(args, out, err, env, allowed, prepare, fn)
     if not sel then opts, perr = nil, serr end
   end
   if not opts then
-    err:write("hwc: ", perr, "\n", USAGE)
+    err:write("hwc: ", perr, "\n", usage())
     return 2
   end
   local ok, res = pcall(fn, arg, opts, out)
@@ -633,7 +359,7 @@ local function command(args, out, err, env, allowed, prepare, fn)
     local msg = tostring(res)
     -- config.load's scope errors are usage errors
     if msg:match("race not in scope") then
-      err:write(msg, "\n", USAGE)
+      err:write(msg, "\n", usage())
       return 2
     end
     err:write(msg, "\n")
@@ -642,11 +368,57 @@ local function command(args, out, err, env, allowed, prepare, fn)
   return res
 end
 
--- env = { pwd, cwd, home }: where hwc runs and the user's home, each defaulting
--- to the process's own (specs pass their own).
-function M.main(args, out, err, env)
+-- Legacy `hwc run` (argv after the command; globals already taken out). Task 7
+-- replaces it with a declaration.
+local function legacy_run(rest, out, err, env)
+  local args = { "run" }
+  for _, a in ipairs(rest) do args[#args + 1] = a end
+  return command(args, out, err, env,
+    { race = true, class = true, variant = true, include = "list", exclude = "list",
+      date = true, out = true, ["relative-to"] = true },
+    function(o)
+      if not o.class then return nil, nil, "run needs --class" end
+      if not require("hwc.driver.matrix").professions(o.variant or "baseline") then
+        return nil, nil, "unknown variant: " .. o.variant
+      end
+      local bad = check_race(o.race or "Dwarf", o.class)
+      if bad then return nil, nil, bad end
+      return o
+    end,
+    function(_, o, w) return run_run(o, w, err) end)
+end
+
+-- Parses rest against decl, finds the WoW-Pro folder when the command needs
+-- one, then runs the handler. A Lua error escaping the handler exits 1.
+local function dispatch(decl, rest, u, env)
+  local commands = require("hwc.cli.commands")
+  local ctx = { ui = u, env = env }
+  if decl.passthrough then
+    ctx.opts = { positionals = rest, filters = {} }
+  else
+    local opts, perr = require("hwc.cli.args").parse(decl, rest)
+    if not opts then return commands.usage_error(u, perr, decl.name) end
+    ctx.opts = opts
+  end
+  if decl.needs_folder then
+    local root, start, ferr = locate(env)
+    if not root then return commands.usage_error(u, ferr, decl.name) end
+    ctx.root, ctx.start = root, start
+  end
+  local ok, res = pcall(decl.run, ctx)
+  if not ok then
+    u:error(strip(res))
+    return 1
+  end
+  return res
+end
+
+-- env = { pwd, cwd, home, hwc_home, tty, clock }: where hwc runs, the user's
+-- home, whether stderr is a terminal and the wall clock, each defaulting to the
+-- process's own (specs pass their own; tty defaults to false).
+function M.main(argv, out, err, env)
   out, err = out or io.stdout, err or io.stderr
-  args = args or {}
+  argv = argv or {}
   env = env or {}
   env = {
     pwd = env.pwd or os.getenv("PWD"),
@@ -654,90 +426,28 @@ function M.main(args, out, err, env)
     -- false (specs) stands for an unset HOME
     home = env.home == nil and os.getenv("HOME") or env.home,
     hwc_home = env.hwc_home == nil and os.getenv("HWC_HOME") or env.hwc_home,
+    tty = env.tty or false,
+    clock = env.clock or os.time,
   }
-  for _, a in ipairs(args) do
-    if a == "-h" or a == "--help" then
-      out:write(USAGE)
-      return 0
-    end
+  local commands = require("hwc.cli.commands")
+  local g = require("hwc.cli.args").globals(argv)
+  local u = require("hwc.ui").new({ out = out, err = err, level = g.level, tty = env.tty })
+  if g.version or g.command == "version" then return dispatch(commands.find("version"), {}, u, env) end
+  if g.help and g.command and g.command ~= "help" then
+    return dispatch(commands.find("help"), { g.command }, u, env)
   end
-  if args[1] == "boot" then
-    local opts, perr = parse_boot(args, 2)
-    local root, _
-    if opts then
-      root, _, perr = locate(env)
-      if not root then opts = nil end
+  if not g.command then
+    if #g.rest > 0 and not g.help then
+      return commands.usage_error(u, "unknown option " .. g.rest[1])
     end
-    if not opts then
-      err:write("hwc: ", perr, "\n", USAGE)
-      return 2
-    end
-    local ok, res = pcall(run_boot, opts, root, out)
-    if not ok then
-      err:write(tostring(res), "\n")
-      return 1
-    end
-    return res
+    return dispatch(commands.find("help"), {}, u, env)
   end
-  if args[1] == "init" or args[1] == "doctor" or args[1] == "sync" then
-    return run_store(args[1], args, out, err, env)
-  end
-  if args[1] == "diff" then return run_diff(args, out, err) end
-  if args[1] == "quest" then
-    local id = tonumber(args[2] or "")
-    if not id or #args > 2 then
-      err:write("hwc: quest needs a numeric id and takes no options\n", USAGE)
-      return 2
-    end
-    local ok, res = pcall(run_quest, id, out, err)
-    if not ok then
-      err:write(tostring(res), "\n")
-      return 1
-    end
-    return res
-  end
-  if args[1] == "run" then
-    return command(args, out, err, env,
-      { race = true, class = true, variant = true, include = "list", exclude = "list",
-        date = true, out = true, ["relative-to"] = true },
-      function(o)
-        if not o.class then return nil, nil, "run needs --class" end
-        if not require("hwc.driver.matrix").professions(o.variant or "baseline") then
-          return nil, nil, "unknown variant: " .. o.variant
-        end
-        local bad = check_race(o.race or "Dwarf", o.class)
-        if bad then return nil, nil, bad end
-        return o
-      end,
-      function(_, o, w) return run_run(o, w, err) end)
-  end
-  if args[1] == "matrix" then
-    return command(args, out, err, env,
-      { race = "list", races = true, include = "list", exclude = "list",
-        date = true, out = true, ["relative-to"] = true },
-      function(o)
-        -- --race (repeatable) and --races (comma list) merge, first-seen order.
-        local given = {}
-        for _, r in ipairs(o.race or {}) do given[#given + 1] = r end
-        if o.races then
-          for r in o.races:gmatch("[^,]+") do given[#given + 1] = r end
-          if #given == #(o.race or {}) then return nil, nil, "--races is empty" end
-        end
-        if #given == 0 then given = { "Dwarf", "Gnome" } end
-        local races, seen = {}, {}
-        for _, r in ipairs(given) do
-          local bad = check_race(r)
-          if bad then return nil, nil, bad end
-          if not seen[r] then seen[r] = true; races[#races + 1] = r end
-        end
-        return o, races
-      end,
-      function(races, o, w) return run_matrix(races, o, w, err) end)
-  end
-  err:write(USAGE)
-  return 2
+  local decl = commands.find(g.command)
+  if not decl then return commands.unknown(u, g.command) end
+  if decl.name == "run" then return legacy_run(g.rest, out, err, env) end
+  return dispatch(decl, g.rest, u, env)
 end
 
-M._json_result, M._report_json = json_result, report_json
+M._report_json = report_json
 
 return M

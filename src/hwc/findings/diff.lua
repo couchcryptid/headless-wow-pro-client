@@ -12,10 +12,6 @@ local diff = {}
 
 local function array(t) return setmetatable(t, { __jsontype = "array" }) end
 
-local function counted(f)
-  return f.severity ~= nil and not f.expected and not report.is_harness(f)
-end
-
 local function set_of(list)
   local s = {}
   for _, v in ipairs(list or {}) do s[v] = true end
@@ -49,7 +45,7 @@ local function index(doc, shared)
   local own = combos_of(doc)
   local by_id = {}
   for _, f in ipairs(doc.findings or {}) do
-    if counted(f) then
+    if report.counted(f) then
       local set = cut(f, own, shared)
       if next(set) then by_id[f.id] = { finding = f, set = set } end
     end
@@ -99,8 +95,9 @@ local function warnings_for(old, new, shared, shared_list)
 
   local oq = oh.catalog and oh.catalog.questie or {}
   local nq = nh.catalog and nh.catalog.questie or {}
-  if oq.tag ~= nq.tag or oq.build ~= nq.build then
-    warn("questie", { old_tag = oq.tag, old_build = oq.build, new_tag = nq.tag, new_build = nq.build })
+  if oq.tag ~= nq.tag or oq.build ~= nq.build or oq.sha256 ~= nq.sha256 then
+    warn("questie", { old_tag = oq.tag, old_build = oq.build, new_tag = nq.tag, new_build = nq.build,
+      old_sha256 = oq.sha256, new_sha256 = nq.sha256 })
   end
 
   local os_ = oh.catalog and oh.catalog.supplement or {}

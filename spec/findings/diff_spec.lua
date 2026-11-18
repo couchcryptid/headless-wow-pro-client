@@ -206,6 +206,7 @@ describe("diff.compare", function()
       end
       assert.same({ "questie" }, only(doc({ catalog = { questie = { tag = "v1.1.3", build = "9b01f2a" }, supplement = { present = false } } })))
       assert.same({ "supplement" }, only(doc({ catalog = { questie = { tag = "v1.1.2", build = "e1652ce" }, supplement = { present = true } } })))
+      assert.same({ "questie" }, only(doc({ catalog = { questie = { tag = "v1.1.2", build = "e1652ce", sha256 = "ffff" }, supplement = { present = false } } })))
       assert.same({ "filters" }, only(doc({ filters = { { kind = "include", pattern = "x" } } })))
       assert.same({ "relative-to" }, only(doc({ relative_to = "elsewhere" })))
       assert.same({ "client" }, only(doc({ client = "c2" })))

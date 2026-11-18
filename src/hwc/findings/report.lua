@@ -39,9 +39,10 @@ local is_harness = report.is_harness
 
 -- Counted findings feed every count; harness notices and expected manual
 -- clicks sit in their own folds.
-local function counted(f)
+function report.counted(f)
   return f.severity ~= nil and not f.expected and not is_harness(f)
 end
+local counted = report.counted
 
 local function sorted_keys(t)
   local keys = {}
