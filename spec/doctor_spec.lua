@@ -77,7 +77,7 @@ describe("doctor", function()
     assert.are.equal("warn", c.supplement.status)
     local order = {}
     for i, x in ipairs(report.checks) do order[i] = x.id end
-    assert.are.same({ "luajit", "rocks", "tools", "wowpro", "questie", "questie-toc",
+    assert.are.same({ "luajit", "rocks", "tools", "wowpro", "addon", "questie", "questie-toc",
       "questie-contract", "questie-upstream", "supplement" }, order)
   end)
 
@@ -87,7 +87,7 @@ describe("doctor", function()
     local c = by_id(report)
     assert.are.equal("warn", c["questie-upstream"].status)
     assert.is_truthy(c["questie-upstream"].detail:find("could not check upstream", 1, true))
-    assert.are.equal(9, #report.checks)
+    assert.are.equal(10, #report.checks)
     assert.is_false(report.failed)
   end)
 
@@ -96,7 +96,7 @@ describe("doctor", function()
     local report = doctor.run(env, deps)
     local c = by_id(report)
     assert.are.equal("fail", c.questie.status)
-    assert.are.equal("hwc sync questie --tag v1.1.2", c.questie.fix)
+    assert.are.equal("hwc update --tag v1.1.2", c.questie.fix)
     assert.is_nil(c["questie-toc"])
     assert.is_nil(c["questie-contract"])
     assert.is_nil(c["questie-upstream"])
@@ -124,14 +124,14 @@ describe("doctor", function()
     local c = by_id(doctor.run(env, deps))
     assert.are.equal("warn", c["questie-upstream"].status)
     assert.are.equal("v1.1.2 → v1.1.3 available", c["questie-upstream"].detail)
-    assert.are.equal("hwc sync questie", c["questie-upstream"].fix)
+    assert.are.equal("hwc update", c["questie-upstream"].fix)
   end)
 
   it("fails the TOC check on a wrong flavor", function()
     write(root .. "/questie/v1.1.2/QuestieDB/QuestieDB_Forever.toc", "## X-Flavor: Vanilla\n## X-Mode: baked\n")
     local c = by_id(doctor.run(env, deps))
     assert.are.equal("fail", c["questie-toc"].status)
-    assert.are.equal("hwc sync questie --tag v1.1.2", c["questie-toc"].fix)
+    assert.are.equal("hwc update --tag v1.1.2", c["questie-toc"].fix)
   end)
 
   it("fails an unsupported contract", function()
@@ -193,7 +193,88 @@ describe("doctor", function()
     assert.is_truthy(text:find("warn supplement: ", 1, true))
     local decoded = dkjson.decode(doctor.json(report))
     assert.are.equal(false, decoded.failed)
-    assert.are.equal(9, #decoded.checks)
+    assert.are.equal(10, #decoded.checks)
+  end)
+
+  describe("addon check", function()
+    local function boot_result(over)
+      local r = {
+        files_loaded = 42, files_failed = {}, errors = {}, missing_order = {},
+        guide = { gid = "X", loaded = true, active_step = "Kill Boars" },
+        steps = { { index = 1, action = "A", step = "Get the quest" } },
+      }
+      for k, v in pairs(over or {}) do r[k] = v end
+      return r
+    end
+
+    before_each(function()
+      write(cwd .. "/WoWPro/WoWPro.toc", "## Version: 1\n")
+      deps.boot_run = function() return boot_result() end
+    end)
+
+    it("skips, without failing, when there is no WoW-Pro folder", function()
+      os.remove(cwd .. "/WoWPro/WoWPro.toc")
+      local report = doctor.run(env, deps)
+      local c = by_id(report).addon
+      assert.are.equal("skip", c.status)
+      assert.is_false(report.failed)
+      assert.is_truthy(doctor.text(report):find("skip addon: ", 1, true))
+      local decoded = dkjson.decode(doctor.json(report))
+      assert.are.equal("skip", decoded.checks[5].status)
+    end)
+
+    it("is ok when the addon loads with a guide", function()
+      local c = by_id(doctor.run(env, deps)).addon
+      assert.are.equal("ok", c.status)
+      assert.are.equal('42 files loaded, active step "A Get the quest"', c.detail)
+    end)
+
+    it("warns on harness errors only", function()
+      deps.boot_run = function()
+        return boot_result({
+          errors = { { msg = "src/hwc/stubs.lua:3: attempt to call global 'Foo'" } },
+          missing_order = { "Foo", "Bar" },
+        })
+      end
+      local c = by_id(doctor.run(env, deps)).addon
+      assert.are.equal("warn", c.status)
+      assert.are.equal("1 harness Lua errors, 2 missing globals", c.detail)
+      assert.are.equal("these are gaps in hwc's WoW API stubs; findings still work", c.fix)
+    end)
+
+    it("fails on an addon error and names the first", function()
+      deps.boot_run = function()
+        return boot_result({ errors = { { msg = "WoWPro.lua:9: boom\nstack traceback" } } })
+      end
+      local report = doctor.run(env, deps)
+      local c = by_id(report).addon
+      assert.are.equal("fail", c.status)
+      assert.are.equal("1 addon Lua errors", c.detail)
+      assert.is_truthy(c.fix:find("WoWPro.lua:9: boom", 1, true))
+      assert.is_nil(c.fix:find("traceback", 1, true))
+      assert.is_true(report.failed)
+    end)
+
+    it("fails when no guide loaded", function()
+      deps.boot_run = function() return boot_result({ guide = { loaded = false } }) end
+      local c = by_id(doctor.run(env, deps)).addon
+      assert.are.equal("fail", c.status)
+      assert.are.equal("no guide loaded", c.detail)
+      assert.are.equal("check the WoW-Pro folder is a complete checkout", c.fix)
+    end)
+
+    it("fails, not crashes, when boot raises", function()
+      deps.boot_run = function() error("kaboom\nmore", 0) end
+      local report = doctor.run(env, deps)
+      local c = by_id(report).addon
+      assert.are.equal("fail", c.status)
+      assert.are.equal("kaboom", c.detail)
+      assert.is_true(report.failed)
+    end)
+  end)
+
+  it("tells you to cd into the WoW-Pro folder", function()
+    assert.are.equal("cd into your WoW-Pro folder for hwc run", by_id(doctor.run(env, deps)).wowpro.fix)
   end)
 
   it("defaults has_tool to a real shell lookup", function()

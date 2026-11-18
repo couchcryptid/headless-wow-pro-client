@@ -240,4 +240,32 @@ describe("install", function()
     assert.is_false(res.already)
     assert.are.equal("v1.1.2", res.sync_result.to)
   end)
+
+  it("passes opts.download_mode to deps.download", function()
+    local seen
+    assert(install.sync(root, { download_mode = "terminal" }, fake_deps({
+      download = function(_, path, mode)
+        seen = mode
+        local f = assert(io.open(path, "wb"))
+        f:write(("x"):rep(zip_bytes))
+        f:close()
+        return true
+      end,
+    })))
+    assert.are.equal("terminal", seen)
+  end)
+
+  it("init forwards opts.download_mode to sync", function()
+    local seen
+    assert(install.init(root, fake_deps({
+      download = function(_, path, mode)
+        seen = mode
+        local f = assert(io.open(path, "wb"))
+        f:write(("x"):rep(zip_bytes))
+        f:close()
+        return true
+      end,
+    }), { download_mode = "capture" }))
+    assert.are.equal("capture", seen)
+  end)
 end)

@@ -2,8 +2,8 @@
 -- characters, stable ids, severities and root-cause links.
 local group = require("hwc.findings.group")
 
-local function runlog(race, class, signals, variant)
-  return { character = { race = race, class = class, professions = {} }, variant = variant,
+local function runlog(race, class, signals, professions)
+  return { character = { race = race, class = class, professions = professions or {} },
     rank = 2, steps = {}, signals = signals, guides = {} }
 end
 
@@ -36,7 +36,7 @@ describe("group.findings", function()
     })
     assert.equal(1, #fs)
     local f = fs[1]
-    assert.same({ "Dwarf WARRIOR baseline", "Gnome MAGE baseline" }, f.combos)
+    assert.same({ "Dwarf WARRIOR none", "Gnome MAGE none" }, f.combos)
     assert.equal("first", f.why) -- from the first combo in sorted order
     assert.equal("medium", f.severity)
     assert.truthy(f.id:match("^F%-%x%x%x%x%x%x%x%x$"))
@@ -86,12 +86,14 @@ describe("group.findings", function()
     })
     assert.equal(1, #b)
     assert.equal(a.id, b[1].id)
-    assert.same({ "Dwarf PALADIN baseline", "Dwarf WARRIOR baseline" }, b[1].combos)
+    assert.same({ "Dwarf PALADIN none", "Dwarf WARRIOR none" }, b[1].combos)
   end)
 
-  it("uses the variant in combos, defaulting to baseline", function()
-    local fs = group.findings({ runlog("Dwarf", "WARRIOR", { dna() }, "mining") })
-    assert.same({ "Dwarf WARRIOR mining" }, fs[1].combos)
+  it("names the professions in combos, sorted, or none", function()
+    local fs = group.findings({ runlog("Dwarf", "WARRIOR", { dna() }, { "Skinning", "Herbalism" }) })
+    assert.same({ "Dwarf WARRIOR herbalism,skinning" }, fs[1].combos)
+    fs = group.findings({ runlog("Dwarf", "WARRIOR", { dna() }, {}) })
+    assert.same({ "Dwarf WARRIOR none" }, fs[1].combos)
   end)
 
   it("links a refusal and the never-shown accept naming its quest both ways", function()

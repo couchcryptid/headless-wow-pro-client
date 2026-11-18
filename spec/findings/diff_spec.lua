@@ -1,6 +1,6 @@
 local diff = require("hwc.findings.diff")
 
-local DWARF, GNOME = "Dwarf WARRIOR baseline", "Gnome MAGE baseline"
+local DWARF, GNOME = "Dwarf WARRIOR none", "Gnome MAGE none"
 
 local function doc(opts)
   opts = opts or {}
@@ -72,10 +72,10 @@ describe("diff.compare", function()
 
   it("keeps fixed_for on a spread finding that also lost characters", function()
     local r = diff.compare(
-      doc({ combos = { DWARF, GNOME, "Human PRIEST baseline" }, findings = { f("F-1", { DWARF, GNOME }) } }),
-      doc({ combos = { DWARF, GNOME, "Human PRIEST baseline" }, findings = { f("F-1", { GNOME, "Human PRIEST baseline" }) } }))
+      doc({ combos = { DWARF, GNOME, "Human PRIEST none" }, findings = { f("F-1", { DWARF, GNOME }) } }),
+      doc({ combos = { DWARF, GNOME, "Human PRIEST none" }, findings = { f("F-1", { GNOME, "Human PRIEST none" }) } }))
     assert.equal(1, r.counts.spread)
-    assert.same({ "Human PRIEST baseline" }, r.spread[1].added_for)
+    assert.same({ "Human PRIEST none" }, r.spread[1].added_for)
     assert.same({ DWARF }, r.spread[1].fixed_for)
   end)
 
@@ -118,7 +118,26 @@ describe("diff.compare", function()
   it("returns nil and a message when no characters are shared", function()
     local r, err = diff.compare(doc({ combos = { DWARF } }), doc({ combos = { GNOME } }))
     assert.is_nil(r)
-    assert.matches("no shared characters", err)
+    assert.equal("not comparable: OLD has Dwarf Warrior, NEW has Gnome Mage", err)
+  end)
+
+  it("names at most three characters a side", function()
+    local many = { "Dwarf WARRIOR none", "Dwarf PRIEST none", "Dwarf HUNTER none", "Dwarf ROGUE none" }
+    local _, err = diff.compare(doc({ combos = many }), doc({ combos = {} }))
+    assert.equal("not comparable: OLD has Dwarf Hunter, Dwarf Priest, Dwarf Rogue and 1 more, NEW has no characters",
+      err)
+  end)
+
+  it("says a side written before --professions must be re-run", function()
+    local _, err = diff.compare(doc({ combos = { "Dwarf WARRIOR baseline" } }), doc({ combos = { DWARF } }))
+    assert.equal("not comparable: OLD has Dwarf Warrior (Baseline), NEW has Dwarf Warrior; "
+      .. "OLD was written before --professions, so re-run it with this hwc", err)
+    for _, v in ipairs({ "secondary", "alch-herb", "bs-mining", "lw-skin", "eng-ench" }) do
+      _, err = diff.compare(doc({ combos = { DWARF } }), doc({ combos = { "Gnome MAGE " .. v } }))
+      assert.matches("; NEW was written before %-%-professions, so re%-run it with this hwc$", err)
+    end
+    _, err = diff.compare(doc({ combos = { "Dwarf WARRIOR baseline" } }), doc({ combos = { "Gnome MAGE lw-skin" } }))
+    assert.matches("; OLD and NEW were written before %-%-professions, so re%-run them with this hwc$", err)
   end)
 
   it("rejects a format other than 2", function()
@@ -169,7 +188,7 @@ describe("diff.compare", function()
     end)
 
     it("ignores a stop on a character that is not shared", function()
-      local priest = "Human PRIEST baseline"
+      local priest = "Human PRIEST none"
       local r = diff.compare(doc({ commit = "b", combos = { DWARF, GNOME } }),
         doc({ commit = "c", combos = { DWARF, priest }, stop = { { combo = priest, reason = "stuck" } } }))
       assert.same({ "combos", "combos" }, codes(r))
@@ -206,6 +225,7 @@ describe("diff.compare", function()
       end
       assert.same({ "questie" }, only(doc({ catalog = { questie = { tag = "v1.1.3", build = "9b01f2a" }, supplement = { present = false } } })))
       assert.same({ "supplement" }, only(doc({ catalog = { questie = { tag = "v1.1.2", build = "e1652ce" }, supplement = { present = true } } })))
+      assert.same({ "questie" }, only(doc({ catalog = { questie = { tag = "v1.1.2", build = "e1652ce", sha256 = "ffff" }, supplement = { present = false } } })))
       assert.same({ "filters" }, only(doc({ filters = { { kind = "include", pattern = "x" } } })))
       assert.same({ "relative-to" }, only(doc({ relative_to = "elsewhere" })))
       assert.same({ "client" }, only(doc({ client = "c2" })))
@@ -280,7 +300,7 @@ describe("diff.render", function()
   end)
 
   it("shows both sides of a spread finding that also lost characters", function()
-    local priest = "Human PRIEST baseline"
+    local priest = "Human PRIEST none"
     local out = render(
       doc({ combos = { DWARF, GNOME, priest }, findings = { f("F-1", { DWARF, GNOME }) } }),
       doc({ combos = { DWARF, GNOME, priest }, findings = { f("F-1", { GNOME, priest }) } }))

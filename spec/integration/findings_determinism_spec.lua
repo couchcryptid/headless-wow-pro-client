@@ -16,7 +16,7 @@ end
 local REPO = lfs.currentdir()
 local RUN = "cd '%s' && '" .. REPO .. "/bin/hwc' run --race Dwarf --class WARRIOR"
   .. " --exclude '*' --include '*01_12_Dun_Morogh*' --date 2026-11-12"
-local STEM_PATTERN = "^2026%-11%-12%-Dwarf%-WARRIOR%-baseline%-filtered%-%x%x%x%x%x%x%x%x%.json$"
+local STEM_PATTERN = "^2026%-11%-12%-Dwarf%-WARRIOR%-filtered%-%x%x%x%x%x%x%x%x%.json$"
 
 -- The one findings .json in dir: its name carries the content hash.
 local function findings_json(dir)

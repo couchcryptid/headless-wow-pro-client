@@ -17,7 +17,7 @@ describe("hash", () => {
       sev: new Set(["high", "low"]),
       file: new Set([doc.header.guides[0]!.file]),
       kind: new Set(["did-not-advance"]),
-      combo: new Set(["Gnome MAGE baseline"]),
+      combo: new Set(["Gnome MAGE none"]),
       order: "guide" as const,
     };
     expect(s.sev.size).toBeLessThan(d.sev.size);

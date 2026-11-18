@@ -115,7 +115,13 @@ function M.run(cfg)
   -- recorded in catalog.sources, never fatal.
   local cat = catalog.load(cfg)
   if not cat.sources.questie.present then
-    io.stderr:write("hwc: no QuestieDB installed (", tostring(cat.sources.questie.reason), "); run hwc init\n")
+    -- cfg.warn (optional) takes the message; without one it goes to stderr.
+    local msg = "no QuestieDB installed (" .. tostring(cat.sources.questie.reason) .. "); run hwc init"
+    if cfg.warn then
+      cfg.warn(msg)
+    else
+      io.stderr:write("hwc: ", msg, "\n")
+    end
   end
   sb.world = World.new(cfg, cat, sb.clock)
   stubs.install(sb, cfg)

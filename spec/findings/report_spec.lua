@@ -23,7 +23,7 @@ local function sigs()
 end
 
 local function findings() return group.findings({ runlog(sigs()) }) end
-local function header() return { scope = "s", matrix = { combos = { "Dwarf WARRIOR baseline" } } } end
+local function header() return { scope = "s", matrix = { combos = { "Dwarf WARRIOR none" } } } end
 
 describe("report.build", function()
   it("round trips through JSON", function()
@@ -115,10 +115,10 @@ describe("report.build", function()
   end)
 
   it("carries labels for signals, actions, combos and stops", function()
-    local h = { matrix = { combos = { "NightElf WARRIOR baseline", "Dwarf MAGE alch-herb" } } }
+    local h = { matrix = { combos = { "NightElf WARRIOR none", "Dwarf MAGE alchemy,herbalism" } } }
     local labels = report.build({}, h).labels
-    assert.equal("Night Elf Warrior", labels.combos["NightElf WARRIOR baseline"])
-    assert.equal("Dwarf Mage (alch-herb)", labels.combos["Dwarf MAGE alch-herb"])
+    assert.equal("Night Elf Warrior", labels.combos["NightElf WARRIOR none"])
+    assert.equal("Dwarf Mage (Alchemy, Herbalism)", labels.combos["Dwarf MAGE alchemy,herbalism"])
     assert.equal("Never offered", labels.signals["never-shown-accept"])
     assert.equal("Accept", labels.actions.A)
     assert.equal("Hit its step limit", labels.stops.iterations)
@@ -138,8 +138,8 @@ describe("report.build", function()
     assert.same(report.GAPS, doc.header.gaps)
     assert.same({
       "The client checkout had uncommitted changes; this run may not be reproducible from its commit.",
-      "Catalog source supplement was missing. Camping 101 quests aren't recognised, so profession variants "
-        .. "match their baselines.",
+      "Catalog source supplement was missing. Camping 101 quests aren't recognised, so characters with "
+        .. "professions play like ones with none.",
     }, doc.header.warnings)
   end)
 
@@ -151,18 +151,18 @@ describe("report.build", function()
   it("counts by file and by combo, primary and follow-on, counted findings only", function()
     local fs = {
       { id = "F-1", signal = "accept-refused", severity = "high", file = "a.lua", causes = { "F-2" },
-        combos = { "Dwarf WARRIOR baseline", "Gnome MAGE baseline" } },
+        combos = { "Dwarf WARRIOR none", "Gnome MAGE none" } },
       { id = "F-2", signal = "did-not-advance", severity = "high", file = "a.lua", caused_by = "F-1", causes = {},
-        combos = { "Dwarf WARRIOR baseline" } },
+        combos = { "Dwarf WARRIOR none" } },
       { id = "F-3", signal = "manual-completion", severity = "low", file = "a.lua", expected = true, causes = {},
-        combos = { "Dwarf WARRIOR baseline" } },
-      { id = "F-4", signal = "missing-global", severity = "low", causes = {}, combos = { "Dwarf WARRIOR baseline" } },
+        combos = { "Dwarf WARRIOR none" } },
+      { id = "F-4", signal = "missing-global", severity = "low", causes = {}, combos = { "Dwarf WARRIOR none" } },
     }
     local s = report.build(fs, header()).summary
     assert.same({ ["a.lua"] = { high = { primary = 1, follow = 1 } } }, s.by_file)
     assert.same({
-      ["Dwarf WARRIOR baseline"] = { high = { primary = 1, follow = 1 } },
-      ["Gnome MAGE baseline"] = { high = { primary = 1, follow = 0 } },
+      ["Dwarf WARRIOR none"] = { high = { primary = 1, follow = 1 } },
+      ["Gnome MAGE none"] = { high = { primary = 1, follow = 0 } },
     }, s.by_combo)
   end)
 end)
@@ -284,7 +284,7 @@ describe("report.warnings", function()
   end)
 
   it("adds a level-flag warning line", function()
-    local h = { guides = { { gid = "G", flags = { { combo = "Dwarf WARRIOR baseline", rule = "enter-under" } } } } }
+    local h = { guides = { { gid = "G", flags = { { combo = "Dwarf WARRIOR none", rule = "enter-under" } } } } }
     assert.same({ "1 guide entered under-levelled" }, report.warnings(h, {}))
   end)
 
@@ -301,7 +301,7 @@ describe("report.warnings", function()
 end)
 
 describe("report.guides", function()
-  local A, B = "Dwarf WARRIOR baseline", "Gnome MAGE baseline"
+  local A, B = "Dwarf WARRIOR none", "Gnome MAGE none"
   local function gl(gid, t)
     t.gid, t.file = gid, gid .. ".lua"
     if t.finished == nil then t.finished = true end
@@ -390,10 +390,19 @@ describe("report.context", function()
   end)
 
   it("single is nil for several or duplicated-to-many combos", function()
-    local h = { matrix = { combos = { "Dwarf WARRIOR baseline", "Gnome MAGE baseline" } } }
+    local h = { matrix = { combos = { "Dwarf WARRIOR none", "Gnome MAGE none" } } }
     assert.is_nil(report.context({}, h).single)
     assert.is_nil(report.context({}, {}).single)
-    local d = { matrix = { combos = { "Dwarf WARRIOR baseline", "Dwarf WARRIOR baseline" } } }
+    local d = { matrix = { combos = { "Dwarf WARRIOR none", "Dwarf WARRIOR none" } } }
     assert.equal("Dwarf Warrior", report.context({}, d).single)
+  end)
+end)
+
+describe("report.counted", function()
+  it("counts a finding with a severity that is neither expected nor harness", function()
+    assert.is_true(report.counted({ severity = "high", signal = "never-shown-accept" }))
+    assert.is_false(report.counted({ signal = "never-shown-accept" }))
+    assert.is_false(report.counted({ severity = "low", expected = true, signal = "x" }))
+    assert.is_false(report.counted({ severity = "low", signal = "missing-global" }))
   end)
 end)

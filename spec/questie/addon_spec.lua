@@ -78,6 +78,6 @@ lib.seen = { name = name, class = { UnitClassBase("player") }, faction = UnitFac
     release("function lib.RequireContract(n) return false, 'contract mismatch' end\n")
     assert.has_error(function() addon.load(dir, { class = "MAGE", faction = "Horde" }) end,
       "hwc: questie: contract mismatch; installed " .. dir:match("([^/]+)$")
-      .. "; run hwc sync questie --tag <a compatible tag>")
+      .. "; run hwc update --tag <a compatible tag>")
   end)
 end)

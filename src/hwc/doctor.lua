@@ -1,5 +1,5 @@
 -- `hwc doctor`: a read-only health report (design spec §4.4). Every check is
--- {id, status = ok|warn|fail, detail, fix?}; `failed` is true if any fail.
+-- {id, status = ok|warn|fail|skip, detail, fix?}; `failed` is true if any fail.
 local dkjson = require("dkjson")
 local json = require("hwc.json")
 local home = require("hwc.questie.home")
@@ -67,11 +67,14 @@ local function check_tools(deps)
   return check("tools", "ok", "curl, unzip, " .. sum)
 end
 
+local function find_wowpro(env)
+  return source.find(source.start_dir(env.cwd and { pwd = env.pwd, cwd = env.cwd } or nil))
+end
+
 local function check_wowpro(env)
-  local start = source.start_dir(env.cwd and { pwd = env.pwd, cwd = env.cwd } or nil)
-  local dir = source.find(start)
+  local dir = find_wowpro(env)
   if not dir then
-    return check("wowpro", "warn", "not in a WoW-Pro folder", "cd into your WoW-Pro folder for run/matrix")
+    return check("wowpro", "warn", "not in a WoW-Pro folder", "cd into your WoW-Pro folder for hwc run")
   end
   local info = addon_info.read(dir)
   local detail = dir
@@ -81,7 +84,46 @@ local function check_wowpro(env)
   return check("wowpro", "ok", detail)
 end
 
-local function sync_fix(tag) return "hwc sync questie --tag " .. tag end
+local function first_line(msg)
+  return (tostring(msg):match("^[^\r\n]*"))
+end
+
+-- Boots the addon (headless, Dwarf Warrior) and classifies what came back.
+local function check_addon(env, deps)
+  local dir = find_wowpro(env)
+  if not dir then
+    return check("addon", "skip", "no WoW-Pro folder to load")
+  end
+  local boot = require("hwc.boot")
+  local boot_run = deps.boot_run or function(root)
+    local cfg = require("hwc.config").load({ addon_path = root, race = "Dwarf", class = "WARRIOR" })
+    -- The questie row already reports a missing QuestieDB.
+    cfg.warn = function() end
+    return boot.run(cfg)
+  end
+  local ok, r = pcall(boot_run, dir)
+  if not ok then return check("addon", "fail", first_line(r)) end
+  local harness = #boot.harness_errors(r)
+  local addon_errs = {}
+  for _, e in ipairs(r.errors) do
+    if not boot.is_harness_error(e) then addon_errs[#addon_errs + 1] = e end
+  end
+  if #addon_errs > 0 then
+    return check("addon", "fail", #addon_errs .. " addon Lua errors", "first error: " .. first_line(addon_errs[1].msg))
+  end
+  if not (r.guide and r.guide.loaded) then
+    return check("addon", "fail", "no guide loaded", "check the WoW-Pro folder is a complete checkout")
+  end
+  if harness > 0 or #r.missing_order > 0 then
+    return check("addon", "warn", harness .. " harness Lua errors, " .. #r.missing_order .. " missing globals",
+      "these are gaps in hwc's WoW API stubs; findings still work")
+  end
+  local s = r.steps and r.steps[1]
+  local step = s and (tostring(s.action) .. " " .. tostring(s.step)) or tostring(r.guide.active_step)
+  return check("addon", "ok", r.files_loaded .. " files loaded, active step \"" .. step .. "\"")
+end
+
+local function sync_fix(tag) return "hwc update --tag " .. tag end
 
 -- Appends the QuestieDB checks to out; the dependent ones only when the
 -- active install is intact.
@@ -134,7 +176,7 @@ local function questie_checks(env, deps, out)
   elseif sel.tag == tag then
     out[#out + 1] = check("questie-upstream", "ok", "up to date (" .. tag .. ")")
   else
-    out[#out + 1] = check("questie-upstream", "warn", tag .. " → " .. sel.tag .. " available", "hwc sync questie")
+    out[#out + 1] = check("questie-upstream", "warn", tag .. " → " .. sel.tag .. " available", "hwc update")
   end
 end
 
@@ -178,6 +220,7 @@ function M.run(env, deps)
     check_rocks(deps),
     check_tools(deps),
     check_wowpro(env),
+    check_addon(env, deps),
   }
   questie_checks(env, deps, checks)
   checks[#checks + 1] = check_supplement(deps)
@@ -188,7 +231,7 @@ function M.run(env, deps)
   return { checks = checks, failed = failed }
 end
 
-local LABEL = { ok = "ok  ", warn = "warn", fail = "FAIL" }
+local LABEL = { ok = "ok  ", warn = "warn", fail = "FAIL", skip = "skip" }
 
 function M.text(report)
   local lines = {}

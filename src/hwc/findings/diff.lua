@@ -12,10 +12,6 @@ local diff = {}
 
 local function array(t) return setmetatable(t, { __jsontype = "array" }) end
 
-local function counted(f)
-  return f.severity ~= nil and not f.expected and not report.is_harness(f)
-end
-
 local function set_of(list)
   local s = {}
   for _, v in ipairs(list or {}) do s[v] = true end
@@ -49,7 +45,7 @@ local function index(doc, shared)
   local own = combos_of(doc)
   local by_id = {}
   for _, f in ipairs(doc.findings or {}) do
-    if counted(f) then
+    if report.counted(f) then
       local set = cut(f, own, shared)
       if next(set) then by_id[f.id] = { finding = f, set = set } end
     end
@@ -99,8 +95,9 @@ local function warnings_for(old, new, shared, shared_list)
 
   local oq = oh.catalog and oh.catalog.questie or {}
   local nq = nh.catalog and nh.catalog.questie or {}
-  if oq.tag ~= nq.tag or oq.build ~= nq.build then
-    warn("questie", { old_tag = oq.tag, old_build = oq.build, new_tag = nq.tag, new_build = nq.build })
+  if oq.tag ~= nq.tag or oq.build ~= nq.build or oq.sha256 ~= nq.sha256 then
+    warn("questie", { old_tag = oq.tag, old_build = oq.build, new_tag = nq.tag, new_build = nq.build,
+      old_sha256 = oq.sha256, new_sha256 = nq.sha256 })
   end
 
   local os_ = oh.catalog and oh.catalog.supplement or {}
@@ -143,6 +140,47 @@ local function warnings_for(old, new, shared, shared_list)
   return out, stopped_early
 end
 
+-- Profession tokens hwc wrote before --professions (the old --variant names).
+-- A combo ending in one can never match a current one.
+local PRE_PROFESSIONS = {
+  baseline = true, secondary = true, ["alch-herb"] = true, ["bs-mining"] = true,
+  ["lw-skin"] = true, ["eng-ench"] = true,
+}
+
+-- "Dwarf Warrior, Gnome Mage and 3 more": a side's characters, sorted, at most three.
+local function characters_text(combos)
+  if #combos == 0 then return "no characters" end
+  local names = {}
+  for i, c in ipairs(combos) do names[i] = text.character(c) end
+  table.sort(names)
+  if #names > 3 then
+    return table.concat(names, ", ", 1, 3) .. " and " .. (#names - 3) .. " more"
+  end
+  if #names == 1 then return names[1] end
+  return table.concat(names, ", ", 1, #names - 1) .. " and " .. names[#names]
+end
+
+local function pre_professions(combos)
+  for _, c in ipairs(combos) do
+    if PRE_PROFESSIONS[c:match("(%S+)$") or ""] then return true end
+  end
+  return false
+end
+
+-- Why two runs share no character: what each side has, and which side to re-run
+-- when it predates --professions.
+local function no_shared_message(old, new)
+  local oc, nc = combos_of(old), combos_of(new)
+  local msg = string.format("not comparable: OLD has %s, NEW has %s", characters_text(oc), characters_text(nc))
+  local op, np = pre_professions(oc), pre_professions(nc)
+  if op and np then
+    msg = msg .. "; OLD and NEW were written before --professions, so re-run them with this hwc"
+  elseif op or np then
+    msg = msg .. "; " .. (op and "OLD" or "NEW") .. " was written before --professions, so re-run it with this hwc"
+  end
+  return msg
+end
+
 function diff.compare(old, new)
   for _, side_ in ipairs({ { "OLD", old }, { "NEW", new } }) do
     local d = side_[2]
@@ -157,7 +195,7 @@ function diff.compare(old, new)
     if in_new[c] and not shared_set[c] then shared_set[c] = true; shared[#shared + 1] = c end
   end
   table.sort(shared)
-  if #shared == 0 then return nil, "not comparable: no shared characters" end
+  if #shared == 0 then return nil, no_shared_message(old, new) end
 
   local o, n = index(old, shared_set), index(new, shared_set)
   local warnings, stopped_early = warnings_for(old, new, shared_set, shared)

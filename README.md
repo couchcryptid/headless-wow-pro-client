@@ -36,8 +36,7 @@ come from a catalog built from QuestieDB, never from the guide lines.
 
   Skyborne is two races in the client, picked at character creation, with
   different classes: High Order Skyborne (Alliance, race 95) and Windshaper
-  Skyborne (Horde, race 96). Both have the client token `Skyborne`. Dwarf and Gnome are the most tested, so
-  `matrix` defaults to `--races Dwarf,Gnome`.
+  Skyborne (Horde, race 96). Both have the client token `Skyborne`.
 - **Next:** the `/triage` skill.
 - **Data gaps:** listed in every findings file's header.
 - **Design:** the design spec, the plans and the per-plan rulings are in
@@ -57,7 +56,7 @@ come from a catalog built from QuestieDB, never from the guide lines.
   `Interface/AddOns` folder. `hwc` must be run from inside it (see
   [Choosing guides](#choosing-guides)).
 - **`curl`, `unzip`, and `shasum` or `sha256sum`**, which `hwc init` and
-  `hwc sync questie` use to download and verify QuestieDB.
+  `hwc update` use to download and verify QuestieDB.
 - **Optional:** `python3`.
 
 ## Install
@@ -67,6 +66,7 @@ make install                                                  # links bin/hwc in
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc       # zsh
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc      # bash (~/.bash_profile on macOS)
 hwc --help                                                    # check
+hwc version                                                   # release tag and commit (also hwc --version)
 ```
 
 `PREFIX` sets another location (`make install PREFIX=/usr/local`);
@@ -81,10 +81,16 @@ Run `hwc` from inside a WoW-Pro folder (a git checkout or `Interface/AddOns`):
 ```sh
 hwc init                                                       # download QuestieDB into ~/.hwc, check the setup (any folder)
 cd ~/Projects/WoW-Pro-Guides
-hwc boot --race Dwarf --class WARRIOR                          # load the addon, show the first step
 hwc run --race Dwarf --class WARRIOR                           # play one character along the chain
-hwc matrix --races Dwarf,Gnome                                 # every combination (also Human, NightElf)
+hwc diff OLD.json NEW.json                                     # compare two runs (see "Comparing runs")
 ```
+
+`hwc boot`, `hwc matrix` and `hwc sync questie` remain for one release as
+stubs that print what replaced them (`hwc doctor`, `hwc run`, `hwc update`).
+
+`hwc help` lists the commands and `hwc help <command>` shows one command's
+options. `hwc list` shows the races, their classes and the professions that
+`hwc run` accepts.
 
 Findings go to `~/.hwc/findings` unless `--out DIR` says otherwise. Specs, from
 this repo: `~/.luarocks/bin/busted` (slow ones: `--tags=slow`).
@@ -132,61 +138,119 @@ when it is stale. The dev server fills the page from `spec/fixtures/findings/<na
 
 Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Booting the addon
+## Checking the setup
 
 ```sh
-cd ~/Projects/WoW-Pro-Guides && hwc boot --race Dwarf --class WARRIOR       # text summary
-cd ~/Projects/WoW-Pro-Guides && hwc boot --race Gnome --class MAGE --json   # full result as JSON
+cd ~/Projects/WoW-Pro-Guides && hwc doctor          # every check, with the fix beside each failure
+cd ~/Projects/WoW-Pro-Guides && hwc doctor --json   # the same, as JSON
 ```
 
-`hwc boot` loads `WoWPro/WoWPro.toc`, then `WoWPro_Leveling/WoWPro_Leveling.toc`,
-for the Forever flavor (TOC 16001). It then fires `ADDON_LOADED`, `PLAYER_LOGIN`
-and `PLAYER_ENTERING_WORLD` and settles the virtual clock until the startup
-lockdown releases and the timers drain. It prints:
+`hwc doctor` checks LuaJIT, the rocks, the tools, the WoW-Pro folder, QuestieDB
+and the supplement. Its `addon` check loads the addon for a Dwarf Warrior: the
+WoW-Pro and Leveling TOCs for the Forever flavor (TOC 16001), then
+`ADDON_LOADED`, `PLAYER_LOGIN` and `PLAYER_ENTERING_WORLD`, then the virtual
+clock until the startup lockdown releases and the timers drain.
 
-- the addon branch, commit and dirty flag;
-- the loaded guide GID;
-- the rows the engine shows;
-- error counts (harness and addon);
-- the number of missing globals;
-- the stand-ins that were called.
+- **ok:** `N files loaded, active step "<action> <step>"`.
+- **warn:** harness Lua errors or missing globals. These are gaps in hwc's WoW
+  API stubs; findings still work.
+- **fail:** addon Lua errors, or no guide loaded. The hint names the first error.
+- **skip:** no WoW-Pro folder found; `cd` into yours.
 
-A git checkout without a commit is refused, so an unidentified run can't be
-mistaken for a real one. A folder that isn't in git (`Interface/AddOns`) is
-identified by the `## Version:` in `WoWPro/WoWPro.toc`; the report header says
-"not a git folder" and `branch` and `commit` are `null` in the JSON. With the addon's defaults (`autoresize = true`,
-`numsteps = 1`, WoWPro.lua:348-349) the engine shows one row.
+It exits 1 when a check fails. A git checkout without a commit is refused, so
+an unidentified run can't be mistaken for a real one. A folder that isn't in
+git (`Interface/AddOns`) is identified by the `## Version:` in
+`WoWPro/WoWPro.toc`; the report header says "not a git folder" and `branch` and
+`commit` are `null` in the findings JSON. With the addon's defaults
+(`autoresize = true`, `numsteps = 1`, WoWPro.lua:348-349) the engine shows one
+row.
 
 ## Running characters and findings
 
 ```sh
 cd ~/Projects/WoW-Pro-Guides
-hwc run --race Dwarf --class PRIEST --out /tmp/findings          # one character
-hwc run --race Dwarf --class WARRIOR --variant alch-herb         # with professions
+hwc run --race Dwarf --class PRIEST --out /tmp/findings                    # one character, no professions
+hwc run --race Dwarf --class WARRIOR --professions herbalism,alchemy       # with professions
 hwc run --race Dwarf --class WARRIOR --exclude "*" --include "*Dun_Morogh*" --date 2026-11-12
-hwc matrix --races Dwarf,Gnome --date 2026-11-12                 # the whole matrix
 ```
 
 `hwc run` plays one character through the guide chain with the real engine
-(to the chain's last line, or to the last included guide when filters are given); `hwc matrix` plays every
-combo and groups all the signals into one findings file. Both exit 0 once the
-findings are written, whatever they contain, 1 on a harness failure and 2 on a
-usage error (a missing `--class`, a race not in the table above, or a class the
-race can't play in Forever).
+(to the chain's last line, or to the last included guide when filters are
+given) and writes its findings. `--race` and `--class` are required and
+case-insensitive; `hwc list` shows the valid ones. It exits 0 once the findings
+are written, whatever they contain, 1 on a harness failure and 2 on a usage
+error (a missing `--race` or `--class`, a race not in the table above, a class
+the race can't play in Forever, or a bad `--professions`).
 
-Output, under `--out DIR` (default `~/.hwc/findings`, created if missing, so runs never write into the WoW-Pro folder):
+To play every class of a race, loop over `hwc list`:
 
-- `DIR/<date>-<scope>-<hash>.html`: the findings report, one self-contained page
-  with the findings JSON embedded in it (it opens from disk and loads nothing
-  from the network). The scope is
-  `forever-<faction>-<races lower, joined by '-'>` for `matrix` (`forever-<races>`
-  when the races span both factions) and
-  `<race>-<class>-<variant>` for `run`. With any filter given, the scope gains
-  `-filtered`.
-- `DIR/<date>-<scope>-<hash>.json`: the same findings as a machine-readable document
-  (format 2, the JSON the page embeds), which `/triage` reads.
-- `DIR/<date>-<scope>-<hash>/<race>-<class>-<variant>.json`: one run log per character
-  (git-ignored).
+```sh
+for c in $(hwc list classes Dwarf); do hwc run --race Dwarf --class "$c"; done
+```
+
+### Professions
+
+`--professions LIST` names what the character knows from the start, each at
+skill 1 of 75, with the spell that teaches it
+(`src/hwc/world/profession_spells.lua`). The guides' `SPELL|<Profession>; <id>;
+Flip` tags test those spells. Leaving the flag out means no professions.
+
+- A comma list, case-insensitive; a hyphen stands for a space (`first-aid`).
+  `herbalism,alchemy` and `alchemy,herbalism` are the same character.
+- At most two primary professions: `alchemy`, `blacksmithing`, `enchanting`,
+  `engineering`, `herbalism`, `leatherworking`, `mining`, `skinning`,
+  `tailoring`.
+- Any number of secondary ones: `first-aid`, `fishing`.
+- `cooking` is rejected: every character learns Cooking from Camping 101:
+  Cooking, when the guide's trainer step sends it there. Leave it out.
+- A repeated name, an empty item (`herbalism,`) and an unknown name are usage
+  errors; an unknown name lists the valid ones.
+
+`hwc list professions` prints them one per line.
+
+#### Covering professions
+
+These six `--professions` values, run for a character, between them reach every
+`A Camping 101: <Profession>` quest in the 1-25 guides:
+
+| `--professions` |
+|---|
+| `alchemy,herbalism` |
+| `blacksmithing,mining` |
+| `leatherworking,skinning` |
+| `enchanting,engineering` |
+| `tailoring` |
+| `first-aid,fishing` |
+
+Cooking needs no entry; every run learns it in the guide. The Camping 101 rules
+key on the quest's name, which QuestieDB supplies for the Forever-added Camping
+101 quests (96031-96059, 96626/96629/96634, 97915-97950). A quest no source
+names is marked `unverified` and its profession plays like a character without
+it; the findings header lists this under Gaps. A Camping accept hidden by a `P|`
+profession the character doesn't know is by design (spec §3) and is not
+reported.
+
+### Output
+
+stdout holds the results only: a summary of the findings and a
+`hwc: wrote ...` line with the paths. stderr holds the progress (on a terminal the
+guide, level and elapsed time on one redrawn line; otherwise one line per guide)
+and warnings. `-q`/`--quiet` prints results only; `-v`/`--verbose`
+adds progress detail.
+
+Files go under `--out DIR` (default `~/.hwc/findings`, created if missing, so
+runs never write into the WoW-Pro folder). The stem is
+`<date>-<Race>-<CLASS>[-<professions>][-filtered]-<hash>`, e.g.
+`2026-11-18-Dwarf-WARRIOR-herbalism-skinning-3f9a2c17`, or
+`2026-11-18-Dwarf-WARRIOR-3f9a2c17` with no professions. With any filter given
+the stem gains `-filtered`.
+
+- `DIR/<stem>.html`: the findings report, one self-contained page with the
+  findings JSON embedded in it (it opens from disk and loads nothing from the
+  network).
+- `DIR/<stem>.json`: the same findings as a machine-readable document (format
+  2, the JSON the page embeds), which `/triage` reads.
+- `DIR/<stem>/<Race>-<CLASS>[-<professions>].json`: the run log (git-ignored).
 
 `<hash>` is 8 hex digits of the findings JSON: two runs with different results
 never overwrite each other, and identical findings files share a name.
@@ -203,34 +267,11 @@ finding's id depends on the base: run from the same directory (or pass the same
 addon commit, catalog, config and seed give byte-identical `.html` and `.json`.
 The `Client` row under "About this run" is this repo's own HEAD commit.
 
-Matrix combos (`src/hwc/driver/matrix.lua`): for each race, every class it can
-play in Forever at the `baseline` variant, plus each other variant on the race's
-first class in sorted order. The class lists are in `Player.RACES`
-(`src/hwc/world/player.lua`), from Blizzard's Forever race/class table
+The class lists are in `Player.RACES` (`src/hwc/world/player.lua`), from
+Blizzard's Forever race/class table
 (<https://worldofwarcraft.blizzard.com/news/24304075/>). They never come from
 guide tags: the guide is what's under test, and a guide edit must not change
-which characters are played. Dwarf: HUNTER, PALADIN, PRIEST, ROGUE, SHAMAN,
-WARRIOR; Gnome: MAGE, PRIEST, ROGUE, WARLOCK, WARRIOR. That's 11 classes and
-23 runs for `--races Dwarf,Gnome`. Variants start with each profession at rank 1, max 75, and with the spell that
-teaches it (`src/hwc/world/profession_spells.lua`),
-which the guides' `SPELL|<Profession>; <id>; Flip` tags test. Together they
-cover every `A Camping 101: <Profession>` quest in the 1-25 guides. The Camping
-101 rules key on the quest's name, which QuestieDB supplies for the
-Forever-added Camping 101 quests (96031-96059, 96626/96629/96634,
-97915-97950). A quest no source names is marked `unverified` and its
-profession variant plays like its baseline; the findings header lists this
-under Gaps. A Camping accept hidden by a `P|` profession the character
-doesn't know is by design (spec §3) and is not reported. The variants:
-
-| Variant | Professions |
-|---|---|
-| `baseline` | none |
-| `secondary` | Cooking, First Aid, Fishing |
-| `alch-herb` | Alchemy, Herbalism |
-| `bs-mining` | Blacksmithing, Mining |
-| `lw-skin` | Leatherworking, Skinning |
-| `eng-ench` | Engineering, Enchanting |
-| `tailoring` | Tailoring |
+which characters are played.
 
 ## Comparing runs
 
@@ -246,18 +287,22 @@ cd ~/Projects/WoW-Pro-Guides
 hwc run --race Dwarf --class WARRIOR --out /tmp/findings      # on main
 git switch my-guide-fix
 hwc run --race Dwarf --class WARRIOR --out /tmp/findings      # on the branch
-hwc diff /tmp/findings/2026-11-18-Dwarf-WARRIOR-baseline-1a2b3c4d.json \
-         /tmp/findings/2026-11-18-Dwarf-WARRIOR-baseline-5e6f7a8b.json
+hwc diff /tmp/findings/2026-11-18-Dwarf-WARRIOR-1a2b3c4d.json \
+         /tmp/findings/2026-11-18-Dwarf-WARRIOR-5e6f7a8b.json
 ```
 
 Pass the `.json` files; a `.html` path is refused. Add `--json` for the result
-as JSON (before or after the paths). Findings land in one of five categories:
+as JSON (before or after the paths). A diff compares one character's two runs.
+Findings land in one of five categories:
 
 - **fixed**: in OLD, gone from NEW.
 - **new**: in NEW only.
 - **partly fixed**: in both, but NEW hits fewer characters.
 - **spread**: in both, but NEW hits more characters.
 - **unchanged**: in both on the same characters (counted, not listed).
+
+Partly fixed and spread only arise in files that hold several characters, as
+older hwc versions (`matrix`) wrote them; a file from `hwc run` holds one.
 
 Only findings that count toward the report take part (not harness or expected
 ones), and only on the characters both runs played. A warning line says when
@@ -266,7 +311,7 @@ the comparison may mislead:
 - different QuestieDB tag or build
 - different supplement
 - different guide filters
-- characters only in one run (left out)
+- characters only in one run (left out), e.g. a file from an older hwc that played several characters
 - a character's run stopped early in one run but not the other (findings past the stop show as fixed)
 - runs started from different folders
 - different hwc versions
@@ -279,12 +324,18 @@ the comparison may mislead:
 | 1 | NEW has new or spread findings, or a shared character's NEW run stopped early |
 | 2 | usage error, unreadable file, invalid JSON, or the runs share no characters |
 
+When the runs share no character, `hwc diff` says what each side played, e.g.
+`not comparable: OLD has Dwarf Warrior, NEW has Gnome Mage`. A file written
+before the `--professions` flag names its characters differently (`baseline`,
+`alch-herb`, ...), so it never shares one with a newer file; the message then
+ends `; OLD was written before --professions, so re-run it with this hwc`.
+
 Exit 1 means "new findings or a cut-short run" here, as in `diff(1)` it means "files differ".
 
 ## Choosing guides
 
 By default a run plays the race's whole chain. `--include PATTERN` and
-`--exclude PATTERN` (each repeatable, on `run` and `matrix`) pick which guides
+`--exclude PATTERN` (each repeatable, on `run`) pick which guides
 are played, following the AWS S3 CLI:
 
 - Every guide starts included.
@@ -299,8 +350,8 @@ are played, following the AWS S3 CLI:
 
 ```sh
 cd ~/Projects/WoW-Pro-Guides
-hwc run --class PRIEST --exclude "*" --include "*Dun_Morogh*"   # only Dun Morogh
-hwc run --class PRIEST --exclude "*/19_25_*"                    # everything but the 19-25 guide
+hwc run --race Dwarf --class PRIEST --exclude "*" --include "*Dun_Morogh*"   # only Dun Morogh
+hwc run --race Dwarf --class PRIEST --exclude "*/19_25_*"                    # everything but the 19-25 guide
 ```
 
 Additions to S3:
@@ -308,7 +359,7 @@ Additions to S3:
 - A pattern starting with `./` or `../`, or an absolute path, is resolved from the
   current directory and made relative to the WoW-Pro folder, so tab completion
   works:
-  `cd WoWPro_Leveling/Forever/Alliance && hwc run --class PRIEST --exclude "*" --include ./01_12_Dun_Morogh.lua`.
+  `cd WoWPro_Leveling/Forever/Alliance && hwc run --race Dwarf --class PRIEST --exclude "*" --include ./01_12_Dun_Morogh.lua`.
   A pattern that resolves outside the WoW-Pro folder is a usage error.
 - A pattern naming a folder matches every file under it.
 - The WoW-Pro folder is the nearest folder at or above the current directory that
@@ -328,10 +379,8 @@ guide on the chain. With filters, the page's "About this run" section lists
 the filters and the guides played, and the included guides the run never
 reaches (only when an `--include` was given).
 
-A race whose chain reaches no included guide plays nothing. `matrix` skips its
-combos, names the race in a warning at the top of the page and under "About
-this run", and exits 2 (writing nothing)
-only if no race reaches one; a single `run` exits 2 and writes nothing.
+A race whose chain reaches no included guide plays nothing: `hwc run` exits 2
+and writes nothing.
 
 **Known limit:** quests from jumped guides were never done. Prerequisite
 gates, `orphan-turnin` and `leftover-quests` (`not-turned-in`) findings near a
@@ -360,7 +409,7 @@ worktree to a newer commit, remove it first with
 `git -C ~/Projects/WoW-Pro-Guides worktree remove <path>`.
 
 `spec/integration/anchors_spec.lua` (`#slow`) plays a full Dwarf Warrior
-baseline to level 25 on each worktree. Each anchor is pending while its
+with no professions to level 25 on each worktree. Each anchor is pending while its
 worktree or the pinned catalog is absent.
 
 | Anchor | Red (`main`) | Green |
@@ -398,18 +447,14 @@ makes it the active one, then runs the health check. `HWC_HOME` moves the Questi
 
 ### Health check
 
-```sh
-hwc doctor          # LuaJIT, rocks, tools, the WoW-Pro folder, QuestieDB, the supplement
-hwc doctor --json   # the same, as JSON
-```
-
-It exits 1 when a check fails, and prints the fix beside each failure.
+`hwc doctor` checks the setup, including that the addon loads; see
+[Checking the setup](#checking-the-setup).
 
 ### Updating QuestieDB
 
 ```sh
-hwc sync questie              # the newest Forever release
-hwc sync questie --tag TAG    # one release by tag
+hwc update              # the newest Forever release
+hwc update --tag TAG    # one release by tag
 ```
 
 The old releases stay in `~/.hwc/questie/`. The findings header records the
@@ -430,8 +475,8 @@ The supplement holds hand-checked facts that QuestieDB lacks. Each entry
 names its source. It is optional and not committed.
 
 Every source is optional. A missing source is recorded in `sources` with
-`present: false`, never treated as an error; a partial QuestieDB copy is recorded as `present: "partial"` with the missing files listed. `hwc boot` loads the catalog into
-the world.
+`present: false`, never treated as an error; a partial QuestieDB copy is recorded as `present: "partial"` with the missing files listed. The catalog is loaded into
+the world when a character plays.
 
 ```sh
 hwc quest 179      # the merged quest as JSON, with each source's path, presence and sha256
@@ -481,11 +526,11 @@ header says it "should be loaded *before* the client specific map lists". The
 client loads files in TOC order, so the harness does the same: Patches loads
 **after** `WoWPro_ZoneData_Forever.lua`. That matches the game, bug included.
 
-## Missing globals (Dwarf Warrior boot)
+## Missing globals (Dwarf Warrior load)
 
 The sandbox records every global read that has no value. These are the reads
-left after a Dwarf Warrior boot, in first-read order. None of them blocks the
-boot.
+left after loading the addon for a Dwarf Warrior (the `hwc doctor` addon check), in first-read order. None of them blocks the
+load.
 
 | Globals | Status |
 |---|---|
@@ -500,5 +545,5 @@ boot.
 | `GetBindLocation` | guarded probe (`WoWPro_Events.lua:249`). The hearth location is player state for a later plan, so `WoWProDB.char.hearth` stays unset. |
 
 Frame methods the mock doesn't model show up as `Frame:<Name>`, and
-unstubbed namespaced APIs show up as `<Namespace>.<Field>`. The Dwarf boot
+unstubbed namespaced APIs show up as `<Namespace>.<Field>`. The Dwarf Warrior load
 has neither.

@@ -842,4 +842,82 @@ describe("driver.run", function()
       assert.same({ "G1:1", "G1:2", "G1:3" }, E.acted)
     end)
   end)
+
+  -- opts.on_progress: the driver reports guide, jump and level events and never prints.
+  describe("progress events", function()
+    local function collect(guides, script, opts, world)
+      local events = {}
+      opts = opts or {}
+      opts.on_progress = function(e) events[#events + 1] = e end
+      local log, E = drive(guides, script, opts, world)
+      return events, log, E
+    end
+
+    local function of(events, kind)
+      local out = {}
+      for _, e in ipairs(events) do
+        if e.kind == kind then out[#out + 1] = e end
+      end
+      return out
+    end
+
+    local function chain()
+      return {
+        G1 = { startlevel = 1, next_gid = "G2", file = "g1.lua", steps = { { action = "R", name = "a" } } },
+        G2 = { startlevel = 1, next_gid = "G3", file = "g2.lua", steps = { { action = "R", name = "b" } } },
+        G3 = { startlevel = 1, file = "g3.lua", steps = { { action = "R", name = "c" }, { action = "D", name = "Done" } } },
+      }
+    end
+    local SCRIPT = {
+      G1 = { { complete = { 1 }, done = true, switch = "G2" } },
+      G2 = { { complete = { 1 }, done = true, switch = "G3" } },
+      G3 = completes(1),
+    }
+
+    it("reports each opened guide with its file and index, in order", function()
+      local events = collect(chain(), SCRIPT)
+      local guides = of(events, "guide")
+      assert.same({
+        { kind = "guide", gid = "G1", file = "g1.lua", index = 1 },
+        { kind = "guide", gid = "G2", file = "g2.lua", index = 2 },
+        { kind = "guide", gid = "G3", file = "g3.lua", index = 3 },
+      }, guides)
+    end)
+
+    it("reports one jump event naming the excluded guides", function()
+      local events = collect(chain(), SCRIPT, { included = { G1 = true, G3 = true } })
+      local jumps = of(events, "jump")
+      assert.same({ { kind = "jump", from = "G2", to = "G3", passed = { "G2" } } }, jumps)
+    end)
+
+    it("reports a jump that ends the chain with no target", function()
+      local events = collect(chain(), SCRIPT, { included = { G1 = true } })
+      local jumps = of(events, "jump")
+      assert.equal(1, #jumps)
+      assert.is_nil(jumps[1].to)
+      assert.same({ "G2", "G3" }, jumps[1].passed)
+    end)
+
+    it("reports one level event per level gained, not the starting level", function()
+      local steps = { { action = "R", name = "a" }, { action = "R", name = "b" } }
+      local events = collect(one_guide(steps), { G1 = {
+        { complete = { 1 }, level = 2 }, { complete = { 2 }, level = 3 },
+      } })
+      assert.same({ { kind = "level", level = 2 }, { kind = "level", level = 3 } }, of(events, "level"))
+    end)
+
+    it("reports the level a jump at the start of a run raises", function()
+      local guides = chain()
+      guides.G2.startlevel = 5
+      local events = collect(guides, SCRIPT, { included = { G2 = true } })
+      assert.same({ { kind = "level", level = 5 } }, of(events, "level"))
+    end)
+
+    it("leaves the run log byte-identical with and without on_progress", function()
+      local json = require("hwc.json")
+      local plain = drive(chain(), SCRIPT, { included = { G1 = true, G3 = true } })
+      local _, with = collect(chain(), SCRIPT, { included = { G1 = true, G3 = true } })
+      assert.equal(json.encode(plain), json.encode(with))
+    end)
+  end)
 end)

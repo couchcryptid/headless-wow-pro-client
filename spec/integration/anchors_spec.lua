@@ -45,7 +45,7 @@ local function absent(slug)
   return nil
 end
 
--- One Dwarf Warrior baseline run per worktree, kept with its Engine so the guide
+-- One Dwarf Warrior run (no professions) per worktree, kept with its Engine so the guide
 -- loaded at the stop can be read. The anchors were written when a run stopped at
 -- level 25, inside 19_25; since runs play the whole chain (55439ed), the run is
 -- limited to that scope with the guide filter: Dun Morogh -> 12_20 -> 19_25, then

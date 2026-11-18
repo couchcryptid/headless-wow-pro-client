@@ -109,6 +109,16 @@ describe("boot", function()
     end
   end)
 
+  it("hands a missing QuestieDB to cfg.warn instead of stderr", function()
+    local config = require("hwc.config")
+    local cfg = config.load({ addon_path = ADDON, catalog = { questie_dir = "/nonexistent/hwc-questie" } })
+    local got = {}
+    cfg.warn = function(msg) got[#got + 1] = msg end
+    require("hwc.boot").run(cfg)
+    assert.equal(1, #got)
+    assert.matches("^no QuestieDB installed %(.+%); run hwc init$", got[1])
+  end)
+
   it("refuses a checkout without git identity", function()
     local config = require("hwc.config")
     local cfg = config.load({ addon_path = ADDON })
