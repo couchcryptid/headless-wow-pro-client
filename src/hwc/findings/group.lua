@@ -178,7 +178,7 @@ local function link_roots(findings)
       -- The engine's only format (WoWPro_Broker.lua:2292):
       -- "NextStep:PRE&(%s): A mandatory prereq was not met: %s". Only the id after
       -- "not met:" counts; a why without that phrase links nothing.
-      local n = tonumber(f.why:match("not met:%s*(%d+)"))
+      local n = tonumber(f.why:match(require("hwc.findings.text").PRE_NOT_MET))
       local target = n and blocker(n)
       if target and target ~= f then link(f, target, by_id) end
     elseif f.signal == "accept-refused" and has(f.reasons, "prerequisite") and f.missing then

@@ -218,8 +218,8 @@ function report.carried_note(carried)
   if not carried or #carried == 0 then return nil end
   local quests = {}
   for i, c in ipairs(carried) do
-    quests[i] = (c.qname and c.qname ~= "") and ('"' .. c.qname .. '" (' .. tostring(c.qid) .. ")")
-      or ("quest " .. tostring(c.qid))
+    quests[i] = (c.qname and c.qname ~= "") and (text.with_part(c.qname, c.chain) .. " (" .. tostring(c.qid) .. ")")
+      or text.quest_ref(c.qid)
   end
   return "Taken in the guide the run stopped in and still in the log, which that guide or the next may turn in "
     .. "after the run's end, so not findings: " .. plural(#carried, "quest") .. ": " .. ids(quests) .. "."

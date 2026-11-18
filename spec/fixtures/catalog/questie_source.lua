@@ -43,6 +43,10 @@ QUESTS[1112] = { name = "Fixture Cycle", preQuestSingle = { 1111 }, nextQuestInC
 QUESTS[1121] = { name = "Fixture Fork", nextQuestInChain = 1122 }
 QUESTS[1122] = { name = "Fixture Fork", preQuestSingle = { 1121 } }
 QUESTS[1123] = { name = "Fixture Fork", preQuestSingle = { 1121 } }
+-- next_in_chain loops with no predecessor cycle: 1141 -> 1142 -> 1143 -> 1142.
+QUESTS[1141] = { name = "Fixture Loop", nextQuestInChain = 1142 }
+QUESTS[1142] = { name = "Fixture Loop", preQuestSingle = { 1141 }, nextQuestInChain = 1143 }
+QUESTS[1143] = { name = "Fixture Loop", preQuestSingle = { 1142 }, nextQuestInChain = 1142 }
 QUESTS[1131] = { name = "Fixture Solo" }
 QUESTS[1132] = { name = "Fixture Solo", preQuestSingle = { 1105 } }
 

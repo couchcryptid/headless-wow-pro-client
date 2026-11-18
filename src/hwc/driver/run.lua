@@ -12,6 +12,7 @@
 -- walked 1..n); nothing in it is built from pairs.
 local actions = require("hwc.driver.actions")
 local xp = require("hwc.world.xp")
+local findings_text = require("hwc.findings.text")
 
 local run = {}
 
@@ -121,7 +122,7 @@ end
 
 -- Names the quest a hidden accept's unmet prerequisite refers to ("not met: N").
 function Driver:prerequisite_ref(sig)
-  local pre = sig.why and sig.why:match("not met:%s*(%d+)")
+  local pre = sig.why and sig.why:match(findings_text.PRE_NOT_MET)
   if not pre then return end
   pre = tonumber(pre)
   sig.pre_qname, sig.pre_chain = self:quest_name(pre), self:chain_of(pre)
@@ -409,7 +410,7 @@ function Driver:leftovers()
       sig.confidence = self:confidence(q)
       self.log.signals[#self.log.signals + 1] = sig
     else
-      self.log.carried[#self.log.carried + 1] = { qid = q, qname = self:quest_name(q) }
+      self.log.carried[#self.log.carried + 1] = { qid = q, qname = self:quest_name(q), chain = self:chain_of(q) }
     end
   end
 end

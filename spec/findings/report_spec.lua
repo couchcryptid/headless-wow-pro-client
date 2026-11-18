@@ -216,6 +216,9 @@ describe("labels and notes for wording the markdown carried", function()
       report.carried_note({ { qid = 287, qname = "Frostmane Hold" }, { qid = 313 } }))
     assert.equal("Taken in the guide the run stopped in and still in the log, which that guide or the next may "
       .. "turn in after the run's end, so not findings: 1 quest: quest 9.", report.carried_note({ { qid = 9, qname = "" } }))
+    assert.equal("Taken in the guide the run stopped in and still in the log, which that guide or the next may "
+      .. "turn in after the run's end, so not findings: 1 quest: \"Raene's Cleansing\" (8/11) (1029).",
+      report.carried_note({ { qid = 1029, qname = "Raene's Cleansing", chain = { part = 8, total = 11 } } }))
     assert.is_nil(report.carried_note(nil))
     assert.is_nil(report.carried_note({}))
   end)

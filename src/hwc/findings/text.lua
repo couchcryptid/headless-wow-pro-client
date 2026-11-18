@@ -78,6 +78,9 @@ local function lower_first(s) return (s:gsub("^%u", string.lower)) end
 
 local function titlecase(s) return (s:sub(1, 1):upper() .. s:sub(2):lower()) end
 
+-- WoWPro's unmet-prerequisite why ("...: A mandatory prereq was not met: N"): captures N.
+text.PRE_NOT_MET = "not met:%s*(%d+)"
+
 local function quoted(name) return '"' .. name .. '"' end
 
 -- "step" is the verb form of a step: Get flight path at "Thelsamar".
@@ -342,7 +345,7 @@ local function clauses(f, ctx)
   local own = text.quest_ref(f.qid, f.qname, f.chain)
   ctx = ctx or {}
   if s == "never-shown-accept" then
-    local pre = f.why and f.why:match("not met: (%d+)")
+    local pre = f.why and f.why:match(text.PRE_NOT_MET)
     if pre then
       return "The guide tells you to accept this quest, but WoWPro hides the step because its prerequisite, "
         .. text.quest_ref(pre, f.pre_qname, f.pre_chain) .. ", is never completed."
