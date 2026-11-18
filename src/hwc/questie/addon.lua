@@ -78,7 +78,7 @@ function M.load(version_dir, character)
 
   local ok, msg = lib.RequireContract(release.SUPPORTED_CONTRACT)
   if not ok then local installed = tostring(version_dir):match("([^/]+)/*$") or tostring(version_dir)
-    fail(tostring(msg) .. "; installed " .. installed .. "; run hwc sync questie --tag <a compatible tag>") end
+    fail(tostring(msg) .. "; installed " .. installed .. "; run hwc update --tag <a compatible tag>") end
 
   local xp = lib.Support and lib.Support.Get("QuestXP")
   if not (xp and type(xp.db) == "table") then fail("no QuestXP data") end

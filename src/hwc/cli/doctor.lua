@@ -4,9 +4,9 @@ local update = require("hwc.cli.update")
 
 return {
   name = "doctor",
-  summary = "Check LuaJIT, rocks, tools, the WoW-Pro folder, QuestieDB and the supplement",
+  summary = "Check LuaJIT, rocks, tools, the WoW-Pro folder, that the addon loads, QuestieDB and the supplement",
   usage = "[--json]",
-  description = "Check LuaJIT, rocks, tools, the WoW-Pro folder, QuestieDB and the supplement.",
+  description = "Check LuaJIT, rocks, tools, the WoW-Pro folder, that the addon loads, QuestieDB and the supplement.",
   options = {
     { name = "json", flag = true, help = "Print the report as JSON." },
   },
