@@ -62,6 +62,7 @@ QUESTS[1208] = { name = "Fixture Talk And Kill", questLevel = 30, startedBy = { 
   objectives = { { { 2002 }, { 2003 } } } }
 QUESTS[1209] = { name = "Fixture Unknown Npc", questLevel = 30, objectives = { { { 9999 } } } }
 QUESTS[1210] = { name = "Fixture Unknown Item", questLevel = 30, objectives = { nil, nil, { { 9998 } } } }
+QUESTS[1211] = { name = "Fixture Bought", questLevel = 30, objectives = { nil, nil, { { 5005 } } } }
 QUESTS[1131] = { name = "Fixture Solo" }
 QUESTS[1132] = { name = "Fixture Solo", preQuestSingle = { 1105 } }
 
@@ -77,6 +78,7 @@ local ITEMS = {
   [5001] = { name = "Fixture Pelt", npcDrops = { 2003 } },
   [5002] = { name = "Fixture Fang", npcDrops = { 2001, 2002 } },
   [5003] = { name = "Fixture Fang" },
+  [5005] = { name = "Fixture Mead", npcDrops = { 2003 }, vendors = { 2001 } },
   [5004] = { name = "Fixture Keg", questRewards = { 179 } },
   [4990] = { name = "Fixture Mug", questRewards = { 179 } },
 }
@@ -87,6 +89,7 @@ local OBJECTS = {
 
 -- Drop tables (Source:drops shape, rate 0-1); 5002 has none, so npcDrops serves it.
 local DROPS = {
+  [5005] = { { npc = 2003, rate = 0.0017 } },
   [5001] = { { npc = 2001, rate = 0.5 }, { npc = 2003, rate = 0.25 } },
 }
 

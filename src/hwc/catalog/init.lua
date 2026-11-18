@@ -321,8 +321,12 @@ function Catalog:noncombat(qid)
       local npc = self:npc(o.ids and o.ids[1])
       if npc and not kills.talk_to(npc, quest) then return false end
     elseif o.kind == "item" then
-      local it = self:item(o.ids and o.ids[1])
-      if it and #it.drops > 0 then return false end
+      -- Combat only when a mob drops it AND nobody sells it: an item you can buy is never a
+      -- combat objective, whatever rare drops exist.
+      local id = o.ids and o.ids[1]
+      local it = self:item(id)
+      local raw = self.questie and self.questie:item(id)
+      if it and #it.drops > 0 and #(raw and raw.vendors or {}) == 0 then return false end
     end
   end
   return true, "no-combat-objective"
