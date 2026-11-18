@@ -18,7 +18,7 @@ report.GAPS = {
   "party XP for non-elites (spec §5.5)",
   "dungeon runs and instance XP (spec §3)",
   -- Ruling AB: the Forever-added Camping 101 quests have no name in any catalog source.
-  "Camping 101 quests are recognised only by name from the local supplement (no catalog source names them); without it, profession variants equal baselines",
+  "Camping 101 quests are recognised only by name from the local supplement (no catalog source names them); without it, characters with professions play like ones with none",
   -- Ruling AC: kill vs talk-to is a heuristic (kills.objective_kills).
   "talk-to NPC objectives may be credited as kills",
   -- Catalog:quest_rewards: QuestieDB has no reward counts and no choice/fixed split.
@@ -28,7 +28,7 @@ report.GAPS = {
 }
 
 local NOT_REPRODUCIBLE = "uncommitted changes; this run may not be reproducible from its commit."
-local SUPPLEMENT_NOTE = "Camping 101 quests aren't recognised, so profession variants match their baselines."
+local SUPPLEMENT_NOTE = "Camping 101 quests aren't recognised, so characters with professions play like ones with none."
 
 -- Harness notices are about the client's WoW API stubs, not guides: kept out of
 -- every count and shown only in their own folded section.

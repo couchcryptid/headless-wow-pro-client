@@ -97,4 +97,54 @@ describe("Player.classes_for", function()
   it("raises for an unknown race", function()
     assert.has_error(function() Player.classes_for("Goblin") end, "hwc: race not in scope: Goblin")
   end)
+
+  -- Classes come from Player.RACES (Blizzard's Forever table), never from guide tags:
+  -- the guide is what's under test.
+  it("is the race's Forever class list from Player.RACES", function()
+    assert.same(Player.RACES.Undead.classes, Player.classes_for("Undead"))
+  end)
+end)
+
+-- The README's "Covering professions" list (design §6): together the characters
+-- reach every Camping 101 quest in the 1-25 Alliance guides. Reads the real
+-- guides and pends without the addon checkout.
+describe("covering professions", function()
+  local lfs = require("lfs")
+  local ADDON = os.getenv("HOME") .. "/Projects/WoW-Pro-Guides"
+  local COVERING = { "alchemy,herbalism", "blacksmithing,mining", "leatherworking,skinning",
+    "enchanting,engineering", "tailoring", "first-aid,fishing" }
+
+  it("each parses as a valid --professions list", function()
+    for _, list in ipairs(COVERING) do assert.is_table(professions.parse(list), list) end
+  end)
+
+  if lfs.attributes(ADDON .. "/WoWPro/WoWPro.toc", "mode") == nil then
+    pending("addon checkout absent at " .. ADDON)
+    return
+  end
+
+  it("cover exactly the Camping 101 professions in the 1-25 Alliance guides", function()
+    local found = {}
+    local dir = ADDON .. "/WoWPro_Leveling/Forever/Alliance"
+    for f in lfs.dir(dir) do
+      local lo = f:match("^(%d+)_%d+_.*%.lua$")
+      if lo and tonumber(lo) < 25 then
+        for line in io.lines(dir .. "/" .. f) do
+          local p = line:match("^A Camping 101: ([%a ]+)|")
+          if p then found[p] = true end
+        end
+      end
+    end
+    -- Cooking needs no covering character: every run learns it from the guide.
+    assert.is_true(found.Cooking)
+    found.Cooking = nil
+    local want, got = {}, {}
+    for p in pairs(found) do want[#want + 1] = p end
+    for _, list in ipairs(COVERING) do
+      for _, p in ipairs(professions.parse(list)) do got[#got + 1] = p end
+    end
+    table.sort(want); table.sort(got)
+    assert.same(want, got)
+    assert.equal(11, #got)
+  end)
 end)

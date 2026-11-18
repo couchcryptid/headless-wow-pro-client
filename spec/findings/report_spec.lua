@@ -138,8 +138,8 @@ describe("report.build", function()
     assert.same(report.GAPS, doc.header.gaps)
     assert.same({
       "The client checkout had uncommitted changes; this run may not be reproducible from its commit.",
-      "Catalog source supplement was missing. Camping 101 quests aren't recognised, so profession variants "
-        .. "match their baselines.",
+      "Catalog source supplement was missing. Camping 101 quests aren't recognised, so characters with "
+        .. "professions play like ones with none.",
     }, doc.header.warnings)
   end)
 

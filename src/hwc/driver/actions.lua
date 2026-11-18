@@ -281,8 +281,8 @@ local function perform_accept(ctx, step, out)
 
   -- Camping 101 (spec §5.2): the client abstracts levelling the profession and
   -- turns the quest in at once, unless the guide has its own T step or the
-  -- character lacks the gating skill. No skill is trained here: the baseline
-  -- trains only when a guide step says so (spec §11), and Cooking has no
+  -- character lacks the gating skill. No skill is trained here: a character
+  -- with no professions trains only when a guide step says so (spec §11), and Cooking has no
   -- requires_skill gate, so it is turned in without learning Cooking.
   local quest = w.log:get(qid).quest
   if not is_camping(quest) or guide_turns_in(ctx.engine, qid) then return end

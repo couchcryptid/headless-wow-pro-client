@@ -83,6 +83,9 @@ end
 
 local function titlecase(s) return (s:sub(1, 1):upper() .. s:sub(2):lower()) end
 
+-- Every character starts at level 1; the CLI's progress line reads it too.
+Player.START_LEVEL = 1
+
 -- record(kind, fields) appends a world-change record; supplied by the World.
 function Player.new(cfg, record)
   local race = assert(Player.RACES[cfg.race], "hwc: race not in scope: " .. tostring(cfg.race))
@@ -91,7 +94,7 @@ function Player.new(cfg, record)
     name = "Hwc", realm = "HwcRealm", race = race.name, race_token = race.token, race_key = cfg.race,
     class = titlecase(cfg.class), class_token = cfg.class:upper(),
     faction = cfg.faction or race.faction, sex = cfg.sex,
-    level = 1, xp = 0, zone = start[1], subzone = "", map_id = start[2], x = start[3], y = start[4],
+    level = Player.START_LEVEL, xp = 0, zone = start[1], subzone = "", map_id = start[2], x = start[3], y = start[4],
     bind = nil, flight_points = {}, skills = {}, spells = {}, bags = {},
     _record = record or function() end,
   }, Player)

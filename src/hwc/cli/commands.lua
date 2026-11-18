@@ -5,36 +5,12 @@
 local commands = {}
 
 -- Command name -> module under hwc.cli, where the two differ. The stubs share
--- one module; run is declared below until its own module lands.
+-- one module.
 local MODULE = { help = "help_cmd", boot = "stubs", matrix = "stubs", sync = "stubs" }
 
 local ORDER = { "init", "doctor", "update", "run", "diff", "quest", "list", "version", "help", "boot", "matrix", "sync" }
 
--- Temporary: run still goes through cli.lua's legacy path, which takes these
--- options. This declaration only gives it a usage line and help.
-local RUN = {
-  name = "run",
-  summary = "Play one character along the guide chain; write findings and its run log",
-  usage = "--class CLASS [--race RACE] [--variant V] [options]",
-  description = "Play one character along the guide chain; write findings and its run log.\n"
-    .. "Run it from a WoW-Pro folder (the one holding WoWPro/WoWPro.toc) or below it.",
-  options = {
-    { name = "class", metavar = "CLASS", required = true, help = "Player class token, e.g. WARRIOR." },
-    { name = "race", metavar = "RACE", default_text = "Dwarf", help = "Player race.", see = "hwc list races" },
-    { name = "variant", metavar = "V", default_text = "baseline",
-      help = "Profession variant: baseline, secondary, alch-herb, bs-mining, lw-skin, eng-ench, tailoring." },
-    { name = "include", metavar = "PATTERN", help = "Glob on guide paths; repeatable, last match wins." },
-    { name = "exclude", metavar = "PATTERN", help = "Glob on guide paths; repeatable, last match wins." },
-    { name = "date", metavar = "D", default_text = "today", help = "Findings date, YYYY-MM-DD." },
-    { name = "out", metavar = "DIR", default_text = "~/.hwc/findings", help = "Findings directory." },
-    { name = "relative-to", metavar = "DIR", default_text = "current directory",
-      help = "Every path in the output is written relative to DIR." },
-  },
-  notes = { 'See README "Choosing guides" for the filter rules.' },
-}
-
 local function load(name)
-  if name == "run" then return RUN end
   local mod = require("hwc.cli." .. (MODULE[name] or name))
   return MODULE[name] == "stubs" and mod[name] or mod
 end
