@@ -233,8 +233,9 @@ reported.
 ### Output
 
 stdout holds the results only: a summary of the findings and a
-`hwc: wrote ...` line with the paths. stderr holds the progress (the guide, the
-level, jumps) and warnings. `-q`/`--quiet` prints results only; `-v`/`--verbose`
+`hwc: wrote ...` line with the paths. stderr holds the progress (on a terminal the
+guide, level and elapsed time on one redrawn line; otherwise one line per guide)
+and warnings. `-q`/`--quiet` prints results only; `-v`/`--verbose`
 adds progress detail.
 
 Files go under `--out DIR` (default `~/.hwc/findings`, created if missing, so
@@ -310,10 +311,10 @@ the comparison may mislead:
 - different QuestieDB tag or build
 - different supplement
 - different guide filters
-- characters only in one run (left out), e.g. different `--race`, `--class` or `--professions`
+- characters only in one run (left out), e.g. a file from an older hwc that played several characters
 - a character's run stopped early in one run but not the other (findings past the stop show as fixed)
 - runs started from different folders
-- different hwc versions (a file from before the `--professions` flag names its characters differently, so re-run it once)
+- different hwc versions
 - both runs are the same addon commit
 - uncommitted changes in the OLD or NEW run
 
@@ -322,6 +323,12 @@ the comparison may mislead:
 | 0 | nothing new (fixed, partly fixed and unchanged may be present) |
 | 1 | NEW has new or spread findings, or a shared character's NEW run stopped early |
 | 2 | usage error, unreadable file, invalid JSON, or the runs share no characters |
+
+When the runs share no character, `hwc diff` says what each side played, e.g.
+`not comparable: OLD has Dwarf Warrior, NEW has Gnome Mage`. A file written
+before the `--professions` flag names its characters differently (`baseline`,
+`alch-herb`, ...), so it never shares one with a newer file; the message then
+ends `; OLD was written before --professions, so re-run it with this hwc`.
 
 Exit 1 means "new findings or a cut-short run" here, as in `diff(1)` it means "files differ".
 

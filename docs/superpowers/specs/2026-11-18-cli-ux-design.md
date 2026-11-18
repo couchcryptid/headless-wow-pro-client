@@ -145,7 +145,7 @@ so semantic-release cuts a major version.
     - `unknown option --colour for hwc run`
     - `--race needs a value`
     - `missing --class`
-    - `hwc diff needs 2 files, got 3`
+    - `diff needs 2 files, got 3` (the command named once: output reads `hwc: diff needs …`)
     - `unknown command: hwc rnu (did you mean run?)`
   - The "did you mean" suggestion is offered only for an edit distance of 2 or
     less, and only among visible commands; the hidden stubs never appear in it.
@@ -291,8 +291,11 @@ format 2), so the Preact report page needs no rebuild. It already renders
 `hwc list`, and `src/hwc/driver/matrix.lua` is deleted.
 
 **Note:** findings files written before this change carry `baseline`/`alch-herb`
-tokens, so `hwc diff` against one warns that the characters differ.
-Re-running `main` once after upgrading fixes it.
+tokens, so they share no character with a newer file and `hwc diff` stops with
+exit 2: `not comparable: OLD has Dwarf Warrior (Baseline), NEW has Dwarf Warrior;
+OLD was written before --professions, so re-run it with this hwc` (naming the
+side or sides that carry an old token). Re-running `main` once after upgrading
+fixes it.
 
 ### 4.5 `hwc list`
 
@@ -358,7 +361,10 @@ Same checks as today, plus:
 
 **Progress:**
 - **On a terminal:** one line, redrawn with `\r` and cleared (`\r\27[K`)
-  before any other stderr write and at `:done()`.
+  before any other stderr write, before a `:result` and at `:done()`. Each text
+  is cut to the terminal width − 1 columns (UTF-8 code points), ending in `…`,
+  so it never wraps. The width comes from `ioctl(TIOCGWINSZ)` on stderr, else
+  `$COLUMNS`, else 80; `ui.new{ width = N }` fixes it for specs.
 - **Not on a terminal:** each progress text is written as its own line, but
   only when it changes (no redraws), so CI logs stay short.
 - **Quiet:** progress is off.
@@ -373,6 +379,8 @@ Same checks as today, plus:
     change (my call: keeps `world/` untouched).
 - **The CLI renders** them as:
   `Dwarf Warrior · 12_20_Eastern_Kingdom (guide 2) · level 14 · 0:06`.
+  - Off a terminal it leaves out `· level L · M:SS`, so the text changes only
+    when the guide does and CI logs get one line per guide.
   - Elapsed time is wall clock from `os.time` (seconds), in the CLI only. The
     findings never see it, so determinism is untouched.
   - The guide total isn't known up front (the chain is followed as it goes),
