@@ -31,6 +31,21 @@ local QUESTS = {
     questLevel = 30, requiredMinRep = { 72 }, requiredMaxRep = { "92", 3000 } },
 }
 
+-- A same-name chain (1101 -> 1104), a branch off 1102 with another name, a cycle,
+-- two same-name quests behind one predecessor, and a same-name pair that is not adjacent.
+QUESTS[1101] = { name = "Fixture Chain", nextQuestInChain = 1102 }
+QUESTS[1102] = { name = "Fixture Chain", preQuestSingle = { 1101 }, nextQuestInChain = 1103 }
+QUESTS[1103] = { name = "Fixture Chain", preQuestSingle = { 1102 }, nextQuestInChain = 1104 }
+QUESTS[1104] = { name = "Fixture Chain", preQuestGroup = { 1103 } }
+QUESTS[1105] = { name = "Fixture Branch", preQuestSingle = { 1102 } }
+QUESTS[1111] = { name = "Fixture Cycle", preQuestSingle = { 1112 }, nextQuestInChain = 1112 }
+QUESTS[1112] = { name = "Fixture Cycle", preQuestSingle = { 1111 }, nextQuestInChain = 1111 }
+QUESTS[1121] = { name = "Fixture Fork", nextQuestInChain = 1122 }
+QUESTS[1122] = { name = "Fixture Fork", preQuestSingle = { 1121 } }
+QUESTS[1123] = { name = "Fixture Fork", preQuestSingle = { 1121 } }
+QUESTS[1131] = { name = "Fixture Solo" }
+QUESTS[1132] = { name = "Fixture Solo", preQuestSingle = { 1105 } }
+
 local NPCS = {
   [2001] = { name = "Fixture Giver", minLevel = 5, maxLevel = 5, rank = 0, spawns = { [12] = { { 10.5, 20.5 }, { 11, 21 } } },
     zoneID = 12 },

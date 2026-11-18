@@ -502,7 +502,7 @@
       "qid":530,
       "qname":"Tunnel Rats",
       "reasons":[],
-      "sentence":"The run passed this turn-in step, but quest \"Tunnel Rats\" (530) was still in the log when the run ended.",
+      "sentence":"The run passed this turn-in step, but quest 530 \"Tunnel Rats\" was still in the log when the run ended.",
       "severity":"low",
       "signal":"leftover-quests",
       "step":{
@@ -546,7 +546,7 @@
       "qid":470,
       "qname":"Ore for Ironforge",
       "reasons":[],
-      "sentence":"The run passed this turn-in step, but quest \"Ore for Ironforge\" (470) was still in the log when the run ended.",
+      "sentence":"The run passed this turn-in step, but quest 470 \"Ore for Ironforge\" was still in the log when the run ended.",
       "severity":"low",
       "signal":"leftover-quests",
       "step":{

@@ -197,9 +197,27 @@ end
 -- Titles and sentences
 ---------------------------------------------------------------------------
 
+-- ` (p/t)` for a quest in a same-name chain, else "".
+local function part_of(chain)
+  if type(chain) == "table" and chain.part and chain.total then
+    return " (" .. tostring(chain.part) .. "/" .. tostring(chain.total) .. ")"
+  end
+  return ""
+end
+
+-- `"<name>" (p/t)`: a quoted quest name, numbered when it is a part of a chain.
+function text.with_part(name, chain) return quoted(name) .. part_of(chain) end
+
+-- A quest reference: `quest <id> "<name>" (p/t)`; plain `quest <id>` without a name.
+function text.quest_ref(id, name, chain)
+  local out = "quest " .. tostring(id)
+  if name and name ~= "" then out = out .. " " .. text.with_part(name, chain) end
+  return out
+end
+
 local function name_of(f)
-  if f.name and f.name ~= "" then return quoted(f.name) end
-  if f.qid then return "quest " .. f.qid end
+  if f.name and f.name ~= "" then return text.with_part(f.name, f.chain) end
+  if f.qid then return text.quest_ref(f.qid, f.qname, f.chain) end
   return "this step"
 end
 
@@ -300,7 +318,7 @@ function text.title(f)
     if t then return (t[1]:gsub("%%s", function() return nm end)) end
   elseif s == "leftover-quests" then
     local which = "Quest " .. tostring(f.qid)
-    if f.qname and f.qname ~= "" then which = "Quest " .. quoted(f.qname) .. " (" .. tostring(f.qid) .. ")" end
+    if f.qname and f.qname ~= "" then which = "Quest " .. text.with_part(f.qname, f.chain) .. " (" .. tostring(f.qid) .. ")" end
     if (f.reasons or {})[1] == "not-turned-in" then return which .. " is not turned in within scope" end
     return which .. " is left in the log"
   elseif s == "rep-faction-unmet" then
@@ -320,13 +338,14 @@ end
 -- Returns the sentence as (first sentence, remainder or nil). Plain text: the
 -- page links a follow-on to its parent from caused_by, not from the sentence.
 local function clauses(f, ctx)
-  local s, q = f.signal, tostring(f.qid)
+  local s = f.signal
+  local own = text.quest_ref(f.qid, f.qname, f.chain)
   ctx = ctx or {}
   if s == "never-shown-accept" then
     local pre = f.why and f.why:match("not met: (%d+)")
     if pre then
       return "The guide tells you to accept this quest, but WoWPro hides the step because its prerequisite, "
-        .. "quest " .. pre .. ", is never completed."
+        .. text.quest_ref(pre, f.pre_qname, f.pre_chain) .. ", is never completed."
     end
     -- The engine's own whys for a hidden step (WoWPro_Broker.lua), said in words.
     local why = f.why and f.why:gsub("^NextStep%(%):%s*", "")
@@ -361,13 +380,13 @@ local function clauses(f, ctx)
         .. "; this character has " .. standing_words(g.points, true) .. ". " .. REP_UNMODELLED
     elseif kind then
       local label = label_for(f, ctx, kind)
-      return "The guide shows this accept, but the quest data says " .. article(label) .. label .. " can't take quest " .. q .. "."
+      return "The guide shows this accept, but the quest data says " .. article(label) .. label .. " can't take " .. own .. "."
     end
     if f.missing and f.missing[1] then
       local names, list = f.missing_names or {}, {}
       for i, id in ipairs(f.missing) do
         local nm = names[tostring(id)]
-        list[i] = "quest " .. tostring(id) .. ((nm and nm ~= "") and (" (" .. nm .. ")") or "")
+        list[i] = text.quest_ref(id, nm, (f.missing_chain or {})[tostring(id)])
       end
       if #list == 1 then
         return "The guide shows this accept, but the quest data says it needs " .. list[1] .. ", which isn't done yet."
@@ -379,19 +398,19 @@ local function clauses(f, ctx)
       return "The guide shows this accept, but the quest data says it needs " .. table.concat(list, " and ")
         .. ", which aren't done yet."
     end
-    return "The guide shows this accept, but the quest data says a prerequisite of quest " .. q .. " isn't done yet."
+    return "The guide shows this accept, but the quest data says a prerequisite of " .. own .. " isn't done yet."
   elseif s == "log-full" then
     return "The guide shows this accept while the quest log is already full."
   elseif s == "orphan-turnin" then
     local verb = text.VERBS[f.action] or f.action or "handle"
-    return "The guide asks you to " .. lower_first(verb) .. " quest " .. q .. ", but this character never had it."
+    return "The guide asks you to " .. lower_first(verb) .. " " .. own .. ", but this character never had it."
   elseif s == "wrong-race-class" then
     local kind = kind_of(f)
     if not (ctx.single) and #(f.combos or {}) > 1 then
-      return "WoWPro shows this step to characters that quest " .. q .. " excludes."
+      return "WoWPro shows this step to characters that " .. own .. " excludes."
     end
     local label = label_for(f, ctx, kind or "race")
-    return "WoWPro shows this step to " .. article(label) .. label .. ", but quest " .. q .. " is for other "
+    return "WoWPro shows this step to " .. article(label) .. label .. ", but " .. own .. " is for other "
       .. (kind == "class" and "classes" or kind == "race" and "races" or "characters") .. "."
   elseif s == "below-level" then
     -- The signal fires after the grind, so f.level is the level the client
@@ -406,12 +425,12 @@ local function clauses(f, ctx)
     -- The reason is the refusal of the client's action (driver.actions); none means it acted.
     local r = (f.reasons or {})[1]
     if r == "incomplete" and f.action == "T" then
-      return "The turn-in was refused because quest " .. q .. " wasn't complete, so the client clicked the step off."
+      return "The turn-in was refused because " .. own .. " wasn't complete, so the client clicked the step off."
     elseif r == "incomplete" then
-      return "Quest " .. q .. "'s objectives weren't complete after the client did this step, "
+      return "The objectives of " .. own .. " weren't complete after the client did this step, "
         .. "so the client clicked it off."
     elseif r == "not-in-log" then
-      return "Quest " .. q .. " wasn't in the log when the guide reached this step, so the client clicked it off."
+      return "Q" .. own:sub(2) .. " wasn't in the log when the guide reached this step, so the client clicked it off."
     elseif r == "requires-skill" then
       return "The turn-in needs a profession skill the character doesn't have, so the client clicked the step off."
     elseif r then
@@ -428,9 +447,7 @@ local function clauses(f, ctx)
       return "The guide accepts this quest here, but no guide the run played has a turn-in step for it; "
         .. "it was still in the log when the run ended."
     end
-    local which = q
-    if f.qname and f.qname ~= "" then which = quoted(f.qname) .. " (" .. q .. ")" end
-    return "The run passed this turn-in step, but quest " .. which .. " was still in the log when the run ended."
+    return "The run passed this turn-in step, but " .. own .. " was still in the log when the run ended."
   elseif s == "rep-faction-unmet" then
     return "WoWPro asks for reputation with faction " .. tostring(f.faction)
       .. ", but this character has never met that faction, so the step is skipped.",

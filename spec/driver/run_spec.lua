@@ -263,6 +263,27 @@ describe("driver.run", function()
     assert.equal("Catalog Name", names[96]) -- the catalog wins when it has a name
   end)
 
+  it("attaches the chain part to a signal, and names the prerequisite a hidden accept waits on", function()
+    local world = fx.fake_world({
+      [1030] = { name = "Raene's Cleansing", chain = { 9, 11 } },
+      [1029] = { name = "Raene's Cleansing", chain = { 8, 11 } },
+    })
+    local guides = {
+      G1 = { startlevel = 1, file = "g1.lua", steps = {
+        { action = "R", name = "a" },
+        { action = "A", name = "Raene's Cleansing", qids = { 1030 },
+          why = "NextStep:PRE&(1029): A mandatory prereq was not met: 1029", hidden = true },
+        { action = "D", name = "Done" },
+      } },
+    }
+    local log = drive(guides, { G1 = { { complete = { 1 } }, nil, { complete = { 3 }, done = true } } }, {}, world)
+    local hidden = signals(log, "never-shown-accept")
+    assert.equal(1, #hidden)
+    assert.same({ part = 9, total = 11 }, hidden[1].chain)
+    assert.equal("Raene's Cleansing", hidden[1].pre_qname)
+    assert.same({ part = 8, total = 11 }, hidden[1].pre_chain)
+  end)
+
   -- Ruling X: an accept the engine skipped because its quest is already done
   -- (WoWPro_Broker.lua:2042, "NextStep(): QID is complete: " .. QID) is not a hidden accept.
   it("records no never-shown-accept for an A step skipped as 'QID is complete', but does for a PRE why", function()
@@ -802,6 +823,16 @@ describe("driver.run", function()
     assert.same({ 98323, 99999 }, ar[1].missing)
     assert.same({ ["98323"] = "Secure the Mountain" }, ar[1].missing_names)
     assert.is_true(ar[1].missing_any)
+  end)
+
+  it("carries the chain part of a missing prerequisite", function()
+    local steps = {
+      { action = "A", name = "The Reports", qids = { 291 },
+        outcome = { kind = "refused", reason = "prerequisite", missing = { 1029 } } },
+    }
+    local log = drive(one_guide(steps), {}, {}, fx.fake_world({ [1029] = { name = "Raene's Cleansing", chain = { 8, 11 } } }))
+    local ar = signals(log, "accept-refused")
+    assert.same({ ["1029"] = { part = 8, total = 11 } }, ar[1].missing_chain)
   end)
 
   it("turns a reputation refusal into an unverified accept-refused naming the gate", function()

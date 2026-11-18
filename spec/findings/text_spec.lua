@@ -163,6 +163,46 @@ end)
 describe("text.title and text.sentence (design spec §4.7)", function()
   local function both(f, ctx) return text.title(f), text.sentence(f, ctx or ONE) end
 
+  describe("quest chain parts and named quest references", function()
+    it("text.quest_ref names the quest, numbers a chain part, and falls back to the bare id", function()
+      assert.equal('quest 1029 "Raene\'s Cleansing" (8/11)', text.quest_ref(1029, "Raene's Cleansing", { part = 8, total = 11 }))
+      assert.equal('quest 1045 "Raene\'s Cleansing"', text.quest_ref(1045, "Raene's Cleansing"))
+      assert.equal("quest 1045", text.quest_ref(1045, nil, { part = 1, total = 2 }))
+      assert.equal("quest 1045", text.quest_ref(1045, ""))
+      assert.equal('"X" (2/3)', text.with_part("X", { part = 2, total = 3 }))
+    end)
+    it("a never-shown-accept title numbers the part", function()
+      local f = F({ signal = "never-shown-accept", name = "Raene's Cleansing", qid = 1030, chain = { part = 9, total = 11 },
+        why = "NextStep:PRE&(1029): A mandatory prereq was not met: 1029",
+        pre_qname = "Raene's Cleansing", pre_chain = { part = 8, total = 11 } })
+      local t, s = both(f)
+      assert.equal('"Raene\'s Cleansing" (9/11) is never offered', t)
+      assert.matches('quest 1029 "Raene\'s Cleansing" (8/11), is never completed.', s, 1, true)
+    end)
+    it("a never-shown-accept prerequisite with no name stays plain", function()
+      local f = F({ signal = "never-shown-accept", name = "Next", qid = 5, why = "x not met: 77" })
+      assert.matches("prerequisite, quest 77, is never", text.sentence(f, ONE), 1, true)
+    end)
+    it("the left-in-log title numbers the part", function()
+      local t = text.title(F({ signal = "leftover-quests", qid = 1029, qname = "Raene's Cleansing", chain = { part = 8, total = 11 } }))
+      assert.equal('Quest "Raene\'s Cleansing" (8/11) (1029) is left in the log', t)
+    end)
+    it("the missing list names and numbers each prerequisite", function()
+      local f = F({ signal = "accept-refused", name = "Next", qid = 5, reasons = { "prerequisite" },
+        missing = { 1029 }, missing_names = { ["1029"] = "Raene's Cleansing" }, missing_chain = { ["1029"] = { part = 8, total = 11 } } })
+      assert.matches('needs quest 1029 "Raene\'s Cleansing" (8/11), which', text.sentence(f, ONE), 1, true)
+    end)
+    it("the finding's own quest is named in sentences, and plain without a name", function()
+      local named = F({ signal = "orphan-turnin", action = "T", qid = 1045, qname = "Raene's Cleansing", chain = { part = 10, total = 11 } })
+      assert.matches('turn in quest 1045 "Raene\'s Cleansing" (10/11), but', text.sentence(named, ONE), 1, true)
+      local bare = F({ signal = "orphan-turnin", action = "T", qid = 1045 })
+      assert.matches("turn in quest 1045, but", text.sentence(bare, ONE), 1, true)
+    end)
+    it("a finding with no chain and no qid renders as before", function()
+      assert.equal('"Next" is never offered', text.title(F({ signal = "never-shown-accept", name = "Next" })))
+    end)
+  end)
+
   it("never-shown-accept with an unmet prerequisite, no finding for it", function()
     local f = F({ signal = "never-shown-accept", name = "Next", qid = 5,
       why = "NextStep:PRE&(95213): A mandatory prereq was not met: 95213" })
@@ -251,21 +291,21 @@ describe("text.title and text.sentence (design spec §4.7)", function()
   it("accept-refused by prerequisite names the missing quests, with the catalog's name when known", function()
     local s = text.sentence(F({ signal = "accept-refused", name = "The Reports", qid = 291, reasons = { "prerequisite" },
       missing = { 98323 }, missing_names = { ["98323"] = "Secure the Mountain" } }), ONE)
-    assert.equal("The guide shows this accept, but the quest data says it needs quest 98323 (Secure the Mountain), "
+    assert.equal("The guide shows this accept, but the quest data says it needs quest 98323 \"Secure the Mountain\", "
       .. "which isn't done yet.", s)
     s = text.sentence(F({ signal = "accept-refused", name = "X", qid = 9, reasons = { "prerequisite" },
       missing = { 5, 6 }, missing_names = { ["6"] = "Six" } }), ONE)
-    assert.equal("The guide shows this accept, but the quest data says it needs quest 5 and quest 6 (Six), "
+    assert.equal("The guide shows this accept, but the quest data says it needs quest 5 and quest 6 \"Six\", "
       .. "which aren't done yet.", s)
   end)
   it("accept-refused by an any-of (pre_single) prerequisite says one of them would do", function()
     local s = text.sentence(F({ signal = "accept-refused", name = "X", qid = 9, reasons = { "prerequisite" },
       missing = { 5, 6 }, missing_any = true, missing_names = { ["6"] = "Six" } }), ONE)
-    assert.equal("The guide shows this accept, but the quest data says it needs one of quest 5 or quest 6 (Six), "
+    assert.equal("The guide shows this accept, but the quest data says it needs one of quest 5 or quest 6 \"Six\", "
       .. "none of which is done yet.", s)
     s = text.sentence(F({ signal = "accept-refused", name = "X", qid = 9, reasons = { "prerequisite" },
       missing = { 98323 }, missing_any = true, missing_names = { ["98323"] = "Secure the Mountain" } }), ONE)
-    assert.equal("The guide shows this accept, but the quest data says it needs quest 98323 (Secure the Mountain), "
+    assert.equal("The guide shows this accept, but the quest data says it needs quest 98323 \"Secure the Mountain\", "
       .. "which isn't done yet.", s)
   end)
   it("accept-refused by reputation names the faction and both standings", function()
@@ -357,7 +397,7 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     end
     assert.equal("The turn-in was refused because quest 7 wasn't complete, so the client clicked the step off.",
       s_of("T", "incomplete"))
-    assert.equal("Quest 7's objectives weren't complete after the client did this step, so the client clicked it off.",
+    assert.equal("The objectives of quest 7 weren't complete after the client did this step, so the client clicked it off.",
       s_of("C", "incomplete"))
     assert.equal("Quest 7 wasn't in the log when the guide reached this step, so the client clicked it off.",
       s_of("K", "not-in-log"))
@@ -410,7 +450,7 @@ describe("text.title and text.sentence (design spec §4.7)", function()
   it("leftover-quests with a name", function()
     local t, s = both(F({ signal = "leftover-quests", qid = 412, qname = "Wolves" }))
     assert.equal('Quest "Wolves" (412) is left in the log', t)
-    assert.equal('The run passed this turn-in step, but quest "Wolves" (412) was still in the log '
+    assert.equal('The run passed this turn-in step, but quest 412 "Wolves" was still in the log '
       .. "when the run ended.", s)
   end)
   it("leftover-quests accepted earlier and not turned in within scope", function()
