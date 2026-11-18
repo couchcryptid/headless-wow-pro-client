@@ -1,0 +1,78 @@
+# Lint and test on every pull request into main. Release calls it again on the
+# merged commit, so main is never released from an untested commit.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Run the newest push of a PR only. Called runs use their own SHA, so they
+  # never share a group with the calling Release run (which would deadlock).
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lua:
+    name: Lua (luacheck, busted)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # README requirements: LuaJIT 2.1, busted 2.3, luafilesystem, dkjson.
+      - uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: "luajit-2.1"
+      - uses: leafo/gh-actions-luarocks@v6
+
+      - name: Install rocks
+        run: |
+          luarocks install luacheck 1.2.0
+          luarocks install busted 2.3.0
+          luarocks install luafilesystem 1.9.0
+          luarocks install dkjson
+
+      - name: Lint
+        run: luacheck .
+
+      # Default suite only (#slow excluded by .busted). Integration specs need a
+      # WoW-Pro checkout and QuestieDB, so they report pending here.
+      - name: Test
+        run: busted
+
+  report:
+    name: Report page (typecheck, test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/report
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: web/report/.nvmrc
+          cache: npm
+          cache-dependency-path: web/report/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      # The CLI ships the built page as src/hwc/findings/report.html so running
+      # hwc never needs Node. A page change without a rebuild fails here.
+      - name: Check the committed report page is current
+        run: |
+          if ! git diff --exit-code --stat -- ../../src/hwc/findings/report.html; then
+            echo "::error file=src/hwc/findings/report.html::Out of date. Run 'npm run build' in web/report and commit the result."
+            exit 1
+          fi

@@ -114,7 +114,7 @@ describe("boot", function()
     local cfg = config.load({ addon_path = ADDON })
     local info = require("hwc.addon_info")
     local real = info.read
-    info.read = function() return { branch = "", commit = "", dirty = false } end
+    info.read = function() return { git = true, branch = "", commit = "", dirty = false } end
     local ok, err = pcall(require("hwc.boot").run, cfg)
     info.read = real
     assert.is_false(ok)

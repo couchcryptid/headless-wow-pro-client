@@ -1,5 +1,7 @@
 # Findings report redesign
 
+Superseded for the report's output and layout (§3–§4) by `2026-11-18-html-findings-report-design.md`.
+
 Status: draft for review · 2026-11-12 · Supersedes the file layout in
 `2026-11-11-headless-client-design.md` §7.2 and the input format in §8.
 
@@ -136,7 +138,7 @@ bullet per condition:
 
 These findings have the most other findings following from them. Fixing one may also clear those.
 
-1. 🔴 [EnableDungeons auto-completes dungeon accepts](#f-1aa80a4c): explains 12 more · `WoWPro/WoWPro_Broker.lua:2588`
+1. 🔴 ["The Algaz Gauntlet" can't be taken yet](#f-4f5c7038): explains 2 more · `19_25_Alliance.lua:286`
 2. 🔴 ["Stolen Blasting Powder" is never offered](#f-7f8b32ee): explains 1 more · `01_12_Dun_Morogh.lua:275`
 …
 ```
@@ -188,7 +190,6 @@ The guide tells you to accept this quest, but WoWPro hides the step because its 
 
 - Signal: `never-shown-accept`
 - Engine said: `NextStep:PRE&(95213): A mandatory prereq was not met: 95213`
-- Quest log: 95213
 </details>
 
 Triage: _pending_
@@ -226,8 +227,7 @@ own line.
 - `Between steps:` the steps before and after, each written with its verb (§4.8)
   when the action is known, otherwise as the quoted name.
 - `Caused by:` a link to the parent, using the parent's title as the link text.
-- `Also blocks:` links to the direct children, by title. The root of the
-  dungeon chain lists all of them.
+- `Also blocks:` links to the direct children, by title.
 
 **Link text and headings.** A title placed in a heading or link text is
 escaped for markdown: `\`, `[`, `]`, `*` and `_` get a backslash, `<` and `>`
@@ -270,8 +270,9 @@ limits.
 | Signal / case | Title | Sentence |
 |---|---|---|
 | `never-shown-accept`, why matches `not met: N` | "<name>" is never offered | The guide tells you to accept this quest, but WoWPro hides the step because its prerequisite, quest N, is never completed. (N links to N's finding when there is one.) |
-| `never-shown-accept`, reason `engine-dungeon-skip` | Dungeon quest "<name>" is skipped | WoWPro marks this dungeon quest done without showing it, because dungeon quests are switched off. |
-| `never-shown-accept`, any other why | "<name>" is never offered | The guide tells you to accept this quest, but WoWPro never shows the step. The engine's reason is in the detail below. |
+| `never-shown-accept`, why "Optional steps default to skipped." | "<name>" is never offered | WoWPro skips this accept because the step is optional, and optional steps are skipped by default. |
+| `never-shown-accept`, why "Skipping step because player level not high enough." | "<name>" is never offered | WoWPro hides this accept until the character's level is high enough; the character was level <level> when the guide passed it. (The clause after ";" only when the level is known.) |
+| `never-shown-accept`, any other why | "<name>" is never offered | The guide tells you to accept this quest, but WoWPro never shows the step. The engine said: "<why>". |
 | `never-shown-accept`, no why | "<name>" is never offered | The guide tells you to accept this quest, but WoWPro never shows the step and gave no reason. |
 | `accept-refused`, reason race/class | "<name>" can't be taken by a <Race/Class> | The guide shows this accept, but the quest data says a <Race/Class> can't take quest Q. |
 | `accept-refused`, reason prerequisite | "<name>" can't be taken yet | The guide shows this accept, but the quest data says a prerequisite of quest Q isn't done yet. |
@@ -280,16 +281,24 @@ limits.
 | `wrong-race-class` | "<name>" is shown to the wrong <race/class> | WoWPro shows this step to a <Race/Class>, but quest Q is for other <races/classes>. (In multi-combo runs: "…to characters that quest Q excludes.") |
 | `below-level`, with grind | "<name>" is offered below its level | The guide reaches this accept below level <to>, the level the quest requires; the client ground <kills> kills to get there. (The signal fires after the grind, so `level` equals `grind.to`.) |
 | `below-level`, no grind | "<name>" is offered below its level | The guide reaches this accept below the level the quest requires. |
-| `did-not-advance` | "<name>" doesn't advance | The simulated action didn't move WoWPro to the next step, so the client clicked it off. |
-| `manual-completion` (not expected) | "<name>" needed a manual click | No game event completed this step, so the client clicked it off. |
+| `did-not-advance`, `T` refused `incomplete` | "<name>" doesn't advance | The turn-in was refused because quest Q wasn't complete, so the client clicked the step off. |
+| `did-not-advance`, other step refused `incomplete` | "<name>" doesn't advance | Quest Q's objectives weren't complete after the client did this step, so the client clicked it off. |
+| `did-not-advance`, refused `not-in-log` | "<name>" doesn't advance | Quest Q wasn't in the log when the guide reached this step, so the client clicked it off. |
+| `did-not-advance`, refused `requires-skill` | "<name>" doesn't advance | The turn-in needs a profession skill the character doesn't have, so the client clicked the step off. |
+| `did-not-advance`, any other refusal r | "<name>" doesn't advance | The step was refused (r), so the client clicked it off. |
+| `did-not-advance`, the client acted | "<name>" doesn't advance | The client did what this step asks, but WoWPro didn't mark it done, so the client clicked it off. |
+| `manual-completion` (not expected) | "<name>" needed a manual click | No game event completed this step, so the client clicked it off. (Only from RunLogs written before the driver stopped pairing this with `did-not-advance`; the driver now records an unexpected click as `did-not-advance` alone.) |
 | `stuck`, settle-limit | Stuck after "<name>" | WoWPro kept scheduling work after this step and never settled. |
 | `stuck`, same-step | Stuck on "<name>" | WoWPro stayed on this step past the watchdog limit. |
 | `stuck`, max-iterations | Run hit its step limit | The run stopped at its step limit before this guide ended. |
 | `stuck`, no-current-step | No step to show | WoWPro had no current step to show, so the run couldn't continue. |
 | `stuck`, no-guide-loaded | No guide loaded | WoWPro loaded no guide, so nothing ran. |
-| `leftover-quests` | Quest "<qname>" (Q) is left in the log | Quest "<qname>" (Q) was still in the log when this guide ended; the run never turned it in. (`"<qname>" (Q)` falls back to "Q" alone in both.) |
+| `leftover-quests`, at a turn-in step | Quest "<qname>" (Q) is left in the log | The run passed this turn-in step, but quest "<qname>" (Q) was still in the log when the run ended. (`"<qname>" (Q)` falls back to "Q" alone in both.) |
+| `leftover-quests`, reason `not-turned-in` | Quest "<qname>" (Q) is not turned in within scope | The guide accepts this quest here, but no guide the run played has a turn-in step for it; it was still in the log when the run ended. |
+
+The engine fold leaves out the why "NextStep(): Step active." (the engine's why for
+any step it is showing) and the quest-log ids; the JSON keeps both.
 | `lua-error` (addon) | Lua error: <message, first 80 chars> | WoWPro raised an error during the run. The message and stack are in the detail below. |
-| `engine-dungeon-skip` (root) | EnableDungeons auto-completes dungeon accepts | WoWPro's EnableDungeons setting marks dungeon-quest accepts done without showing them; every finding it explains is a dungeon quest the guide never offers. |
 | unknown signal | <raw signal>: <step or name> | (none) |
 
 An unknown signal raises, as `group.lua` already does; the last row is there
@@ -362,6 +371,12 @@ When the line is unknown, the location is just the file name.
 - "Client": full commit, clean or uncommitted changes.
 - "Characters": the sorted, de-duplicated combo list.
 - "Guide rank": `2` (WoWPro's setting for which optional steps are shown).
+- "Skip dungeon quests": `on`/`off` (WoWPro's `EnableDungeons`, its "Skip Dungeon
+  Quests" option, on by default). This client doesn't run dungeons, so the `DUNGEON`
+  accepts the option completes unshown are expected: they are counted on this line
+  (distinct guide lines across every RunLog, from `RunLog.dungeon_skips`) and are not
+  findings. A hidden `DUNGEON` accept the engine didn't complete is still a
+  `never-shown-accept`.
 - "Catalog": one bullet per source with:
   - name,
   - present or missing,

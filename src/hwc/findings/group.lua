@@ -26,16 +26,12 @@ function group.fnv1a32(s)
   return bit.tohex(h, 8)
 end
 
-group.DUNGEON_ROOT = {
-  signal = "engine-dungeon-skip", severity = "high", name = "EnableDungeons auto-completes DUNGEON accepts",
-  file = "WoWPro/WoWPro_Broker.lua", line = 2588,
-}
-
--- Severities (spec §7.2): every §7.1 signal plus engine-dungeon-skip is named; an
--- unknown signal raises instead of silently defaulting.
+-- Severities (spec §7.2): every §7.1 signal is named; an unknown signal raises instead
+-- of silently defaulting. Dungeon accepts WoWPro's Skip Dungeon Quests completes are
+-- run info (RunLog.dungeon_skips), not signals, so they have no entry here.
 local SEVERITY = {
-  ["never-shown-accept"] = "high", ["orphan-turnin"] = "high", ["accept-refused"] = "high",
-  ["wrong-race-class"] = "high", ["log-full"] = "high", ["engine-dungeon-skip"] = "high",
+  ["never-shown-accept"] = "high", ["hidden-use-step"] = "high", ["orphan-turnin"] = "high", ["accept-refused"] = "high",
+  ["wrong-race-class"] = "high", ["log-full"] = "high",
   ["lua-error"] = "high", ["below-level"] = "medium-high",
   ["did-not-advance"] = "medium", stuck = "medium", ["manual-completion"] = "medium",
   ["leftover-quests"] = "low", ["missing-global"] = "low",
@@ -72,7 +68,7 @@ local function new_finding(s, key)
   local f = {
     id = "F-" .. group.fnv1a32(key), signal = s.signal, file = s.file, line = s.line, gid = s.gid,
     action = s.action, name = s.name, qid = s.qid, why = s.why, before = s.before, after = s.after,
-    qname = s.qname, grind = s.grind, level = s.level, log = s.log, confidence = s.confidence, combos = {}, causes = {}, reasons = {},
+    qname = s.qname, grind = s.grind, use = s.use, loot = s.loot, level = s.level, log = s.log, confidence = s.confidence, combos = {}, causes = {}, reasons = {},
   }
   if s.signal == "lua-error" then
     f.name, f.message, f.stack = s.message, s.message, s.stack
@@ -116,54 +112,61 @@ local function link(child, parent, by_id)
   parent.causes[#parent.causes + 1] = child.id
 end
 
+local function has(list, v)
+  for _, x in ipairs(list or {}) do if x == v then return true end end
+  return false
+end
+
+-- Root-cause links (child.caused_by = parent.id, parent.causes lists children):
+--   * a follow-on of a refused quest (orphan turn-in, did-not-advance, leftover) -> the refusal;
+--   * an incomplete turn-in -> a hidden-use-step for the same quest in the same guide
+--     (WoWPro hides the U step until its L items are in bags, so the quest never completes);
+--   * a never-shown-accept -> what blocks its unmet prerequisite N, in order of
+--     preference: a refusal of N, a hidden-use-step of N, an incomplete turn-in of N,
+--     a never-shown-accept of N.
+-- Lowest id breaks ties; a link that would close a cycle is refused.
 local function link_roots(findings)
   local by_id = {}
   for _, f in ipairs(findings) do by_id[f.id] = f end
-  local refusals, hidden = {}, {}
+  local refusals, hidden, on_line = {}, {}, {}
+  local hidden_use, incomplete_turnin = {}, {}
+  local function at(f) return tostring(f.file) .. "\0" .. tostring(f.line) .. "\0" .. tostring(f.qid) end
   for _, f in ipairs(findings) do
     if f.qid and REFUSALS[f.signal] then refusals[f.qid] = refusals[f.qid] or {}; table.insert(refusals[f.qid], f) end
     if f.qid and f.signal == "never-shown-accept" then hidden[f.qid] = hidden[f.qid] or {}; table.insert(hidden[f.qid], f) end
-  end
-  local root
-  for _, f in ipairs(findings) do
-    if f.signal == "never-shown-accept" then
-      for _, r in ipairs(f.reasons) do
-        if r == "engine-dungeon-skip" then
-          if not root then
-            root = {}
-            for k, v in pairs(group.DUNGEON_ROOT) do root[k] = v end
-            root.id = "F-" .. group.fnv1a32("engine-dungeon-skip")
-            root.combos, root.causes, root.reasons = {}, {}, {}
-          end
-          by_id[root.id] = root
-          link(f, root, by_id)
-          break
-        end
-      end
+    if f.qid and f.signal == "hidden-use-step" then hidden_use[f.qid] = hidden_use[f.qid] or {}; table.insert(hidden_use[f.qid], f) end
+    if f.qid and f.signal == "did-not-advance" and f.action == "T" and has(f.reasons, "incomplete") then
+      incomplete_turnin[f.qid] = incomplete_turnin[f.qid] or {}; table.insert(incomplete_turnin[f.qid], f)
+    end
+    if f.qid and f.line and f.signal ~= "leftover-quests" then
+      on_line[at(f)] = on_line[at(f)] or {}
+      table.insert(on_line[at(f)], f)
     end
   end
   for _, f in ipairs(findings) do
     if f.qid and FOLLOWS_REFUSAL[f.signal] then
-      local r = pick(refusals[f.qid])
+      -- The parent on the follow-on's own line first: a quest refused on two lines
+      -- has two refusals, and each follow-on belongs to its own.
+      local here, refused_here = on_line[at(f)] or {}, {}
+      for _, g in ipairs(here) do if REFUSALS[g.signal] then refused_here[#refused_here + 1] = g end end
+      -- A leftover quest sits on the turn-in step the run passed (driver.run leftovers):
+      -- whatever went wrong on that step is why the quest is still in the log.
+      local same_guide_use = {}
+      if f.signal == "did-not-advance" and f.action == "T" and has(f.reasons, "incomplete") then
+        for _, u in ipairs(hidden_use[f.qid] or {}) do
+          if u.gid == f.gid then same_guide_use[#same_guide_use + 1] = u end
+        end
+      end
+      local r = pick(same_guide_use) or pick(refused_here) or (f.signal == "leftover-quests" and pick(here)) or pick(refusals[f.qid])
       if r then link(f, r, by_id) end
     elseif f.signal == "never-shown-accept" and f.why then
       -- The engine's only format (WoWPro_Broker.lua:2292):
       -- "NextStep:PRE&(%s): A mandatory prereq was not met: %s". Only the id after
       -- "not met:" counts; a why without that phrase links nothing.
       local n = tonumber(f.why:match("not met:%s*(%d+)"))
-      local target = n and (pick(refusals[n]) or pick(hidden[n]))
+      local target = n and (pick(refusals[n]) or pick(hidden_use[n]) or pick(incomplete_turnin[n]) or pick(hidden[n]))
       if target and target ~= f then link(f, target, by_id) end
     end
-  end
-  if root then
-    local seen = {}
-    for _, f in ipairs(findings) do
-      if f.caused_by == root.id then
-        for _, c in ipairs(f.combos) do seen[c] = true end
-      end
-    end
-    root.combos = sorted_unique(seen)
-    findings[#findings + 1] = root
   end
 end
 

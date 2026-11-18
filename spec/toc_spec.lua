@@ -60,7 +60,7 @@ describe("skiplist.reason", function()
 end)
 
 describe("toc.files (real addon)", function()
-  local ok, cfg = pcall(config.load, {})
+  local ok, cfg = pcall(config.load, { addon_path = os.getenv("HOME") .. "/Projects/WoW-Pro-Guides" })
   local root = ok and cfg.addon_path
 
   it("expands WoWPro.toc in client order", function()

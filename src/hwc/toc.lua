@@ -4,10 +4,6 @@ local skiplist = require("hwc.skiplist")
 
 local M = {}
 
-local function exists(path)
-  return lfs.attributes(path, "mode") ~= nil
-end
-
 local function read_file(path)
   local f = assert(io.open(path, "rb"))
   local s = f:read("*a")

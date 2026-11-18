@@ -1,0 +1,47 @@
+# GitHub flow: every merge into main is releasable. CI runs on the merged
+# commit, then semantic-release tags it and publishes GitHub release notes
+# when the merged commits include a feat, fix, perf or breaking change.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # One release at a time, in merge order; never cancel one half-way.
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # create the tag and the GitHub release
+      issues: write         # comment on issues a release resolves
+      pull-requests: write  # comment on PRs a release includes
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0    # semantic-release needs every tag and commit
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: web/report/.nvmrc
+          cache: npm
+          cache-dependency-path: .github/release/package-lock.json
+
+      # Release tooling is pinned by its own lockfile, apart from the report page.
+      - run: npm ci --prefix .github/release
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: .github/release/node_modules/.bin/semantic-release

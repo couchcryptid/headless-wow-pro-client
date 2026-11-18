@@ -7,7 +7,7 @@ local FIX = "spec/fixtures/catalog"
 
 local function new_catalog()
   return catalog.load({ catalog = {
-    questie_dir = FIX .. "/questie",
+    questie_source = dofile(FIX .. "/questie_source.lua"),
     wh_json = FIX .. "/wh.json",
     objs_json = FIX .. "/objs.json",
     rate_overrides = FIX .. "/rate_overrides.json",
@@ -53,7 +53,7 @@ end
 -- Scripted engine for the driver loop specs (spec/driver/run_spec.lua).
 -- guides = { [gid] = { startlevel, next_gid, file, steps = { {action, name, qids, tags,
 --   sticky, hidden (never in rows), why, outcome = {kind, reason, grind}} } } }.
--- script = { [gid] = { [index] = { complete = {i...}, switch = gid, level = n,
+-- script = { [gid] = { [index] = { complete = {i...}, switch = gid, level = n, done = bool,
 --   on_manual = { uncomplete = {i...}, switch = gid } } } }: the settle after the
 -- driver acts on (or right-clicks) gid:index applies the entry. With no entry an
 -- action completes nothing. Rows are the uncompleted indices, sticky ones first;
@@ -100,6 +100,15 @@ local function scripted_engine(guides, script, start, world)
   end
   function E:fire() end
   function E:rank() return 2 end
+  E.skip_dungeons = function() return true end
+  -- The guide-list click: loads gid and records it in E.loaded.
+  E.loaded = {}
+  function E:load_guide(gid)
+    self.loaded[#self.loaded + 1] = gid
+    self.cur_gid = gid
+    self:settle()
+    return true
+  end
   function E:update_guide() return true end
   function E:complete_manual(i)
     self.manual[#self.manual + 1] = self.cur_gid .. ":" .. i
@@ -145,7 +154,11 @@ end
 
 -- Minimal world for the driver loop: player, a quest log of qids and a catalog table.
 local function fake_world(quests, log_qids)
-  local w = { player = { level = 1, xp = 0, race_token = "Dwarf", class_token = "WARRIOR", skills = {} } }
+  -- The real Player:add_xp, so a level raise is recorded as XP (w.xp_records).
+  local w = { xp_records = {} }
+  w.player = setmetatable({ level = 1, xp = 0, race_token = "Dwarf", class_token = "WARRIOR", skills = {},
+    _record = function(kind, f) if kind == "xp" then w.xp_records[#w.xp_records + 1] = f end end },
+    require("hwc.world.player"))
   function w.player.knows_skill(self, name) return self.skills[name] ~= nil end
   local order = log_qids or {}
   w.log = {

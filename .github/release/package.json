@@ -1,0 +1,9 @@
+{
+  "name": "hwc-release",
+  "private": true,
+  "description": "Release tooling for .github/workflows/release.yml; see .releaserc.json.",
+  "devDependencies": {
+    "conventional-changelog-conventionalcommits": "9.3.1",
+    "semantic-release": "25.0.9"
+  }
+}

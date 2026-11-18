@@ -53,6 +53,20 @@ describe("driver.run", function()
     assert.equal("acted", log.steps[1].outcome.kind)
   end)
 
+  -- Guide-filters final review 1: a git-less addon's identity (git = false and
+  -- the TOC version) survives into the run log, which the report header reads.
+  it("carries the addon's git flag and version into the log", function()
+    local world = fx.fake_world()
+    local guides = one_guide({ { action = "R", name = "Go" } })
+    local E = fx.scripted_engine(guides, { G1 = completes(1) }, "G1", world)
+    local log = run.drive({ engine = E, world = world, cfg = { race = "Dwarf", class = "WARRIOR" },
+      errors = {}, missing_order = {}, addon = { path = "/x", git = false, version = "x" } },
+      { perform = E.perform })
+    assert.is_false(log.addon.git)
+    assert.equal("x", log.addon.version)
+    assert.equal("/x", log.addon.path)
+  end)
+
   -- Final review minor 2: spec §5.2 "logged as an abstracted-turnin event".
   it("copies an abstracted turn-in into the snapshot outcome", function()
     local log = drive(one_guide({ { action = "A", name = "Camping 101: Cooking", qids = { 96629 },
@@ -79,8 +93,10 @@ describe("driver.run", function()
     assert.equal(101, d[1].line)
     assert.equal("g1.lua", d[1].file)
     assert.equal("Done", d[1].after.name)
+    -- one click, one signal: the C's click is the did-not-advance, not also a manual-completion
     local m = signals(log, "manual-completion")
-    assert.is_false(m[1].expected)
+    assert.equal(1, #m)
+    assert.equal("D", m[1].action)
     assert.same({ "G1:1", "G1:2" }, E.manual)
   end)
 
@@ -165,11 +181,86 @@ describe("driver.run", function()
     assert.equal("Hidden", hidden[1].name)
     assert.equal("PRE not met", hidden[1].why)
     assert.equal("g1.lua", hidden[1].file)
-    local left = signals(log, "leftover-quests")
-    assert.equal("G1", left[1].gid)
-    assert.equal(77, left[1].qid)
+    -- 77 has no turn-in step in any guide played: carried past the run, not a signal
+    assert.same({}, signals(log, "leftover-quests"))
+    assert.same({ { qid = 77 } }, log.carried)
     assert.same({ "G1:1", "G1:3", "G2:1", "G2:2" }, E.acted)
     assert.equal("no-next-guide", log.stop.reason)
+  end)
+
+  -- A quest in the log is a finding only once, at the end of the run, and only when the
+  -- run reached a turn-in step for it. Carrying a quest into the next guide is normal;
+  -- one with no turn-in in the guides played is carried past the run (RunLog.carried).
+  it("records one leftover-quests at the reached turn-in step, not one per guide", function()
+    local world = fx.fake_world({ [77] = { name = "Wolves" } }, { 77 })
+    local guides = {
+      G1 = { startlevel = 1, next_gid = "G2", file = "g1.lua", steps = {
+        { action = "T", name = "Wolves", qids = { 77 } },
+        { action = "R", name = "a" },
+      } },
+      G2 = { startlevel = 5, file = "g2.lua", steps = { { action = "R", name = "b" } } },
+    }
+    local script = { G1 = { nil, { complete = { 2 }, done = true, switch = "G2" } }, G2 = completes(1) }
+    local log = drive(guides, script, {}, world)
+    local left = signals(log, "leftover-quests")
+    assert.equal(1, #left)
+    assert.same({ "G1", "g1.lua", 101, "T", "Wolves", 77, "Wolves" },
+      { left[1].gid, left[1].file, left[1].line, left[1].action, left[1].name, left[1].qid, left[1].qname })
+    assert.is_nil(left[1].before)
+    assert.is_nil(left[1].after)
+    assert.same({}, log.carried)
+  end)
+
+  it("carries a quest whose turn-in step the run never reached", function()
+    local world = fx.fake_world({ [77] = { name = "Wolves" } }, { 77 })
+    local guides = {
+      G1 = { startlevel = 1, next_gid = "G2", file = "g1.lua", steps = { { action = "R", name = "a" } } },
+      G2 = { startlevel = 25, file = "g2.lua", steps = { { action = "T", name = "Wolves", qids = { 77 } } } },
+    }
+    local log = drive(guides, { G1 = { { complete = { 1 }, done = true, switch = "G2" } } }, { max_guides = 2 }, world)
+    assert.equal("max-guides", log.stop.reason)
+    assert.same({}, signals(log, "leftover-quests"))
+    assert.same({ { qid = 77, qname = "Wolves" } }, log.carried)
+  end)
+
+  -- A quest accepted in an earlier guide that no guide played turns in is a finding:
+  -- only the guide the run stopped in can still turn its quests in after the run.
+  it("flags a quest accepted in an earlier guide with no turn-in in scope", function()
+    local world = fx.fake_world({ [77] = { name = "Wolves" }, [88] = { name = "Bears" } }, { 77, 88 })
+    local guides = {
+      G1 = { startlevel = 1, next_gid = "G2", file = "g1.lua", steps = {
+        { action = "A", name = "Wolves", qids = { 77 } },
+        { action = "R", name = "a" },
+      } },
+      G2 = { startlevel = 5, file = "g2.lua", steps = {
+        { action = "A", name = "Bears", qids = { 88 } },
+        { action = "R", name = "b" },
+      } },
+    }
+    local script = { G1 = { { complete = { 1 } }, { complete = { 2 }, done = true, switch = "G2" } },
+      G2 = completes(2) }
+    local log = drive(guides, script, {}, world)
+    local left = signals(log, "leftover-quests")
+    assert.equal(1, #left)
+    assert.same({ "G1", "g1.lua", 101, "A", 77, "not-turned-in" },
+      { left[1].gid, left[1].file, left[1].line, left[1].action, left[1].qid, left[1].reason })
+    assert.same({ { qid = 88, qname = "Bears" } }, log.carried) -- G2 is where the run stopped
+  end)
+
+  -- 01_12_Dun_Morogh.lua:273: Forever quest 95213 has no catalog entry, so its
+  -- leftover-quests finding read "Quest 95213 is left in the log" with no name.
+  it("names a quest the catalog lacks from the guide's own A step for it", function()
+    local world = fx.fake_world({ [96] = { name = "Catalog Name" } }, { 95213, 96 })
+    local steps = {
+      { action = "A", name = "Stolen Blasting Powder", qids = { 95213 } },
+      { action = "T", name = "Stolen Blasting Powder", qids = { 95213 } },
+      { action = "T", name = "Guide Name", qids = { 96 } },
+    }
+    local log = drive(one_guide(steps), { G1 = completes(1) }, {}, world)
+    local names = {}
+    for _, l in ipairs(signals(log, "leftover-quests")) do names[l.qid] = l.qname end
+    assert.equal("Stolen Blasting Powder", names[95213])
+    assert.equal("Catalog Name", names[96]) -- the catalog wins when it has a name
   end)
 
   -- Ruling X: an accept the engine skipped because its quest is already done
@@ -243,32 +334,86 @@ describe("driver.run", function()
     local hidden = signals(log, "never-shown-accept")
     assert.equal(1, #hidden)
     assert.equal("Hidden", hidden[1].name)
-    assert.equal("G1", signals(log, "leftover-quests")[1].gid)
+    assert.same({}, signals(log, "leftover-quests"))
+    assert.same({ { qid = 77 } }, log.carried)
     assert.equal("Onwards", signals(log, "manual-completion")[1].name)
   end)
 
-  it("tags an engine-completed unshown DUNGEON accept engine-dungeon-skip", function()
+  -- WoWPro's "Skip Dungeon Quests" (WoWProCharDB.EnableDungeons, on by default) completes
+  -- DUNGEON accepts unshown (WoWPro_Broker.lua:2589). This client doesn't run dungeons, so
+  -- that's expected: the RunLog records the setting and the skipped accepts, not signals.
+  it("records an engine-completed unshown DUNGEON accept as a dungeon skip, not a signal", function()
     local steps = {
       { action = "R", name = "a" },
       { action = "A", name = "Deadmines", qids = { 3 }, tags = { dungeon = "1581" }, hidden = true },
     }
     local log = drive(one_guide(steps), { G1 = { { complete = { 1, 2 } } } })
-    local hidden = signals(log, "never-shown-accept")
-    assert.equal(1, #hidden)
-    assert.equal("engine-dungeon-skip", hidden[1].reason)
+    assert.same({}, signals(log, "never-shown-accept"))
+    assert.is_true(log.skip_dungeons)
+    assert.same({ { gid = "G1", file = "g1.lua", line = 102, qid = 3, name = "Deadmines" } }, log.dungeon_skips)
   end)
 
-  it("stops with chain-range when the next guide starts at level 25", function()
-    local guides = {
-      G1 = { startlevel = 1, next_gid = "G2", steps = { { action = "R", name = "a" } } },
-      G2 = { startlevel = 25, steps = { { action = "R", name = "b" } } },
+  -- WoWPro hides a non-optional U step with an L tag until every L item is in bags
+  -- (WoWPro_Broker.lua:2182, why "You don't have the required items for this step.").
+  local HIDDEN_USE = "You don't have the required items for this step."
+  local function use_step(extra)
+    local s = { action = "U", name = "Scroll", qids = { 1016 }, hidden = true, why = HIDDEN_USE,
+      tags = { use = "5456", lootitem = { [5455] = 1 } } }
+    for k, v in pairs(extra or {}) do s[k] = v end
+    return s
+  end
+
+  it("records hidden-use-step for a U step hidden until its L items are in bags", function()
+    local steps = {
+      { action = "A", name = "Q", qids = { 1016 } },
+      { action = "l", name = "Q", qids = { 1016 } },
+      use_step(),
+      { action = "T", name = "Q", qids = { 1016 } },
+      { action = "D", name = "Done" },
     }
-    local log, E = drive(guides, { G1 = { { complete = { 1 }, done = true, switch = "G2" } } })
-    assert.equal("chain-range", log.stop.reason)
-    assert.equal("G2", log.stop.gid)
-    assert.same({ "G1", "G2" }, log.guides)
-    assert.same({ "G1:1" }, E.acted)
-    assert.same({}, signals(log, "never-shown-accept"))
+    local log = drive(one_guide(steps), { G1 = { { complete = { 1, 2, 4, 5 }, done = true } } })
+    local hits = signals(log, "hidden-use-step")
+    assert.equal(1, #hits)
+    assert.equal(103, hits[1].line)
+    assert.equal("5456", hits[1].use)
+    assert.same({ [5455] = 1 }, hits[1].loot)
+    assert.equal(1016, hits[1].qid)
+    assert.equal("l", hits[1].before.action)
+    assert.equal("T", hits[1].after.action)
+  end)
+
+  it("records no hidden-use-step without an L tag, for an optional step, or for another why", function()
+    local steps = {
+      { action = "R", name = "a" },
+      use_step({ tags = { use = "5456" } }),
+      use_step({ tags = { use = "5456", lootitem = { [5455] = 1 }, optional = true } }),
+      use_step({ why = "Some other reason." }),
+      { action = "D", name = "Done" },
+    }
+    local log = drive(one_guide(steps), { G1 = { { complete = { 1, 5 }, done = true } } })
+    assert.same({}, signals(log, "hidden-use-step"))
+  end)
+
+  it("keeps a hidden A step with a use item as never-shown-accept", function()
+    local steps = {
+      { action = "R", name = "a" },
+      { action = "A", name = "Q", qids = { 5 }, hidden = true, why = HIDDEN_USE,
+        tags = { use = "5456", lootitem = { [5455] = 1 } } },
+      { action = "D", name = "Done" },
+    }
+    local log = drive(one_guide(steps), { G1 = { { complete = { 1, 3 }, done = true } } })
+    assert.equal(1, #signals(log, "never-shown-accept"))
+    assert.same({}, signals(log, "hidden-use-step"))
+  end)
+
+  it("still flags a hidden DUNGEON accept the engine did not complete", function()
+    local steps = {
+      { action = "R", name = "a" },
+      { action = "A", name = "Deadmines", qids = { 3 }, tags = { dungeon = "1581" }, hidden = true },
+    }
+    local log = drive(one_guide(steps), { G1 = { { complete = { 1 } } } })
+    assert.equal(1, #signals(log, "never-shown-accept"))
+    assert.same({}, log.dungeon_skips)
   end)
 
   it("stops with max-guides once that many guides have loaded", function()
@@ -281,15 +426,40 @@ describe("driver.run", function()
     assert.same({ "G1", "G2" }, log.guides)
   end)
 
-  it("stops with level when the player reaches stop_level", function()
-    local world = fx.fake_world()
-    local steps = { { action = "R", name = "a" }, { action = "A", name = "b", qids = { 2 }, hidden = true } }
-    local log, E = drive(one_guide(steps), { G1 = { { complete = { 1 }, level = 25 } } }, {}, world)
-    assert.equal("level", log.stop.reason)
-    assert.equal(25, log.stop.level)
-    assert.same({ "G1:1" }, E.acted)
-    -- the unreached rest of the guide is not reported as hidden
-    assert.same({}, signals(log, "never-shown-accept"))
+  -- Forever 30_41 -> Dungeon_Uld -> 30_41 ...: Uld has no next guide, so the addon pops
+  -- back to 30_41, which comes back on the same final step that sent the run away. A
+  -- player stops there; the driver must too, instead of clicking it until max-iterations.
+  it("stops with guide-cycle when a guide comes back on the step that left it", function()
+    local guides = {
+      G1 = { startlevel = 1, next_gid = "G2", file = "g1.lua", steps = {
+        { action = "R", name = "a" }, { action = "R", name = "Onwards" } } },
+      G2 = { startlevel = 5, file = "g2.lua", steps = { { action = "R", name = "Onwards" } } },
+    }
+    local script = { G1 = { { complete = { 1 } }, { switch = "G2" } }, G2 = { { switch = "G1" } } }
+    local log = drive(guides, script, { max_iterations = 200 })
+    assert.equal("guide-cycle", log.stop.reason)
+    assert.same({ "G1", "G2" }, log.guides)
+    local stuck = signals(log, "stuck")
+    assert.equal(1, #stuck)
+    assert.equal("guide-cycle", stuck[1].reason)
+    assert.equal("G1", stuck[1].gid)
+    assert.equal("Onwards", stuck[1].name)
+  end)
+
+  it("keeps playing a guide the engine returns to further along", function()
+    local guides = {
+      G1 = { startlevel = 1, file = "g1.lua", steps = {
+        { action = "R", name = "a" }, { action = "R", name = "jump" }, { action = "R", name = "after" } } },
+      G2 = { startlevel = 5, file = "g2.lua", steps = { { action = "R", name = "x" } } },
+    }
+    local script = {
+      G1 = { { complete = { 1 } }, { complete = { 2 }, switch = "G2" }, { complete = { 3 }, done = true } },
+      G2 = { { complete = { 1 }, switch = "G1" } },
+    }
+    local log = drive(guides, script, { max_iterations = 200 })
+    assert.equal("no-next-guide", log.stop.reason)
+    assert.same({ "G1", "G2", "G1" }, log.guides)
+    assert.same({}, signals(log, "stuck"))
   end)
 
   it("turns refusals into log-full, accept-refused, orphan-turnin and below-level", function()
@@ -300,7 +470,7 @@ describe("driver.run", function()
       { action = "A", name = "Low", qids = { 5 }, outcome = { kind = "acted", grind = { kills = 9, to = 4 } } },
     }
     local script = { G1 = { nil, nil, nil, { complete = { 4 } } } }
-    local log = drive(one_guide(steps), script, {}, fx.fake_world({ [5] = { name = "Low Quest" } }))
+    local log, E = drive(one_guide(steps), script, {}, fx.fake_world({ [5] = { name = "Low Quest" } }))
     assert.equal(1, #signals(log, "log-full"))
     local ar = signals(log, "accept-refused")
     assert.equal(1, #ar)
@@ -315,7 +485,10 @@ describe("driver.run", function()
     assert.equal("T", b[1].before.action)
     assert.equal("Low Quest", b[1].qname)
     assert.same({ kills = 9, to = 4 }, b[1].grind)
-    assert.equal(3, #signals(log, "did-not-advance"))
+    -- One click, one finding: a refused step's own signal already says why it didn't
+    -- advance, so the client clicks it off without a did-not-advance as well.
+    assert.same({}, signals(log, "did-not-advance"))
+    assert.same({ "G1:1", "G1:2", "G1:3", "G1:5" }, E.manual)
   end)
 
   it("flags a shown step whose quest the catalog keeps from this race or class, once", function()
@@ -340,6 +513,20 @@ describe("driver.run", function()
     assert.equal("None for me", w[1].name)
     assert.equal(8, w[1].qid)
     assert.equal("race", w[1].reason)
+  end)
+
+  it("does not flag a non-quest step that borrows a race/class quest's QID", function()
+    -- 01_12_Dun_Morogh.lua:301-302: `f Thelsamar` and `h Stoutlager Inn` carry the
+    -- Shaman-only QID 94466. On a non-quest step the QID only skips the step once that
+    -- quest is complete (WoWPro_Broker.lua:2037); it gates nothing by race or class.
+    local world = fx.fake_world({ [8] = { classes = { "SHAMAN" } } })
+    local steps = {
+      { action = "f", name = "Thelsamar", qids = { 8 } },
+      { action = "h", name = "Stoutlager Inn", qids = { 8 } },
+      { action = "R", name = "Run", qids = { 8 } },
+    }
+    local log = drive(one_guide(steps), {}, {}, world)
+    assert.same({}, signals(log, "wrong-race-class"))
   end)
 
   it("reads why from the acted step's guide when a signal follows a guide switch", function()
@@ -368,6 +555,23 @@ describe("driver.run", function()
     assert.equal("Broker.lua:1: boom", signals(log, "manual-completion")[1].reason)
   end)
 
+  it("records the right-click error as the did-not-advance reason for an unexpected click", function()
+    local world = fx.fake_world()
+    local E = fx.scripted_engine(one_guide({ { action = "C", name = "Kill", qids = { 7 },
+      outcome = { kind = "refused", reason = "incomplete" } } }), {}, "G1", world)
+    local real = E.complete_manual
+    function E:complete_manual(i)
+      real(self, i)
+      if i == 1 then return false, "Broker.lua:1: boom" end
+      return true
+    end
+    local ctx = { engine = E, world = world, cfg = {}, errors = {}, missing_order = {} }
+    local log = run.drive(ctx, { perform = E.perform })
+    assert.equal("Broker.lua:1: boom", signals(log, "did-not-advance")[1].reason)
+    assert.equal("D", signals(log, "manual-completion")[1].action)
+    assert.equal(1, #signals(log, "manual-completion"))
+  end)
+
   it("records stuck with settle-limit when a settle hits its limit", function()
     local log = drive(one_guide({ { action = "R", name = "a" } }), { G1 = { { complete = { 1 }, hit_limit = true } } })
     local s = signals(log, "stuck")
@@ -381,6 +585,46 @@ describe("driver.run", function()
       { max_iterations = 3, stuck_limit = 100 })
     assert.equal("iterations", log.stop.reason)
     assert.equal(1, #signals(log, "stuck"))
+  end)
+
+  it("records the level the run passed a hidden accept at, not the level at close", function()
+    local guides = one_guide({
+      { action = "R", name = "a" },
+      { action = "A", name = "Hidden", qids = { 55 }, why = "PRE not met", hidden = true },
+      { action = "R", name = "b" },
+      { action = "R", name = "c" },
+    })
+    local script = { G1 = { { complete = { 1 }, level = 4 }, nil, { complete = { 3 } }, { complete = { 4 }, level = 7 } } }
+    local log = drive(guides, script)
+    assert.equal(4, signals(log, "never-shown-accept")[1].level)
+    assert.equal(1, log.guide_levels[1].enter)
+    assert.equal(7, log.guide_levels[1].leave)
+  end)
+
+  it("records each guide's entry and exit levels", function()
+    local guides = {
+      G1 = { startlevel = 1, next_gid = "G2", file = "g1.lua", steps = { { action = "R", name = "a" } } },
+      G2 = { startlevel = 5, next_gid = "G3", file = "g2.lua", steps = { { action = "R", name = "b" } } },
+      G3 = { startlevel = 10, file = "g3.lua", steps = { { action = "R", name = "c" }, { action = "D", name = "Done" } } },
+    }
+    local script = {
+      G1 = { { complete = { 1 }, done = true, switch = "G2", level = 5 } },
+      G2 = { { complete = { 1 }, done = true, switch = "G3" } },
+      G3 = completes(1),
+    }
+    local log = drive(guides, script)
+    assert.same({ gid = "G1", file = "g1.lua", start_level = 1, enter = 1, leave = 5, finished = true, last_line = 101 },
+      log.guide_levels[1])
+    assert.equal("G2", log.guide_levels[2].gid)
+    assert.equal(5, log.guide_levels[2].enter)
+  end)
+
+  it("marks a guide cut short as not finished", function()
+    local steps = { { action = "C", name = "loop", qids = { 1 } } }
+    local log = drive(one_guide(steps), { G1 = { { on_manual = { uncomplete = { 1 } } } } },
+      { max_iterations = 3, stuck_limit = 100 })
+    assert.equal(1, #log.guide_levels)
+    assert.is_false(log.guide_levels[1].finished)
   end)
 
   it("stops with no-step when nothing is current and the guide is not done", function()
@@ -453,8 +697,149 @@ describe("driver.run", function()
   end)
 
   it("lists the stop reasons", function()
-    for _, r in ipairs({ "level", "chain-range", "no-next-guide", "stuck", "iterations", "errors", "no-step", "max-guides" }) do
+    for _, r in ipairs({ "no-next-guide", "stuck", "iterations", "errors", "no-step", "max-guides", "guide-cycle" }) do
       assert.is_true(run.STOP[r], r)
     end
+    assert.is_nil(run.STOP.level)
+    assert.is_nil(run.STOP["chain-range"])
+    assert.is_nil(run.DEFAULTS.stop_level)
+    assert.is_nil(run.CHAIN_MAX_START)
+  end)
+
+  -- Guide filters: the driver plays the chain to its last line and jumps over the
+  -- guides the include/exclude filters left out, with the guide-list click (LoadGuide).
+  describe("guide filters", function()
+    local function set(...)
+      local out = {}
+      for _, g in ipairs({ ... }) do out[g] = true end
+      return out
+    end
+
+    -- G1 (1) -> G2 (5) -> G3 (10); G1 completes and the engine switches to G2.
+    local function chain()
+      return {
+        G1 = { startlevel = 1, next_gid = "G2", file = "g1.lua", steps = { { action = "R", name = "a" } } },
+        G2 = { startlevel = 5, next_gid = "G3", file = "g2.lua", steps = { { action = "R", name = "b" } } },
+        G3 = { startlevel = 10, file = "g3.lua", steps = {
+          { action = "R", name = "c" }, { action = "D", name = "Done" },
+        } },
+      }
+    end
+    local SCRIPT = {
+      G1 = { { complete = { 1 }, done = true, switch = "G2" } },
+      G2 = { { complete = { 1 }, done = true, switch = "G3" } },
+      G3 = completes(1),
+    }
+
+    it("an excluded guide is jumped to the next included one on the chain", function()
+      local log, E = drive(chain(), SCRIPT, { included = set("G1", "G3") })
+      assert.same({ "G1", "G3" }, log.guides)
+      assert.same({ "G3" }, E.loaded)
+      assert.equal(1, #log.jumps)
+      local j = log.jumps[1]
+      assert.equal("G2", j.from)
+      assert.same({ "G2" }, j.passed)
+      assert.equal("G3", j.to)
+      assert.equal(1, j.level_before)
+      assert.equal(1, j.level_after)
+      for _, s in ipairs(log.steps) do assert.not_equal("G2", s.gid) end
+      assert.same({ "G1:1", "G3:1", "G3:2" }, E.acted)
+      assert.equal("no-next-guide", log.stop.reason)
+    end)
+
+    it("the start guide excluded jumps before playing", function()
+      local log, E = drive(chain(), SCRIPT, { included = set("G2") })
+      assert.same({ "G2" }, log.guides)
+      assert.equal("G1", log.jumps[1].from)
+      assert.same({ "G1" }, log.jumps[1].passed)
+      assert.equal("G2", log.jumps[1].to)
+      assert.equal(5, log.jumps[1].level_after)
+      assert.same({ "G2" }, E.loaded)
+      assert.equal("G2:1", E.acted[1])
+    end)
+
+    it("excluded guides to the end of the chain stop with no-next-guide", function()
+      local log, E = drive(chain(), SCRIPT, { included = set("G1") })
+      assert.equal("no-next-guide", log.stop.reason)
+      assert.same({ "G1" }, log.guides)
+      assert.same({ "G2", "G3" }, log.jumps[1].passed)
+      assert.is_nil(log.jumps[1].to)
+      assert.equal(1, log.jumps[1].level_after)
+      assert.same({}, E.loaded)
+    end)
+
+    it("treats a cycle in the chain as its end", function()
+      local guides = chain()
+      guides.G3.next_gid = "G2"
+      local log = drive(guides, SCRIPT, { included = set("G1") })
+      assert.equal("no-next-guide", log.stop.reason)
+      assert.same({ "G2", "G3" }, log.jumps[1].passed)
+      assert.is_nil(log.jumps[1].to)
+    end)
+
+    it("the level is never lowered", function()
+      local world = fx.fake_world()
+      world.player.level = 12
+      local log = drive(chain(), SCRIPT, { included = set("G1", "G3") }, world)
+      assert.equal(12, log.jumps[1].level_before)
+      assert.equal(12, log.jumps[1].level_after)
+    end)
+
+    it("raises the level with the XP table when the start guide is excluded", function()
+      local world = fx.fake_world()
+      local log = drive(chain(), SCRIPT, { included = set("G2", "G3") }, world)
+      assert.equal(5, world.player.level)
+      local xp = require("hwc.world.xp")
+      local total = 0
+      for l = 1, 4 do total = total + xp.to_next(l) end
+      local recorded = 0
+      for _, r in ipairs(world.xp_records) do recorded = recorded + r.n end
+      assert.equal(total, recorded)
+      assert.equal(5, log.jumps[1].level_after)
+    end)
+
+    it("a mid-chain jump keeps the level earned so far", function()
+      local world = fx.fake_world()
+      world.player.level = 3
+      local log = drive(chain(), SCRIPT, { included = set("G1", "G3") }, world)
+      assert.equal(3, log.jumps[1].level_before)
+      assert.equal(3, log.jumps[1].level_after)
+    end)
+
+    it("stops the raise at the XP cap", function()
+      local guides = chain()
+      guides.G3.startlevel = 40
+      local log = drive(guides, SCRIPT, { included = set("G3") })
+      assert.equal(require("hwc.world.xp").CAP_LEVEL, log.jumps[1].level_after)
+    end)
+
+    it("stops with load-guide-failed when the engine does not load the guide", function()
+      local guides = chain()
+      local world = fx.fake_world()
+      local E = fx.scripted_engine(guides, SCRIPT, "G1", world)
+      function E:load_guide(gid) self.loaded[#self.loaded + 1] = gid; return false, "boom" end
+      local log = run.drive({ engine = E, world = world, cfg = {}, errors = {}, missing_order = {} },
+        { perform = E.perform, included = set("G1", "G3") })
+      assert.equal("no-step", log.stop.reason)
+      local stuck = signals(log, "stuck")
+      assert.equal(1, #stuck)
+      assert.equal("load-guide-failed", stuck[1].reason)
+      assert.same({ "G1" }, log.guides)
+    end)
+
+    it("plays every guide with no included set", function()
+      local log, E = drive(chain(), SCRIPT)
+      assert.same({ "G1", "G2", "G3" }, log.guides)
+      assert.same({}, log.jumps)
+      assert.same({}, E.loaded)
+    end)
+
+    it("a run past level 25 keeps playing", function()
+      local steps = { { action = "R", name = "a" }, { action = "R", name = "b" } }
+      local log, E = drive(one_guide(steps), { G1 = { { complete = { 1 }, level = 30 }, { complete = { 2 } } } })
+      assert.equal("no-next-guide", log.stop.reason)
+      assert.equal(30, log.stop.level)
+      assert.same({ "G1:1", "G1:2", "G1:3" }, E.acted)
+    end)
   end)
 end)

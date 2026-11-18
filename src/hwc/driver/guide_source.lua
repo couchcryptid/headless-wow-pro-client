@@ -1,6 +1,7 @@
 -- Maps engine guide steps back to the addon source: which file registers a
 -- guide, and which line a step came from. Read-only over the addon checkout.
 local lfs = require("lfs")
+local toc = require("hwc.toc")
 
 local M = {}
 
@@ -30,6 +31,10 @@ local function lua_files(dir, out)
   return out
 end
 
+local function register_gid(line)
+  return line:match("RegisterGuide%s*%(%s*'([^']+)'") or line:match('RegisterGuide%s*%(%s*"([^"]+)"')
+end
+
 -- { [gid] = rel_file } from the RegisterGuide('<gid>' calls under `dir`
 -- (default WoWPro_Leveling/Forever), rel_file relative to addon_path.
 function M.index(addon_path, dir)
@@ -38,8 +43,23 @@ function M.index(addon_path, dir)
   if lfs.attributes(root, "mode") ~= "directory" then return out end
   for _, path in ipairs(lua_files(root, {})) do
     for _, line in ipairs(M.read_lines(path) or {}) do
-      local gid = line:match("RegisterGuide%s*%(%s*'([^']+)'") or line:match('RegisterGuide%s*%(%s*"([^"]+)"')
+      local gid = register_gid(line)
       if gid and not out[gid] then out[gid] = path:sub(#addon_path + 2) end
+    end
+  end
+  return out
+end
+
+-- The guides the Forever TOC loads, in load order: { gid, rel } per RegisterGuide
+-- call (every line scanned) in each non-skipped .lua file, rel relative to addon_path.
+function M.toc_guides(addon_path)
+  local out = {}
+  for _, e in ipairs(toc.files(addon_path, "WoWPro_Leveling/WoWPro_Leveling.toc", "Forever")) do
+    if not e.skipped and e.rel:lower():match("%.lua$") then
+      for _, line in ipairs(M.read_lines(e.path) or {}) do
+        local gid = register_gid(line)
+        if gid then out[#out + 1] = { gid = gid, rel = e.rel } end
+      end
     end
   end
   return out

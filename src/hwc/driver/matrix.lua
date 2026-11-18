@@ -141,6 +141,7 @@ end
 -- Every class x baseline, plus each non-baseline variant on the race's first
 -- class (Camping 101 quests are not class-gated, so one class covers them).
 function matrix.combos(addon_path, races)
+  if not addon_path then error("hwc: matrix needs the WoW-Pro folder", 0) end
   local out = {}
   for _, race in ipairs(races) do
     local classes = matrix.classes_for(addon_path, race)

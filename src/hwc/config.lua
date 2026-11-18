@@ -1,11 +1,10 @@
 -- Harness configuration: defaults plus validation of the addon checkout path.
 local Player = require("hwc.world.player")
 local SKILL_LINES = require("hwc.world.skill_lines")
+local home = require("hwc.questie.home")
 local lfs = require("lfs")
 
 local M = {}
-
-local QUESTIE_PIN = "d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc"
 
 -- The hwc repo root (the directory containing bin/hwc), derived from where this
 -- module was loaded from, so catalog paths do not depend on the process cwd.
@@ -21,13 +20,24 @@ local function resolve(path)
   return M.repo_root() .. "/" .. path
 end
 
+-- The active QuestieDB version dir, even when it is broken, so the catalog
+-- can report "broken: <tag>"; nil with no store or no active tag. A tag
+-- version_dir rejects is never turned into a path, so nil too.
+function M.default_questie_dir()
+  local root = home.root()
+  local tag = home.active(root)
+  if not tag then return nil end
+  local ok, dir = pcall(home.version_dir, root, tag)
+  return ok and dir or nil
+end
+
 -- Catalog sources (design spec §6). All optional; relative paths resolve
 -- against the repo root.
 local function catalog_config(c)
   c = c or {}
   local sim = (os.getenv("HOME") or "") .. "/Projects/wow-pro-leveling/sim/data/"
   return {
-    questie_dir = resolve(c.questie_dir or ("local/questie/" .. QUESTIE_PIN)),
+    questie_dir = c.questie_dir and resolve(c.questie_dir) or M.default_questie_dir(),
     wh_json = resolve(c.wh_json or (sim .. "wh.json")),
     objs_json = resolve(c.objs_json or (sim .. "objs.json")),
     rate_overrides = resolve(c.rate_overrides or (sim .. "rate_overrides.json")),
@@ -46,8 +56,10 @@ end
 
 function M.load(tbl)
   tbl = tbl or {}
-  local addon_path = tbl.addon_path or (os.getenv("HOME") .. "/Projects/WoW-Pro-Guides")
-  if not file_exists(addon_path .. "/WoWPro/WoWPro.toc") then
+  -- No default: the CLI finds the WoW-Pro folder (hwc.source). Without one the
+  -- config still serves world and catalog code; boot.run refuses it.
+  local addon_path = tbl.addon_path
+  if addon_path and not file_exists(addon_path .. "/WoWPro/WoWPro.toc") then
     error("hwc: addon path not found: " .. addon_path, 0)
   end
   local race = tbl.race or "Human"

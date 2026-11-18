@@ -8,7 +8,7 @@ local function F(t)
   return t
 end
 
-local ONE = { single = "Dwarf Warrior", by_qid = {}, by_id = {} }
+local ONE = { single = "Dwarf Warrior", by_id = {} }
 
 describe("text constants", function()
   it("exposes the severity display table", function()
@@ -17,8 +17,49 @@ describe("text constants", function()
     assert.same({ marker = "🟡", word = "Medium", rank = 3 }, text.SEVERITY["medium"])
     assert.same({ marker = "⚪", word = "Low", rank = 4 }, text.SEVERITY["low"])
   end)
-  it("anchors lower-case", function()
-    assert.equal("f-7f8b32ee", text.anchor("F-7F8B32EE"))
+  it("labels every signal in plain words", function()
+    assert.same({
+      ["never-shown-accept"] = "Never offered",
+      ["hidden-use-step"] = "Use step never shown",
+      ["accept-refused"] = "Can't be taken",
+      ["log-full"] = "Quest log full",
+      ["orphan-turnin"] = "Turn-in without the quest",
+      ["wrong-race-class"] = "Wrong race or class",
+      ["below-level"] = "Offered below level",
+      ["did-not-advance"] = "Doesn't advance",
+      ["manual-completion"] = "Manual click",
+      ["stuck"] = "Stuck",
+      ["leftover-quests"] = "Left in log",
+      ["lua-error"] = "Lua error",
+      ["missing-global"] = "Missing global",
+    }, text.SIGNALS)
+  end)
+  it("labels every early stop reason, and not the normal end", function()
+    assert.same({
+      iterations = "Hit its step limit",
+      errors = "Too many addon errors",
+      ["no-step"] = "No step to show",
+      ["max-guides"] = "Reached --max-guides",
+      stuck = "Stuck on a step",
+      ["guide-cycle"] = "Guide loops back on itself",
+    }, text.STOPS)
+    assert.is_nil(text.STOPS["no-next-guide"])
+  end)
+  it("labels every stop reason driver/run.lua emits except no-next-guide", function()
+    local f = assert(io.open("src/hwc/driver/run.lua", "r"))
+    local src = f:read("*a")
+    f:close()
+    local n = 0
+    for reason in src:gmatch('self:stop%("([^"]+)"%)') do
+      n = n + 1
+      if reason ~= "no-next-guide" then assert.is_string(text.STOPS[reason], "no STOPS entry for " .. reason) end
+    end
+    assert.is_true(n > 0, "found no self:stop calls in run.lua")
+  end)
+  it("has no markdown helpers", function()
+    assert.is_nil(text.anchor)
+    assert.is_nil(text.md_text)
+    assert.is_nil(text.links)
   end)
   it("returns nil for an unknown verb letter", function() assert.is_nil(text.VERBS["Q"]) end)
 end)
@@ -127,42 +168,55 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     assert.equal("The guide tells you to accept this quest, but WoWPro hides the step because its prerequisite, "
       .. "quest 95213, is never completed.", s)
   end)
-  it("never-shown-accept links the prerequisite finding when there is one", function()
+  it("hidden-use-step names the item the step needs and the item it uses", function()
+    local f = F({ signal = "hidden-use-step", name = "Divined Scroll", qid = 1016, use = "5456", loot = { [5455] = 1 } })
+    local t, s = both(f)
+    assert.equal('"Divined Scroll" is never shown', t)
+    assert.equal("WoWPro hides this use step until item 5455 is in bags, and it wasn't while the run passed here, "
+      .. "so the client never used item 5456.", s)
+  end)
+  it("hidden-use-step lists several loot items ascending", function()
+    local f = F({ signal = "hidden-use-step", use = "5456", loot = { [9] = 1, [5455] = 2, [12] = 1 } })
+    assert.equal("WoWPro hides this use step until items 9, 12, 5455 are in bags, and it wasn't while the run "
+      .. "passed here, so the client never used item 5456.", text.sentence(f, ONE))
+  end)
+  it("never-shown-accept names a prerequisite that has its own finding as plain quest N", function()
     local f = F({ signal = "never-shown-accept", name = "Next", qid = 5,
       why = "NextStep:PRE&(95213): A mandatory prereq was not met: 95213" })
     local pre = F({ id = "F-7F8B32EE", signal = "accept-refused", name = "Pre", qid = 95213, reasons = { "prerequisite" } })
-    local s = text.sentence(f, { single = "Dwarf Warrior", by_id = {}, by_qid = { [95213] = pre } })
+    local s = text.sentence(f, { single = "Dwarf Warrior", by_id = { [pre.id] = pre } })
     assert.equal("The guide tells you to accept this quest, but WoWPro hides the step because its prerequisite, "
-      .. 'quest [\"Pre\" can\'t be taken yet](#f-7f8b32ee), is never completed.', s)
+      .. "quest 95213, is never completed.", s)
   end)
-  it("a prerequisite follow-on names its parent once", function()
+  it("a prerequisite follow-on has no Follows from prefix and no link", function()
     local pre = F({ id = "F-7F8B32EE", signal = "accept-refused", name = "Pre", qid = 95213, reasons = { "prerequisite" } })
     local f = F({ signal = "never-shown-accept", name = "Next", qid = 5, caused_by = pre.id,
       why = "NextStep:PRE&(95213): A mandatory prereq was not met: 95213" })
-    local s = text.sentence(f, { single = "Dwarf Warrior", by_id = { [pre.id] = pre }, by_qid = { [95213] = pre } })
-    assert.equal('Follows from ["Pre" can\'t be taken yet](#f-7f8b32ee). The guide tells you to accept this quest, '
+    local s = text.sentence(f, { single = "Dwarf Warrior", by_id = { [pre.id] = pre } })
+    assert.equal("The guide tells you to accept this quest, "
       .. "but WoWPro hides the step because its prerequisite, quest 95213, is never completed.", s)
-  end)
-  it("a follow-on keeps the prerequisite link when the prerequisite isn't its parent", function()
-    local root = F({ id = "F-00000001", signal = "engine-dungeon-skip" })
-    local pre = F({ id = "F-7F8B32EE", signal = "accept-refused", name = "Pre", qid = 95213, reasons = { "prerequisite" } })
-    local f = F({ signal = "never-shown-accept", name = "Next", qid = 5, caused_by = root.id,
-      why = "NextStep:PRE&(95213): A mandatory prereq was not met: 95213" })
-    local s = text.sentence(f, { by_id = { [root.id] = root, [pre.id] = pre }, by_qid = { [95213] = pre } })
-    assert.truthy(s:find("quest [\"Pre\" can't be taken yet](#f-7f8b32ee)", 1, true))
-  end)
-  it("never-shown-accept for a dungeon skip", function()
-    local f = F({ signal = "never-shown-accept", name = "Deadmines", qid = 5, reasons = { "engine-dungeon-skip" } })
-    local t, s = both(f)
-    assert.equal('Dungeon quest "Deadmines" is skipped', t)
-    assert.equal("WoWPro marks this dungeon quest done without showing it, because dungeon quests are switched off.", s)
   end)
   it("never-shown-accept with some other why", function()
     local f = F({ signal = "never-shown-accept", name = "Next", qid = 5, why = "Something odd" })
     local t, s = both(f)
     assert.equal('"Next" is never offered', t)
-    assert.equal("The guide tells you to accept this quest, but WoWPro never shows the step. "
-      .. "The engine's reason is in the detail below.", s)
+    assert.equal('The guide tells you to accept this quest, but WoWPro never shows the step. '
+      .. 'The engine said: "Something odd".', s)
+  end)
+  -- The reason goes in the sentence: the reader shouldn't have to open the fold.
+  it("never-shown-accept skipped as optional", function()
+    local _, s = both(F({ signal = "never-shown-accept", name = "Next", qid = 5,
+      why = "NextStep(): Optional steps default to skipped." }))
+    assert.equal("WoWPro skips this accept because the step is optional, and optional steps are skipped by default.", s)
+  end)
+  it("never-shown-accept hidden by level", function()
+    local _, s = both(F({ signal = "never-shown-accept", name = "Next", qid = 5, level = 19,
+      why = "NextStep(): Skipping step because player level not high enough." }))
+    assert.equal("WoWPro hides this accept until the character's level is high enough; "
+      .. "the character was level 19 when the guide passed it.", s)
+    local _, s2 = both(F({ signal = "never-shown-accept", name = "Next", qid = 5,
+      why = "NextStep(): Skipping step because player level not high enough." }))
+    assert.equal("WoWPro hides this accept until the character's level is high enough.", s2)
   end)
   it("never-shown-accept with no why", function()
     local t, s = both(F({ signal = "never-shown-accept", name = "Next", qid = 5 }))
@@ -177,14 +231,14 @@ describe("text.title and text.sentence (design spec §4.7)", function()
   it("accept-refused by class across several combos", function()
     local f = F({ signal = "accept-refused", name = "Pre", qid = 7, reasons = { "class" },
       combos = { "Gnome MAGE baseline", "Dwarf PRIEST baseline", "Dwarf PRIEST lw-skin" } })
-    local t, s = both(f, { by_id = {}, by_qid = {} })
+    local t, s = both(f, { by_id = {} })
     assert.equal('"Pre" can\'t be taken by a Mage/Priest', t)
     assert.equal("The guide shows this accept, but the quest data says a Mage/Priest can't take quest 7.", s)
   end)
   it("uses an for a vowel-initial race", function()
     local f = F({ signal = "accept-refused", name = "Pre", qid = 7, reasons = { "race" }, combos = { "Orc WARRIOR baseline" } })
     assert.equal("The guide shows this accept, but the quest data says an Orc can't take quest 7.",
-      text.sentence(f, { single = "Orc Warrior", by_id = {}, by_qid = {} }))
+      text.sentence(f, { single = "Orc Warrior", by_id = {} }))
   end)
   it("accept-refused by prerequisite", function()
     local t, s = both(F({ signal = "accept-refused", name = "Pre", qid = 7, reasons = { "prerequisite" } }))
@@ -214,7 +268,7 @@ describe("text.title and text.sentence (design spec §4.7)", function()
   it("wrong-race-class, multi-combo run", function()
     local f = F({ signal = "wrong-race-class", name = "Shown", qid = 7, reasons = { "class" },
       combos = { "Dwarf PRIEST baseline", "Gnome MAGE baseline" } })
-    local t, s = both(f, { by_id = {}, by_qid = {} })
+    local t, s = both(f, { by_id = {} })
     assert.equal('"Shown" is shown to the wrong class', t)
     assert.equal("WoWPro shows this step to characters that quest 7 excludes.", s)
   end)
@@ -228,10 +282,27 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     local _, s = both(F({ signal = "below-level", name = "Low", qid = 7, level = 4 }))
     assert.equal("The guide reaches this accept below the level the quest requires.", s)
   end)
-  it("did-not-advance", function()
-    local t, s = both(F({ signal = "did-not-advance", name = "Stuck", qid = 7 }))
+  it("did-not-advance after the client acted", function()
+    local t, s = both(F({ signal = "did-not-advance", action = "K", name = "Stuck", qid = 7 }))
     assert.equal('"Stuck" doesn\'t advance', t)
-    assert.equal("The simulated action didn't move WoWPro to the next step, so the client clicked it off.", s)
+    assert.equal("The client did what this step asks, but WoWPro didn't mark it done, so the client clicked it off.", s)
+  end)
+  it("did-not-advance on a refused step says why it was refused", function()
+    local function s_of(action, reason)
+      local f = F({ signal = "did-not-advance", action = action, name = "Stuck", qid = 7, reasons = { reason } })
+      local _, s = both(f)
+      return s
+    end
+    assert.equal("The turn-in was refused because quest 7 wasn't complete, so the client clicked the step off.",
+      s_of("T", "incomplete"))
+    assert.equal("Quest 7's objectives weren't complete after the client did this step, so the client clicked it off.",
+      s_of("C", "incomplete"))
+    assert.equal("Quest 7 wasn't in the log when the guide reached this step, so the client clicked it off.",
+      s_of("K", "not-in-log"))
+    assert.equal("The turn-in needs a profession skill the character doesn't have, so the client clicked the step off.",
+      s_of("T", "requires-skill"))
+    assert.equal("The step was refused (already-completed), so the client clicked it off.",
+      s_of("A", "already-completed"))
   end)
   it("manual-completion", function()
     local t, s = both(F({ signal = "manual-completion", name = "Click" }))
@@ -263,15 +334,33 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     assert.equal("No guide loaded", t)
     assert.equal("WoWPro loaded no guide, so nothing ran.", s)
   end)
+  it("stuck guide-cycle", function()
+    local t, s = both(F({ signal = "stuck", name = "Onwards", reasons = { "guide-cycle" } }))
+    assert.equal('Guide loops back to "Onwards"', t)
+    assert.equal("Finishing this step sent the run to another guide, and WoWPro then came back to this same step, "
+      .. "which would only send it away again; the run stopped here.", s)
+  end)
+  it("stuck load-guide-failed", function()
+    local t, s = both(F({ signal = "stuck", reasons = { "load-guide-failed" } }))
+    assert.equal("Next guide didn't load", t)
+    assert.equal("WoWPro didn't load the next guide in the chain, so the run stopped.", s)
+  end)
   it("leftover-quests with a name", function()
     local t, s = both(F({ signal = "leftover-quests", qid = 412, qname = "Wolves" }))
     assert.equal('Quest "Wolves" (412) is left in the log', t)
-    assert.equal('Quest "Wolves" (412) was still in the log when this guide ended; the run never turned it in.', s)
+    assert.equal('The run passed this turn-in step, but quest "Wolves" (412) was still in the log '
+      .. "when the run ended.", s)
+  end)
+  it("leftover-quests accepted earlier and not turned in within scope", function()
+    local t, s = both(F({ signal = "leftover-quests", qid = 412, qname = "Wolves", reasons = { "not-turned-in" } }))
+    assert.equal('Quest "Wolves" (412) is not turned in within scope', t)
+    assert.equal("The guide accepts this quest here, but no guide the run played has a turn-in step for it; "
+      .. "it was still in the log when the run ended.", s)
   end)
   it("leftover-quests with no qname", function()
     local t, s = both(F({ signal = "leftover-quests", qid = 412 }))
     assert.equal("Quest 412 is left in the log", t)
-    assert.equal("Quest 412 was still in the log when this guide ended; the run never turned it in.", s)
+    assert.equal("The run passed this turn-in step, but quest 412 was still in the log when the run ended.", s)
   end)
   it("lua-error uses the first line of the message", function()
     local f = F({ signal = "lua-error", name = "boom\nsecond", message = "boom\nsecond" })
@@ -285,55 +374,21 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     local exact = string.rep("y", 80)
     assert.equal("Lua error: " .. exact, text.title(F({ signal = "lua-error", message = exact })))
   end)
-  it("engine-dungeon-skip root", function()
-    local f = F({ signal = "engine-dungeon-skip", name = "EnableDungeons auto-completes DUNGEON accepts" })
-    assert.equal("EnableDungeons auto-completes dungeon accepts", text.title(f))
-    assert.equal("WoWPro's EnableDungeons setting marks dungeon-quest accepts done without showing them; "
-      .. "every finding it explains is a dungeon quest the guide never offers.", text.sentence(f, ONE))
-  end)
   it("unknown signal falls back to the raw signal and an empty sentence", function()
     local f = F({ signal = "mystery", action = "A", name = "Foo" })
     assert.equal('mystery: Accept "Foo"', text.title(f))
     assert.equal("", text.sentence(f, ONE))
   end)
 
-  it("escapes markdown in link text but keeps the title plain", function()
+  it("keeps a title with markdown characters plain", function()
     local parent = F({ id = "F-00000009", signal = "lua-error", message = "x.lua:1: '<eof>' expected near ']' *a_b*" })
-    local f = F({ signal = "did-not-advance", name = "Next", caused_by = parent.id })
     assert.equal("Lua error: x.lua:1: '<eof>' expected near ']' *a_b*", text.title(parent))
-    local s = text.sentence(f, { single = "Dwarf Warrior", by_qid = {}, by_id = { [parent.id] = parent } })
-    assert.truthy(s:find("Follows from [Lua error: x.lua:1: '&lt;eof&gt;' expected near '\\]' \\*a\\_b\\*](#f-00000009).",
-      1, true), s)
-  end)
-  it("tells colliding link titles apart by quest and line", function()
-    local a = F({ id = "F-00000001", signal = "never-shown-accept", name = "Same", qid = 5, line = 10 })
-    local b = F({ id = "F-00000002", signal = "never-shown-accept", name = "Same", qid = 6, line = 20 })
-    local c = F({ id = "F-00000003", signal = "never-shown-accept", name = "Other", qid = 7, line = 30 })
-    assert.same({ '["Same" is never offered (quest 5, line 10)](#f-00000001)',
-      '["Same" is never offered (quest 6, line 20)](#f-00000002)', '["Other" is never offered](#f-00000003)' },
-      text.links({ a, b, c }))
-    local d = F({ id = "F-00000004", signal = "lua-error", message = "boom" })
-    local e = F({ id = "F-00000005", signal = "lua-error", message = "boom", line = 3 })
-    assert.same({ "[Lua error: boom](#f-00000004)", "[Lua error: boom (line 3)](#f-00000005)" }, text.links({ d, e }))
-  end)
-  it("tells a parent and a prerequisite with the same title apart in one sentence", function()
-    local parent = F({ id = "F-00000001", signal = "accept-refused", name = "Pre", qid = 1, line = 4,
-      reasons = { "prerequisite" } })
-    local pre = F({ id = "F-00000002", signal = "accept-refused", name = "Pre", qid = 95213, line = 8,
-      reasons = { "prerequisite" } })
-    local f = F({ signal = "never-shown-accept", name = "Next", qid = 5, caused_by = parent.id,
-      why = "A mandatory prereq was not met: 95213" })
-    local s = text.sentence(f, { by_id = { [parent.id] = parent }, by_qid = { [95213] = pre } })
-    assert.equal('Follows from ["Pre" can\'t be taken yet (quest 1, line 4)](#f-00000001). The guide tells you to '
-      .. 'accept this quest, but WoWPro hides the step because its prerequisite, quest ["Pre" can\'t be taken yet '
-      .. '(quest 95213, line 8)](#f-00000002), is never completed.', s)
   end)
 
-  it("prefixes a follow-on finding with a link to its parent and keeps the first clause only", function()
+  it("a follow-on keeps the first clause only, with no prefix", function()
     local parent = F({ id = "F-7F8B32EE", signal = "accept-refused", name = "Pre", qid = 7, reasons = { "prerequisite" } })
     local f = F({ signal = "never-shown-accept", name = "Next", qid = 5, why = "Something odd", caused_by = "F-7F8B32EE" })
-    local ctx = { single = "Dwarf Warrior", by_qid = {}, by_id = { ["F-7F8B32EE"] = parent } }
-    assert.equal("Follows from [\"Pre\" can't be taken yet](#f-7f8b32ee). "
-      .. "The guide tells you to accept this quest, but WoWPro never shows the step.", text.sentence(f, ctx))
+    local ctx = { single = "Dwarf Warrior", by_id = { ["F-7F8B32EE"] = parent } }
+    assert.equal("The guide tells you to accept this quest, but WoWPro never shows the step.", text.sentence(f, ctx))
   end)
 end)

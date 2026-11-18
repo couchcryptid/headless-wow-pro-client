@@ -3,9 +3,10 @@
 -- this module writes env.WoWPro.* or SavedVariables.
 --
 -- Engine functions it calls:
---   mutating, the two player equivalents only:
+--   mutating, the three player equivalents only:
 --     WoWPro.CompleteStep(i, "Right-Click")   complete_manual (WoWPro_Broker.lua:3857)
 --     WoWPro:UpdateGuide("sim:level")         update_guide (after a ding; no level-up handler)
+--     WoWPro:LoadGuide(gid)                   load_guide (the guide-list click over an excluded guide)
 --   pure reads:
 --     WoWPro:NextGuide(gid)                   guide(), only when the registry names a nextGID
 --                                             (it pops the guide stack otherwise, Broker:777-808)
@@ -276,6 +277,16 @@ function Engine:complete_manual(i)
   return true
 end
 
+-- The guide-list click: loads gid as a player picking it would, then lets the
+-- engine settle. Same return contract as complete_manual.
+function Engine:load_guide(gid)
+  local W = self:W()
+  local ok = call(self.sb, W.LoadGuide, W, gid)
+  self:settle()
+  if not ok then return false, self:last_error() end
+  return true
+end
+
 -- Same return contract as complete_manual.
 function Engine:update_guide()
   local W = self:W()
@@ -289,6 +300,15 @@ function Engine:rank()
   local ok, rank = call(self.sb, W.GuideRank, self:gid())
   if not ok then return nil, self:last_error() end
   return rank
+end
+
+-- WoWPro's "Skip Dungeon Quests" option (WoWPro_Config.lua:1179). Its saved name is
+-- WoWProCharDB.EnableDungeons, defaulted to true (WoWPro.lua:543); while it's on the
+-- engine completes DUNGEON accepts without showing them (WoWPro_Broker.lua:2589).
+function Engine:skip_dungeons()
+  local db = rawget(self.env, "WoWProCharDB")
+  if type(db) ~= "table" then return nil end
+  return db.EnableDungeons
 end
 
 return Engine

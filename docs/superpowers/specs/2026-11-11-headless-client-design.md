@@ -16,7 +16,7 @@ Today the only way to check a WoW-Pro guide fix is to level an alt in the game c
 ## 2. Goals, non-goals, anti-goals
 
 **Goals**
-- Load the addon's own Lua from a configurable path to any WoW-Pro-Guides checkout or worktree, so any branch can be tested. Never modify, vendor or patch it.
+- Load the addon's own Lua from the WoW-Pro folder `hwc` runs in (any checkout or worktree; see `2026-11-17-guide-filters-design.md` §3), so any branch can be tested. Never modify, vendor or patch it.
 - Simulate a player's state well enough for the engine to make its real decisions:
   - race, class, faction, sex;
   - level and an XP bar;
@@ -39,7 +39,7 @@ Today the only way to check a WoW-Pro guide fix is to level an alt in the game c
 - **Fixing guides or the addon.** The client and triage report. People fix.
 
 **Anti-goals (a failure even if it "works")**
-- **Correcting addon bugs in the harness.** If the engine misbehaves (for example the literal `find("FHbPR")` at `WoWPro_Broker.lua:2422`, or `EnableDungeons` looking inverted), the client must reproduce that, and the misbehaviour shows up as findings. The client is faithful to the world and neutral about the addon.
+- **Correcting addon bugs in the harness.** If the engine misbehaves (for example the literal `find("FHbPR")` at `WoWPro_Broker.lua:2422`), the client must reproduce that, and the misbehaviour shows up as findings. The client is faithful to the world and neutral about the addon.
 - **Using the guide as the source of world facts.** Quest levels, XP, objectives and races come from the quest catalog (§6), never from guide lines. Otherwise the client would agree with every guide bug it should catch. The guide is only what's being tested.
 - **Silently clicking steps off.** Every step the client completes by hand rather than through a simulated player action is logged and becomes a finding.
 - **Committing licensed or third-party data** (QuestieDB, Wowhead extracts) to this repo.
@@ -49,7 +49,7 @@ Today the only way to check a WoW-Pro guide fix is to level an alt in the game c
 - **Flavor:** Forever only. `GetBuildInfo` returns TOC 16001, so `WoWPro.FOREVER` is true.
 - **Characters:** Dwarf and Gnome, every class each race can play in Forever, as the 80/20 slice: they share the Dun Morogh start, and #3535 and the issue-01–16 work cover it best. The race and class matrix is configuration. The **class list per race must come from Forever data** (Wowhead Forever or the guides' own `C|` tags), not from Classic assumptions or memory.
 - **Then:** all Alliance races: Human (Elwynn), Night Elf (Teldrassil, then Darkshore). Each race starts on its `WoWPro.Leveling.ForeverStartGuides` entry (`WoWPro_Leveling/WoWPro_Leveling.lua:49–59`). Skyborne (Zephras Isle) is listed there too but is out of scope until the user says otherwise.
-- **Guide chain:** start guide, then the next guide by the engine's own `GuideNextGuide` autoload (Dun Morogh → `ClassicEasternKingdom1220` → `ClassicAlliance1925` → …). A run stops when the character reaches **level 25**, or when the engine's chain loads a guide whose range starts at or above 25, whichever comes first.
+- **Guide chain:** start guide, then the next guide by the engine's own `GuideNextGuide` autoload (Dun Morogh → `ClassicEasternKingdom1220` → `ClassicAlliance1925` → …). A run plays the chain to its last line (revised by `2026-11-17-guide-filters-design.md` §5: the level-25 and chain-range stops are gone).
 - **Professions and Camping 101 (user's decision, 2026-11-11):** all Camping 101 profession quests are in scope. The quests that require the profession to be trained first are gated on the character having that skill.
   - **In the world model:** each Camping 101 quest object carries a "requires skill" condition, for example First Aid, Fishing or Leatherworking. Per Wowhead, those end at the profession trainer, whose progress text gates on the skill. The quest can't be completed or turned in until the simulated character knows that skill.
   - **Camping 101: Cooking is the exception.** Its turn-in is completed by training Cooking at Gremlock (confirmed in game 2026-11-11), so training is the step's action.
@@ -63,7 +63,8 @@ Today the only way to check a WoW-Pro guide fix is to level an alt in the game c
   - **Out of scope:** comparing ranks, a rank matrix, or any work on the engine's rank capability or the guides' `|RANK|` flags. That's routing work.
   - **Guard:** the findings header records the rank, and one check asserts the engine reports rank 2.
 - **Dungeons (user's decision, 2026-11-11):** guide and engine defaults, with no dungeon flag, no dungeon runs and no instance XP this pass.
-  - **Faithful default:** with the default `EnableDungeons = true`, the engine auto-completes every `|DUNGEON|` accept ("No optional Dungeon quests desired", `WoWPro_Broker.lua:2588–2592`). The condition looks inverted against its own comment.
+  - **Faithful default:** with the default `EnableDungeons = true`, the engine auto-completes every `|DUNGEON|` accept ("No optional Dungeon quests desired", `WoWPro_Broker.lua:2588–2592`). The condition isn't inverted: `EnableDungeons` is saved under that name, but the options panel labels it "Skip Dungeon Quests" (`WoWPro_Config.lua:1179`).
+  - **In the report (2026-11-12):** the skipped accepts are expected for this client, so they are not findings. The RunLog records the setting (`skip_dungeons`) and each skipped accept (`dungeon_skips`), and "About this run" states the setting and the count.
   - **The client reproduces it.** It becomes one engine-bug finding, with the hidden accepts (9 in `19_25_Alliance`, 2 in `12_20_Darkshore`) linked under it.
   - **Deferred to routing and rank work:**
     - **Trigger:** a dungeon run happens at the guide's note level or a little above, before the lowest-level quest in the bundle turns grey.
@@ -150,7 +151,7 @@ loop until stop condition:
 ```
 
 - The **shown step** is whatever the real engine shows: `ActiveStep` plus the row state. The driver never chooses steps itself.
-- **Stop conditions:** level 25 reached; the guide chain passes the 1–25 range; the engine reports no next guide; or a watchdog fires. Any watchdog stop is a finding.
+- **Stop conditions:** the engine reports no next guide (the last line of the last included guide); or a watchdog fires. Any watchdog stop is a finding. (Revised by `2026-11-17-guide-filters-design.md` §5: the level-25 and chain-range stops, and `--stop-level`, are removed.)
 - **Skipped steps** are recorded with the engine's own reason (`WoWPro.why[i]`), so "hidden because a PRE wasn't met" is visible.
 
 ## 5. Layer 2: the simulated world and player
@@ -193,7 +194,7 @@ Each step action maps to world changes and the events the real game fires. The s
 - **Camping 101 quests (user's decision, 2026-11-11):**
   - **On accept, the client immediately completes and turns in a Camping 101 quest**, crediting its XP. The real objective is to level the profession to 20, and players do that in many ways: farming materials, the auction house, materials mailed from another character. The client abstracts it.
   - This is the one place the client acts on a quest without a guide step. It's logged as an `abstracted-turnin` event, not a finding.
-  - **Gate:** quests that require the profession to be trained first (§3) are turned in only when the character knows that skill. Otherwise they stay in the log and surface as `leftover-quests`.
+  - **Gate:** quests that require the profession to be trained first (§3) are turned in only when the character knows that skill. Otherwise they stay in the log: a `leftover-quests` "not turned in within scope" finding when accepted in an earlier guide than the one the run stopped in, else listed as carried (§7.1).
   - Camping 101: Cooking keeps its guide steps (train at Gremlock, then turn in) if the guide has them. The immediate turn-in applies only when the guide has no turn-in step for the quest.
 - **Level-up:** the addon has no level-up handler, so after every ding the driver forces `WoWPro:UpdateGuide("sim:level")`.
 - **Elites:** there's no party (solo). Elite kill steps succeed, flagged as elite, with mob XP ×2 split by a configurable party size (default 1, as in the old simulator). Each elite step is noted in the run log so "the guide expects a solo player to kill an elite" stays visible.
@@ -247,22 +248,23 @@ A quest is an object: id, name, quest level, required level, races, classes, pre
 |---|---|
 | `never-shown-accept` | an `A` step was skipped for the whole run, with the engine's reason (e.g. `PRE&(...): A mandatory prereq was not met: 96629`) |
 | `orphan-turnin` | a `T` (or `C`) step for a quest the character never had |
-| `did-not-advance` | the simulated action didn't move the engine; the driver clicked the step off |
+| `did-not-advance` | the simulated action didn't move the engine; the driver clicked the step off. Not recorded when the step's refusal is already a signal (`accept-refused`, `log-full`, `orphan-turnin`): one click, one signal |
 | `stuck` | the same step was active past the watchdog limit, or no step could be advanced |
 | `log-full` | an accept was refused because the log was full |
 | `accept-refused` | the catalog says the character can't take the quest (level, race, class, prerequisite) but the guide shows the accept |
 | `below-level` | an accept shown while the character is below the quest's catalog required level; the player grinds, then accepts. **Severity medium-high, tagged `needs-routing-triage`** (user's decision) |
-| `wrong-race-class` | a step shown to a race or class the catalog excludes |
-| `leftover-quests` | quests still in the log when a guide in the chain ends, or at the end of the run |
+| `wrong-race-class` | a quest step (`A`/`C`/`K`/`T`) shown to a race or class the catalog excludes; a non-quest step's QID only drives its skip-when-complete check and isn't checked |
+| `leftover-quests` | checked once, at the end of the run (carrying a quest into the next guide is normal). A quest still in the log is a finding at the turn-in step the run passed for it; or, if it was accepted in an earlier guide than the one the run stopped in and no guide played turns it in, a finding at its accept with reason `not-turned-in` ("not turned in within scope"). A quest taken in the guide the run stopped in is listed in `RunLog.carried` and "About this run", not a finding |
 | `lua-error` | the addon raised an error (with stack) |
 | `missing-global` | the addon read a WoW global with no stub (harness completeness, not a guide bug) |
-| `manual-completion` | any step completed by the driver rather than by an event (`N`, `D`, notes and stickies are expected and listed separately from real failures) |
+| `manual-completion` | a step the driver clicked off by design (`N`, `D`, notes and stickies), listed separately from real failures. An unexpected click is recorded only as `did-not-advance`: one click, one signal |
 
 ### 7.2 Findings file
 
 Superseded in part by `2026-11-12-findings-report-design.md` (report layout, JSON contract, relative paths).
+The report is now a self-contained HTML page beside the JSON, not a markdown file: see `2026-11-18-html-findings-report-design.md`.
 
-One markdown file per invocation: `findings/YYYY-MM-DD-<scope>.md`, for example `findings/2026-11-12-forever-alliance-dwarf-gnome-1-25.md`.
+One markdown file per invocation: `findings/YYYY-MM-DD-<scope>.md`, for example `findings/2026-11-12-forever-alliance-dwarf-gnome.md` (the directory defaults to `~/.hwc/findings`; scope names lost `-1-25`, see `2026-11-17-guide-filters-design.md` §6).
 - **Header:**
   - the addon repo path, branch and commit;
   - the catalog sources, with commit or date and hash;
@@ -312,7 +314,7 @@ A Claude Code skill in this repo (`.claude/skills/triage/SKILL.md`), run on dema
 
 - **Runtime:** LuaJIT 2.x (Lua 5.1) at `/opt/homebrew/bin/luajit`. Tests use `busted` 2.3.0, which is already installed for 5.1 at `~/.luarocks/bin/busted` (penlight, luafilesystem, dkjson available). Homebrew's `lua` is 5.5 and must not be used.
 - **Language:** Lua for the stub layer, the world, the driver and the specs, since they share the state with the addon. Small offline tools (the catalog exporter, the findings renderer) may be Python 3 stdlib, run with `python3 -I`. No third-party installs without asking.
-- **Addon path:** configuration, defaulting to `~/Projects/WoW-Pro-Guides`. The client reads the checkout's current branch and commit for the findings header. **Use a git worktree** for branch comparisons: the game's Forever AddOns folder is symlinked to that checkout, so switching its branch changes what the game loads.
+- **Addon path:** the WoW-Pro folder `hwc` is run from (the `--addon` flag and the `~/Projects/WoW-Pro-Guides` default are gone; see `2026-11-17-guide-filters-design.md` §3). The client reads the checkout's current branch and commit for the findings header. **Use a git worktree** for branch comparisons: the game's Forever AddOns folder is symlinked to that checkout, so switching its branch changes what the game loads.
 - **Licence of this repo:** the user's choice, still to be decided. Don't copy code from GPL projects (for example Mechanic) unless the user picks a compatible licence. Reading them for ideas is fine. Ketho's vscode-wow-api (MIT) may be used to generate stub signatures and enums.
 - **Determinism:** the same inputs (addon commit, catalog hashes, config, seed) give byte-identical findings.
 
@@ -342,7 +344,7 @@ A Claude Code skill in this repo (`.claude/skills/triage/SKILL.md`), run on dema
 ## 12. Calls made by the author (not decided by the user; check these)
 
 - The no-profession baseline trains only when a step says so. Profession variants start with their skill already known. (The user decided that all Camping 101 quests are in scope and that skill-requiring ones are gated on the skill; how the variants start is my call.)
-- A run stops at level 25 or when the guide chain passes the 1–25 range.
+- A run plays the chain to its last line; the level-25 stop was removed (`2026-11-17-guide-filters-design.md` §5).
 - Skyborne/Zephras Isle is out of scope until the user says otherwise.
 - Elite kills always succeed solo (party size 1), flagged in the log.
 - Finding severities (§7.2).

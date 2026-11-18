@@ -53,6 +53,14 @@ describe("group.findings", function()
     assert.same({ name = "c", action = "C" }, f.after)
   end)
 
+  it("passes the use item and the loot items of a hidden use step through", function()
+    local sig = { signal = "hidden-use-step", gid = "G1", file = "f", line = 1, action = "U", name = "Use", qid = 9,
+      use = "5456", loot = { [5455] = 1 } }
+    local f = group.findings({ runlog("Dwarf", "WARRIOR", { sig }) })[1]
+    assert.equal("5456", f.use)
+    assert.same({ [5455] = 1 }, f.loot)
+  end)
+
   it("keeps the id when the line changes", function()
     local a = group.findings({ runlog("Dwarf", "WARRIOR", { dna({ line = 40 }) }) })[1]
     local b = group.findings({ runlog("Dwarf", "WARRIOR", { dna({ line = 99 }) }) })[1]
@@ -109,22 +117,35 @@ describe("group.findings", function()
     assert.equal(2, #r.causes)
   end)
 
-  it("links three dungeon skips under one engine-dungeon-skip root", function()
-    local sigs = {}
-    for i = 1, 3 do
-      sigs[i] = { signal = "never-shown-accept", gid = "G" .. i, file = "d.lua", line = i, action = "A",
-        name = "Dungeon " .. i, qid = 900 + i, reason = "engine-dungeon-skip" }
-    end
-    local fs = group.findings({ runlog("Dwarf", "WARRIOR", sigs) })
-    local roots = by_signal(fs, "engine-dungeon-skip")
-    assert.equal(1, #roots)
-    local root = roots[1]
-    assert.equal("high", root.severity)
-    assert.equal("EnableDungeons auto-completes DUNGEON accepts", root.name)
-    assert.equal("WoWPro/WoWPro_Broker.lua", root.file)
-    assert.equal(2588, root.line)
-    assert.equal(3, #root.causes)
-    for _, f in ipairs(by_signal(fs, "never-shown-accept")) do assert.equal(root.id, f.caused_by) end
+  it("links a follow-on to the refusal on its own line before one elsewhere on the quest", function()
+    local r1 = { signal = "accept-refused", gid = "G1", file = "f.lua", line = 10, action = "A", name = "x", qid = 7,
+      ordinal = 1 }
+    local r2 = { signal = "accept-refused", gid = "G1", file = "f.lua", line = 50, action = "A", name = "x", qid = 7,
+      ordinal = 2 }
+    local d2 = dna({ file = "f.lua", line = 50, action = "A", name = "x", qid = 7, ordinal = 2 })
+    local fs = group.findings({ runlog("Dwarf", "WARRIOR", { r1, r2, d2 }) })
+    local on50
+    for _, f in ipairs(by_signal(fs, "accept-refused")) do if f.line == 50 then on50 = f end end
+    assert.equal(on50.id, by_signal(fs, "did-not-advance")[1].caused_by)
+  end)
+
+  -- A leftover-quests signal sits on the turn-in step the run passed (driver.run
+  -- leftovers), so the finding on that step is why the quest is still in the log.
+  it("links a leftover quest to the finding on its turn-in step", function()
+    local d = dna({ file = "f.lua", line = 30, qid = 7 })
+    local left = { signal = "leftover-quests", gid = "G1", file = "f.lua", line = 30, action = "T",
+      name = "Report to Grull", qid = 7 }
+    local fs = group.findings({ runlog("Dwarf", "WARRIOR", { d, left }) })
+    local parent = by_signal(fs, "did-not-advance")[1]
+    assert.equal(parent.id, by_signal(fs, "leftover-quests")[1].caused_by)
+  end)
+
+  -- Skipped dungeon accepts are run info (RunLog.dungeon_skips), never signals, so
+  -- there is no engine-dungeon-skip root and no such signal.
+  it("raises on the retired engine-dungeon-skip signal", function()
+    assert.has_error(function()
+      group.findings({ runlog("Dwarf", "WARRIOR", { { signal = "engine-dungeon-skip" } }) })
+    end)
   end)
 
   it("links a prereq-hidden accept only to the quest after 'not met:'", function()
@@ -163,13 +184,73 @@ describe("group.findings", function()
     end
   end)
 
+  describe("cross-signal root causes", function()
+    local function turnin(qid, line, gid)
+      return dna({ qid = qid, line = line, gid = gid or "G1", action = "T", reason = "incomplete" })
+    end
+    local function use_step(qid, line, gid)
+      return { signal = "hidden-use-step", gid = gid or "G1", file = "f.lua", line = line, action = "U",
+        name = "Use", qid = qid, use = 1, loot = 2 }
+    end
+    local function accept(qid, line, prereq)
+      return { signal = "never-shown-accept", gid = "G1", file = "f.lua", line = line, action = "A",
+        name = "Next", qid = qid, why = "NextStep:PRE&(" .. prereq .. "): A mandatory prereq was not met: " .. prereq }
+    end
+    local function refusal(qid, line)
+      return { signal = "accept-refused", gid = "G1", file = "f.lua", line = line, action = "A",
+        name = "Pre", qid = qid, reason = "prerequisite" }
+    end
+    local function hidden_accept(qid, line)
+      return { signal = "never-shown-accept", gid = "G1", file = "f.lua", line = line, action = "A", name = "Hid", qid = qid }
+    end
+    local function find(fs, sig, qid)
+      for _, f in ipairs(fs) do if f.signal == sig and f.qid == qid then return f end end
+    end
+
+    it("links a never-shown-accept to the incomplete turn-in of its prerequisite", function()
+      local fs = group.findings({ runlog("Dwarf", "WARRIOR", { turnin(95213, 40), accept(95214, 50, 95213) }) })
+      local t, a = find(fs, "did-not-advance", 95213), find(fs, "never-shown-accept", 95214)
+      assert.equal(t.id, a.caused_by)
+    end)
+
+    it("links a never-shown-accept to a hidden-use-step of its prerequisite", function()
+      local fs = group.findings({ runlog("Dwarf", "WARRIOR", { use_step(1016, 40), accept(1017, 50, 1016) }) })
+      local u, a = find(fs, "hidden-use-step", 1016), find(fs, "never-shown-accept", 1017)
+      assert.equal(u.id, a.caused_by)
+    end)
+
+    it("links an incomplete turn-in to a hidden-use-step for the same quest in the same guide", function()
+      local fs = group.findings({ runlog("Dwarf", "WARRIOR", { use_step(1016, 30), turnin(1016, 40) }) })
+      assert.equal(find(fs, "hidden-use-step", 1016).id, find(fs, "did-not-advance", 1016).caused_by)
+      local other = group.findings({ runlog("Dwarf", "WARRIOR", { use_step(1016, 30), turnin(1016, 40, "G2") }) })
+      assert.is_nil(find(other, "did-not-advance", 1016).caused_by)
+    end)
+
+    it("prefers refusal, then hidden-use-step, then incomplete turn-in, then hidden accept", function()
+      local function parent_signal(signals)
+        local fs = group.findings({ runlog("Dwarf", "WARRIOR", signals) })
+        local a = find(fs, "never-shown-accept", 50)
+        local by = {}
+        for _, f in ipairs(fs) do by[f.id] = f end
+        return a.caused_by and by[a.caused_by].signal
+      end
+      local function set(...)
+        local out = { accept(50, 90, 7) }
+        for _, s in ipairs({ ... }) do out[#out + 1] = s end
+        return out
+      end
+      local r, u, t, h = refusal(7, 10), use_step(7, 20), turnin(7, 30), hidden_accept(7, 40)
+      assert.equal("accept-refused", parent_signal(set(r, u, t, h)))
+      assert.equal("hidden-use-step", parent_signal(set(u, t, h)))
+      assert.equal("did-not-advance", parent_signal(set(t, h)))
+      assert.equal("never-shown-accept", parent_signal(set(h)))
+    end)
+  end)
+
   it("raises on an unknown signal", function()
     assert.has_error(function() group.findings({ runlog("Dwarf", "WARRIOR", { { signal = "bogus" } }) }) end)
   end)
 
-  it("makes no root without dungeon skips", function()
-    assert.equal(0, #by_signal(group.findings({ runlog("Dwarf", "WARRIOR", { dna() }) }), "engine-dungeon-skip"))
-  end)
 
   it("maps severities and keeps expected manual completions out of the severity ladder", function()
     local sigs = {

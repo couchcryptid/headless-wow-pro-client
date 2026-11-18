@@ -1,6 +1,6 @@
 -- Every human-facing word in the findings report (design spec §4.7, §4.8).
--- Pure: no I/O. render, JSON and markdown all take their titles, sentences and
--- labels from here so the wording lives in one place.
+-- Pure: no I/O. The findings JSON carries every title, sentence and label from
+-- here, so the wording lives in one place and the HTML page holds none.
 local RACES = require("hwc.world.player").RACES
 
 local text = {}
@@ -43,43 +43,34 @@ text.VERBS = {
   ["*"] = "Trash",         -- WoWPro_Parser.lua:96  ("Trash")
 }
 
-function text.anchor(id)
-  local hex = tostring(id):gsub("^[Ff]%-", "")
-  return "f-" .. hex:lower()
-end
+-- A short plain label per signal slug: filter chips and legends.
+text.SIGNALS = {
+  ["never-shown-accept"] = "Never offered",
+  ["hidden-use-step"] = "Use step never shown",
+  ["accept-refused"] = "Can't be taken",
+  ["log-full"] = "Quest log full",
+  ["orphan-turnin"] = "Turn-in without the quest",
+  ["wrong-race-class"] = "Wrong race or class",
+  ["below-level"] = "Offered below level",
+  ["did-not-advance"] = "Doesn't advance",
+  ["manual-completion"] = "Manual click",
+  ["stuck"] = "Stuck",
+  ["leftover-quests"] = "Left in log",
+  ["lua-error"] = "Lua error",
+  ["missing-global"] = "Missing global",
+}
 
--- Escapes text placed in a markdown heading or link text, so a title such as
--- "Lua error: '<eof>' expected near ']'" can't open a link, emphasis or HTML
--- tag. JSON titles stay plain; only the markdown forms go through this.
-function text.md_text(s)
-  s = tostring(s):gsub("[\\%[%]%*_]", "\\%0")
-  return (s:gsub("<", "&lt;"):gsub(">", "&gt;"))
-end
-
-local function link(title, id) return "[" .. text.md_text(title) .. "](#" .. text.anchor(id) .. ")" end
-
--- Markdown links to several findings shown together (one list or sentence).
--- Links whose titles collide get " (quest N, line L)" so they can be told
--- apart; a missing part is left out. Returns the links in input order.
-function text.links(findings)
-  local seen = {}
-  for _, f in ipairs(findings) do
-    local t = text.title(f)
-    seen[t] = (seen[t] or 0) + 1
-  end
-  local out = {}
-  for i, f in ipairs(findings) do
-    local t = text.title(f)
-    if seen[t] > 1 then
-      local parts = {}
-      if f.qid then parts[#parts + 1] = "quest " .. tostring(f.qid) end
-      if f.line then parts[#parts + 1] = "line " .. tostring(f.line) end
-      if #parts > 0 then t = t .. " (" .. table.concat(parts, ", ") .. ")" end
-    end
-    out[i] = link(t, f.id)
-  end
-  return out
-end
+-- Why a character's run stopped early: every stop reason driver/run.lua passes
+-- to Driver:stop except the normal end, no-next-guide, which has no entry.
+-- spec/findings/text_spec.lua scans run.lua so a new reason can't go unlabelled.
+text.STOPS = {
+  iterations = "Hit its step limit",
+  errors = "Too many addon errors",
+  ["no-step"] = "No step to show",
+  ["max-guides"] = "Reached --max-guides",
+  stuck = "Stuck on a step",
+  ["guide-cycle"] = "Guide loops back on itself",
+}
 
 local function lower_first(s) return (s:gsub("^%u", string.lower)) end
 
@@ -126,7 +117,8 @@ function text.combos(affected, matrix)
 
   -- Detail is dropped only when a group reads "(all N variants)": "all N
   -- characters", "all except ..." and named-variant groups lose nothing.
-  local summary, dropped = nil, false
+  local summary
+  local dropped = false
   if #unaffected == 0 then
     summary = "all " .. #matrix .. " characters"
   elseif #unaffected <= 3 then
@@ -227,25 +219,26 @@ local function article(word)
   return word:match("^[AEIOUaeiou]") and "an " or "a "
 end
 
-local function has_reason(f, reason)
-  for _, r in ipairs(f.reasons or {}) do if r == reason then return true end end
-  return false
-end
-
 local STUCK = {
   ["settle-limit"] = { 'Stuck after %s', "WoWPro kept scheduling work after this step and never settled." },
   ["same-step"] = { 'Stuck on %s', "WoWPro stayed on this step past the watchdog limit." },
   ["max-iterations"] = { "Run hit its step limit", "The run stopped at its step limit before this guide ended." },
   ["no-current-step"] = { "No step to show", "WoWPro had no current step to show, so the run couldn't continue." },
   ["no-guide-loaded"] = { "No guide loaded", "WoWPro loaded no guide, so nothing ran." },
+  -- driver/run.lua after_settle: e.g. Forever 30_41 -> Dungeon_Uld pops back to 30_41's final D step.
+  ["guide-cycle"] = { 'Guide loops back to %s',
+    "Finishing this step sent the run to another guide, and WoWPro then came back to this same step, "
+      .. "which would only send it away again; the run stopped here." },
+  ["load-guide-failed"] = { "Next guide didn't load", "WoWPro didn't load the next guide in the chain, so the run stopped." },
 }
 
 function text.title(f)
   local s = f.signal
   local nm = name_of(f)
   if s == "never-shown-accept" then
-    if has_reason(f, "engine-dungeon-skip") then return "Dungeon quest " .. nm .. " is skipped" end
     return nm .. " is never offered"
+  elseif s == "hidden-use-step" then
+    return nm .. " is never shown"
   elseif s == "accept-refused" then
     local kind = kind_of(f)
     if kind then
@@ -269,50 +262,50 @@ function text.title(f)
     local t = STUCK[(f.reasons or {})[1]]
     if t then return (t[1]:gsub("%%s", function() return nm end)) end
   elseif s == "leftover-quests" then
-    if f.qname and f.qname ~= "" then return "Quest " .. quoted(f.qname) .. " (" .. tostring(f.qid) .. ") is left in the log" end
-    return "Quest " .. tostring(f.qid) .. " is left in the log"
+    local which = "Quest " .. tostring(f.qid)
+    if f.qname and f.qname ~= "" then which = "Quest " .. quoted(f.qname) .. " (" .. tostring(f.qid) .. ")" end
+    if (f.reasons or {})[1] == "not-turned-in" then return which .. " is not turned in within scope" end
+    return which .. " is left in the log"
   elseif s == "lua-error" then
     local first = tostring(f.message or f.name or ""):match("^[^\n]*")
     if #first > 80 then first = first:sub(1, 80) .. "…" end
     return "Lua error: " .. first
-  elseif s == "engine-dungeon-skip" then
-    return "EnableDungeons auto-completes dungeon accepts"
   end
   return tostring(s) .. ": " .. (text.step(f.action, f.name) or f.name or "")
 end
 
--- Returns the sentence as (first sentence, remainder or nil).
--- prereq_of: the finding the never-shown sentence links as its prerequisite.
--- A follow-on already links its parent in "Follows from"; don't link it twice.
-local function prereq_of(f, ctx)
-  if f.signal ~= "never-shown-accept" or has_reason(f, "engine-dungeon-skip") then return nil end
-  local pre = f.why and f.why:match("not met: (%d+)")
-  local hit = pre and ctx and ctx.by_qid and ctx.by_qid[tonumber(pre)]
-  if hit and hit.id ~= f.caused_by then return hit end
-  return nil
-end
-
--- linked: id -> markdown link for findings this sentence links (text.links).
-local function clauses(f, ctx, linked)
+-- Returns the sentence as (first sentence, remainder or nil). Plain text: the
+-- page links a follow-on to its parent from caused_by, not from the sentence.
+local function clauses(f, ctx)
   local s, q = f.signal, tostring(f.qid)
   ctx = ctx or {}
-  linked = linked or {}
   if s == "never-shown-accept" then
-    if has_reason(f, "engine-dungeon-skip") then
-      return "WoWPro marks this dungeon quest done without showing it, because dungeon quests are switched off."
-    end
     local pre = f.why and f.why:match("not met: (%d+)")
     if pre then
-      local ref = "quest " .. pre
-      local hit = prereq_of(f, ctx)
-      if hit then ref = "quest " .. (linked[hit.id] or link(text.title(hit), hit.id)) end
       return "The guide tells you to accept this quest, but WoWPro hides the step because its prerequisite, "
-        .. ref .. ", is never completed."
-    elseif f.why and f.why ~= "" then
+        .. "quest " .. pre .. ", is never completed."
+    end
+    -- The engine's own whys for a hidden step (WoWPro_Broker.lua), said in words.
+    local why = f.why and f.why:gsub("^NextStep%(%):%s*", "")
+    if why == "Optional steps default to skipped." then
+      return "WoWPro skips this accept because the step is optional, and optional steps are skipped by default."
+    elseif why == "Skipping step because player level not high enough." then
+      local when = f.level and ("; the character was level " .. tostring(f.level) .. " when the guide passed it") or ""
+      return "WoWPro hides this accept until the character's level is high enough" .. when .. "."
+    elseif why and why ~= "" then
       return "The guide tells you to accept this quest, but WoWPro never shows the step.",
-        "The engine's reason is in the detail below."
+        "The engine said: " .. quoted(f.why) .. "."
     end
     return "The guide tells you to accept this quest, but WoWPro never shows the step and gave no reason."
+  elseif s == "hidden-use-step" then
+    local ids = {}
+    for id in pairs(f.loot or {}) do ids[#ids + 1] = tonumber(id) end
+    table.sort(ids)
+    for k, id in ipairs(ids) do ids[k] = tostring(id) end
+    local many = #ids > 1
+    return "WoWPro hides this use step until " .. (many and "items " or "item ") .. table.concat(ids, ", ")
+      .. (many and " are" or " is") .. " in bags, and it wasn't while the run passed here, so the client never used item "
+      .. tostring(f.use) .. "."
   elseif s == "accept-refused" then
     local kind = kind_of(f)
     if kind then
@@ -343,38 +336,45 @@ local function clauses(f, ctx, linked)
     end
     return "The guide reaches this accept below the level the quest requires."
   elseif s == "did-not-advance" then
-    return "The simulated action didn't move WoWPro to the next step, so the client clicked it off."
+    -- The reason is the refusal of the client's action (driver.actions); none means it acted.
+    local r = (f.reasons or {})[1]
+    if r == "incomplete" and f.action == "T" then
+      return "The turn-in was refused because quest " .. q .. " wasn't complete, so the client clicked the step off."
+    elseif r == "incomplete" then
+      return "Quest " .. q .. "'s objectives weren't complete after the client did this step, "
+        .. "so the client clicked it off."
+    elseif r == "not-in-log" then
+      return "Quest " .. q .. " wasn't in the log when the guide reached this step, so the client clicked it off."
+    elseif r == "requires-skill" then
+      return "The turn-in needs a profession skill the character doesn't have, so the client clicked the step off."
+    elseif r then
+      return "The step was refused (" .. r .. "), so the client clicked it off."
+    end
+    return "The client did what this step asks, but WoWPro didn't mark it done, so the client clicked it off."
   elseif s == "manual-completion" then
     return "No game event completed this step, so the client clicked it off."
   elseif s == "stuck" then
     local t = STUCK[(f.reasons or {})[1]]
     if t then return t[2] end
   elseif s == "leftover-quests" then
+    if (f.reasons or {})[1] == "not-turned-in" then
+      return "The guide accepts this quest here, but no guide the run played has a turn-in step for it; "
+        .. "it was still in the log when the run ended."
+    end
     local which = q
     if f.qname and f.qname ~= "" then which = quoted(f.qname) .. " (" .. q .. ")" end
-    return "Quest " .. which .. " was still in the log when this guide ended; the run never turned it in."
+    return "The run passed this turn-in step, but quest " .. which .. " was still in the log when the run ended."
   elseif s == "lua-error" then
     return "WoWPro raised an error during the run.", "The message and stack are in the detail below."
-  elseif s == "engine-dungeon-skip" then
-    return "WoWPro's EnableDungeons setting marks dungeon-quest accepts done without showing them; "
-      .. "every finding it explains is a dungeon quest the guide never offers."
   end
   return ""
 end
 
+-- A follow-on keeps only its first clause: its parent's card carries the rest.
 function text.sentence(f, ctx)
+  local first, rest = clauses(f, ctx)
   local parent = f.caused_by and ctx and ctx.by_id and ctx.by_id[f.caused_by]
-  local related = {}
-  if parent then related[#related + 1] = parent end
-  local pre = prereq_of(f, ctx)
-  if pre then related[#related + 1] = pre end
-  local linked = {}
-  for i, l in ipairs(text.links(related)) do linked[related[i].id] = l end
-  local first, rest = clauses(f, ctx, linked)
-  if parent then
-    return "Follows from " .. linked[parent.id] .. ". " .. first
-  end
-  if rest then return first .. " " .. rest end
+  if rest and not parent then return first .. " " .. rest end
   return first
 end
 

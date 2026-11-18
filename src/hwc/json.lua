@@ -3,7 +3,7 @@
 -- dkjson's default key order) differs between runs; sorting restores determinism.
 local dkjson = require("dkjson")
 
-local M = {}
+local M = { null = dkjson.null }
 
 local function collect(v, keys, seen)
   if type(v) ~= "table" or seen[v] then return end

@@ -38,9 +38,21 @@ describe("stubs", function()
   end)
 
   it("reads the addon version from its TOC", function()
-    assert.is_string(env.GetAddOnMetadata("WoWPro", "Version"))
+    -- config has no default addon path: point it at a one-file WoW-Pro folder.
+    local dir = os.tmpname()
+    os.remove(dir)
+    os.execute("mkdir -p '" .. dir .. "/WoWPro'")
+    local f = assert(io.open(dir .. "/WoWPro/WoWPro.toc", "w"))
+    f:write("## Interface: 11500\n## Version: 1.2.3\n")
+    f:close()
+    local cfg = config.load({ addon_path = dir, race = "Dwarf", class = "WARRIOR" })
+    sb = sandbox.new(cfg)
+    env = sb.env
+    stubs.install(sb, cfg)
+    assert.equal("1.2.3", env.GetAddOnMetadata("WoWPro", "Version"))
     assert.equal(env.GetAddOnMetadata("WoWPro", "Version"), env.C_AddOns.GetAddOnMetadata("WoWPro", "Version"))
     assert.is_nil(env.GetAddOnMetadata("WoWPro", "NoSuchField"))
+    os.execute("rm -rf '" .. dir .. "'")
   end)
 
   it("runs C_Timer.After through the virtual clock", function()

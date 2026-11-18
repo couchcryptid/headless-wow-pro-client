@@ -16,9 +16,24 @@ Specs run with busted under LuaJIT:
 ~/.luarocks/bin/busted --tags=slow     # full guide runs, determinism, Red/Green anchors
 ```
 
+The report page has its own suite (Node 24, see
+[Working on the report page](README.md#working-on-the-report-page)):
+
+```sh
+cd web/report && npm ci && npm run typecheck && npm test
+```
+
+Lint the Lua with luacheck (config in `.luacheckrc`):
+
+```sh
+~/.luarocks/bin/luacheck .
+```
+
+Run lint and both suites before committing; a change to the page also needs `npm run build`.
+
 The integration specs need two things, and are pending without them:
 - a WoW-Pro-Guides checkout;
-- the local catalog: `tools/fetch-questie.sh <commit>`.
+- QuestieDB: `hwc init`.
 
 The anchors also need the pinned addon worktrees; see
 [Addon worktrees and Red/Green anchors](README.md#addon-worktrees-and-redgreen-anchors).
@@ -72,6 +87,38 @@ The anchors also need the pinned addon worktrees; see
   worktree. Report the before and after signal counts in the pull request.
 - **Commits:** an imperative subject line (e.g. "Give quest reward items on
   turn-in"), and a body saying why when it isn't obvious.
+- **Pull requests** go into `main` and are squash-merged, so the PR title
+  becomes the one commit on `main`. Write it as a
+  [Conventional Commit](https://www.conventionalcommits.org/) with a
+  capitalised, imperative subject: `fix: Give quest reward items on turn-in`.
+  The `PR title` check enforces this.
+- **Releases are automatic.** Each merge into `main` runs CI again, then
+  [semantic-release](https://semantic-release.gitbook.io/) reads the merged
+  titles and decides the next version:
+
+  | Title type | Release |
+  |---|---|
+  | `fix:` | patch (`v1.2.3` → `v1.2.4`) |
+  | `feat:` | minor (`v1.2.3` → `v1.3.0`) |
+  | `feat!:`, `fix!:`, or a `BREAKING CHANGE:` footer | major (`v1.2.3` → `v2.0.0`) |
+  | `perf:`, `docs:`, `test:`, `refactor:`, `chore:`, `ci:`, `build:`, `style:` | none |
+
+  Only `fix` and `feat` release. Title anything a user of `hwc` should get
+  as `fix:` or `feat:`. Two exceptions follow from how semantic-release
+  reads commits:
+  - A breaking change on **any** type (`refactor!:`, or a
+    `BREAKING CHANGE:` footer in the squash body) releases a major.
+  - A plain `git revert` commit (`Revert "..."` plus "This reverts commit
+    <sha>.") releases a patch. A squash-merged GitHub revert PR doesn't match
+    that pattern and releases nothing; retitle it `fix:` if it should ship.
+
+  A release is a `v`-prefixed git tag plus a GitHub release with generated
+  notes. Config: `.releaserc.json`. Tooling is pinned in `.github/release/`.
+- **CI on pull requests** (`.github/workflows/ci.yml`) runs luacheck, the
+  default busted suite on LuaJIT 2.1, and the report page's typecheck, tests
+  and build. It fails if `src/hwc/findings/report.html` doesn't match a fresh
+  build. Integration specs report pending in CI because there's no WoW-Pro
+  checkout or QuestieDB there; run them locally.
 - **Design decisions** and the reasons for them are recorded under
   `docs/superpowers/`. Read the design spec before larger changes.
 

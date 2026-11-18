@@ -102,8 +102,9 @@ function M.harness_errors(result)
 end
 
 function M.run(cfg)
+  if not cfg.addon_path then error("hwc: no WoW-Pro folder", 0) end
   local info = addon_info.read(cfg.addon_path)
-  if info.commit == "" then
+  if info.git and info.commit == "" then
     error("hwc: no git commit for addon path " .. cfg.addon_path
       .. "; refusing to boot an unidentified checkout", 0)
   end
@@ -112,7 +113,11 @@ function M.run(cfg)
   local env = sb.env
   -- World facts come from the catalog (design spec §6); absent sources are
   -- recorded in catalog.sources, never fatal.
-  sb.world = World.new(cfg, catalog.load(cfg), sb.clock)
+  local cat = catalog.load(cfg)
+  if not cat.sources.questie.present then
+    io.stderr:write("hwc: no QuestieDB installed (", tostring(cat.sources.questie.reason), "); run hwc init\n")
+  end
+  sb.world = World.new(cfg, cat, sb.clock)
   stubs.install(sb, cfg)
   env.math = seeded_math(cfg.seed)
   local function phase(name)
@@ -121,7 +126,8 @@ function M.run(cfg)
   phase("after_stubs")
 
   local result = {
-    addon = { path = cfg.addon_path, branch = info.branch, commit = info.commit, dirty = info.dirty },
+    addon = { path = cfg.addon_path, git = info.git, branch = info.branch, commit = info.commit,
+      dirty = info.dirty, version = info.version },
     files_loaded = 0, files_failed = {}, skipped = {},
     errors = sb.errors, missing_order = sb.missing_order, standin_calls = sb.standin_calls,
     sb = sb, world = sb.world,
