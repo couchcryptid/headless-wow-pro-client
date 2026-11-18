@@ -22,6 +22,11 @@ local QUESTS = {
     questLevel = 5 },
   [1010] = { name = "Fixture Provided Item", startedBy = { { 2001 } }, finishedBy = { { 2002 } }, requiredLevel = 1,
     questLevel = 5, sourceItemId = 5002 },
+  -- reputationReward in QuestieDB order (1382's shape: Magram -500, then Gelkis +100).
+  [1382] = { name = "Fixture Centaur Reward", startedBy = { { 2001 } }, finishedBy = { { 2002 } }, requiredLevel = 1,
+    questLevel = 30, reputationReward = { { 93, -500 }, { 92, 100 } } },
+  [1383] = { name = "Fixture Rep Gate", startedBy = { { 2001 } }, finishedBy = { { 2002 } }, requiredLevel = 1,
+    questLevel = 30, requiredMinRep = { 72, 9000 }, requiredMaxRep = { 92, 3000 } },
 }
 
 local NPCS = {
@@ -56,6 +61,12 @@ local XP = {
   [1006] = { 13, 450 },
 }
 
+-- QuestieDB Enum.factionIDs shape: constant name -> faction id (invented subset).
+local FACTIONS = {
+  STORMWIND = 72, GELKIS_CLAN_CENTAUR = 92, MAGRAM_CLAN_CENTAUR = 93, THE_LEAGUE_OF_ARATHOR = 509,
+  BRAWLGAR_ARENA_SEASON_1 = 1374,
+}
+
 local function record(pool, id)
   local row = pool[id]
   if not row then return nil end
@@ -83,6 +94,12 @@ function Source:drops(id)
   if not d then return nil end
   local out = {}
   for i, r in ipairs(d) do out[i] = { npc = r.npc, rate = r.rate } end
+  return out
+end
+
+function Source:factions()
+  local out = {}
+  for k, v in pairs(FACTIONS) do out[k] = v end
   return out
 end
 

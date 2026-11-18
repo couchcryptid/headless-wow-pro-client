@@ -53,6 +53,15 @@ describe("group.findings", function()
     assert.same({ name = "c", action = "C" }, f.after)
   end)
 
+  it("passes a reputation refusal's gate through to the finding", function()
+    local rep = { faction = 72, name = "Stormwind", bound = "min", value = 9000, points = 3100 }
+    local sig = { signal = "accept-refused", gid = "G1", file = "f", line = 1, action = "A", name = "H", qid = 9,
+      reason = "reputation", confidence = "unverified", rep = rep }
+    local f = group.findings({ runlog("Dwarf", "WARRIOR", { sig }) })[1]
+    assert.same(rep, f.rep)
+    assert.equal("unverified", f.confidence)
+  end)
+
   it("passes the use item and the loot items of a hidden use step through", function()
     local sig = { signal = "hidden-use-step", gid = "G1", file = "f", line = 1, action = "U", name = "Use", qid = 9,
       use = "5456", loot = { [5455] = 1 } }

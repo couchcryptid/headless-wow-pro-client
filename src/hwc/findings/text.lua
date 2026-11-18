@@ -2,6 +2,7 @@
 -- Pure: no I/O. The findings JSON carries every title, sentence and label from
 -- here, so the wording lives in one place and the HTML page holds none.
 local RACES = require("hwc.world.player").RACES
+local reputation = require("hwc.world.reputation")
 
 local text = {}
 
@@ -231,6 +232,22 @@ local function label_for(f, ctx, kind)
   return table.concat(list, "/")
 end
 
+local function is_reputation(f)
+  local r = f.reasons or {}
+  return #r == 1 and r[1] == "reputation"
+end
+
+-- A reputation value in words: its band's name (hwc.world.reputation BANDS), with the
+-- points when the value isn't the band's lower bound ("Neutral (2500)").
+local function standing_words(points, always_points)
+  local reaction, lower = reputation.standing(points)
+  local name = reputation.BANDS[reaction].name
+  if always_points or points ~= lower then return name .. " (" .. tostring(points) .. ")" end
+  return name
+end
+
+local REP_UNMODELLED = "Reputation from kills, item turn-ins and encounters isn't modelled, so a real player may have it."
+
 local function article(word)
   return word:match("^[AEIOUaeiou]") and "an " or "a "
 end
@@ -257,7 +274,10 @@ function text.title(f)
     return nm .. " is never shown"
   elseif s == "accept-refused" then
     local kind = kind_of(f)
-    if kind then
+    if is_reputation(f) then
+      local bound = f.rep and f.rep.bound
+      return nm .. " can't be taken: reputation too " .. (bound == "min" and "low" or bound == "max" and "high" or "low/high")
+    elseif kind then
       local label = label_for(f, nil, kind)
       return nm .. " can't be taken by " .. article(label) .. label
     end
@@ -324,7 +344,15 @@ local function clauses(f, ctx)
       .. tostring(f.use) .. "."
   elseif s == "accept-refused" then
     local kind = kind_of(f)
-    if kind then
+    if is_reputation(f) then
+      local g = f.rep
+      if not (g and g.value and g.points) then
+        return "The quest data needs a reputation standing this character doesn't have. " .. REP_UNMODELLED
+      end
+      local need = (g.bound == "max" and "less than " or "") .. standing_words(g.value)
+      return "The quest data needs " .. need .. " with " .. (g.name or ("Faction " .. tostring(g.faction)))
+        .. "; this character has " .. standing_words(g.points, true) .. ". " .. REP_UNMODELLED
+    elseif kind then
       local label = label_for(f, ctx, kind)
       return "The guide shows this accept, but the quest data says " .. article(label) .. label .. " can't take quest " .. q .. "."
     end

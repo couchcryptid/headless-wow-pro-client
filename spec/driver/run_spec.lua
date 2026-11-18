@@ -491,6 +491,55 @@ describe("driver.run", function()
     assert.same({ "G1:1", "G1:2", "G1:3", "G1:5" }, E.manual)
   end)
 
+  it("turns a reputation refusal into an unverified accept-refused naming the gate", function()
+    local ReputationState = require("hwc.world.reputation_state")
+    -- The catalog calls the quest verified: the refusal's own confidence wins.
+    local world = fx.fake_world({ [9] = { name = "Honored Only", confidence = "verified",
+      min_rep = { faction = 72, value = 9000 } } })
+    world.reputation = ReputationState.new("Dwarf", "Alliance", { [72] = "Stormwind" })
+    local steps = { { action = "A", name = "Honored Only", qids = { 9 },
+      outcome = { kind = "refused", reason = "reputation" } } }
+    local log, E = drive(one_guide(steps), {}, {}, world)
+    local ar = signals(log, "accept-refused")
+    assert.equal(1, #ar)
+    assert.equal("reputation", ar[1].reason)
+    assert.equal("unverified", ar[1].confidence)
+    assert.same({ faction = 72, name = "Stormwind", bound = "min", value = 9000, points = 3100 }, ar[1].rep)
+    assert.same({}, signals(log, "did-not-advance"))
+    assert.same({ "G1:1", "G1:2" }, E.manual)
+  end)
+
+  it("still records a reputation refusal when the world has no reputation state", function()
+    local steps = { { action = "A", name = "Gated", qids = { 9 }, outcome = { kind = "refused", reason = "reputation" } } }
+    local log = drive(one_guide(steps), {}, {}, fx.fake_world({ [9] = { confidence = "verified" } }))
+    local ar = signals(log, "accept-refused")
+    assert.equal(1, #ar)
+    assert.equal("unverified", ar[1].confidence)
+    assert.is_nil(ar[1].rep)
+    assert.is_nil(log.reputation)
+  end)
+
+  -- Review Focus 5: changes in turn-in order, assumptions sorted; identical JSON twice.
+  it("carries the world's reputation changes and assumptions into the log, deterministically", function()
+    local ReputationState = require("hwc.world.reputation_state")
+    local function world()
+      local w = fx.fake_world()
+      local r = ReputationState.new("Gnome", "Alliance", { [500] = "Zeta", [600] = "Alpha", [92] = "Gelkis Clan Centaur" })
+      for _, g in ipairs({ { 7, 600, 10 }, { 7, 500, 20 }, { 8, 92, 100 } }) do r:reward(g[1], g[2], g[3]) end
+      w.reputation = r
+      return w
+    end
+    local json = require("hwc.json")
+    local a = drive(one_guide({ { action = "R", name = "Go" } }), { G1 = completes(1) }, {}, world())
+    local b = drive(one_guide({ { action = "R", name = "Go" } }), { G1 = completes(1) }, {}, world())
+    assert.same({ 7, 7, 8 }, { a.reputation.changes[1].qid, a.reputation.changes[2].qid, a.reputation.changes[3].qid })
+    assert.same({ "starting reputation for Gnome is inferred, not captured",
+      "factions first met at an assumed Neutral 0: Alpha, Zeta",
+      "reward scaling by level is unverified for Forever" }, a.reputation.assumptions)
+    assert.equal(json.encode(a.reputation), json.encode(b.reputation))
+    assert.equal(json.encode(a), json.encode(b))
+  end)
+
   it("flags a shown step whose quest the catalog keeps from this race or class, once", function()
     local world = fx.fake_world({ [8] = { races = { "Human" }, confidence = "unverified" } })
     local steps = { { action = "C", name = "Human only", qids = { 8 } } }

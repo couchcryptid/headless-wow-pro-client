@@ -57,6 +57,8 @@ function QuestLog:refusal(qid, opts)
   for _, p in ipairs(quest.pre_group or {}) do
     if not self.history[p] then return "prerequisite" end
   end
+  -- Last, so level and prerequisites win (design §4.5): QuestieDB requiredMinRep/requiredMaxRep.
+  if w.reputation and w.reputation:gate(quest) then return "reputation" end
   return nil, quest
 end
 
@@ -189,6 +191,14 @@ function QuestLog:turn_in(qid)
   end
   local gained = xp.quest_xp(quest.xp or 0, player.level, quest.level or player.level)
   local levels = player:add_xp(gained)
+  -- Reputation rewards (QuestieDB reputationReward), after XP and in QuestieDB order.
+  -- Each applies at full value: scaling by level is unverified for Forever, and there
+  -- is no racial bonus (ReputationState:gain). No event fires: WoWPro reads reputation
+  -- when it evaluates a REP step and doesn't listen for UPDATE_FACTION (design §4.2).
+  local rep = self.world.reputation
+  if rep then
+    for _, r in ipairs(quest.reputation_reward or {}) do rep:reward(qid, r.faction, r.value) end
+  end
   -- The client takes the collected objective items on turn-in (the id the bags hold).
   local bags = false
   for _, obj in ipairs(quest.objectives or {}) do

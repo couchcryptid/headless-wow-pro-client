@@ -247,6 +247,26 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     assert.equal('"Pre" can\'t be taken yet', t)
     assert.equal("The guide shows this accept, but the quest data says a prerequisite of quest 7 isn't done yet.", s)
   end)
+  it("accept-refused by reputation names the faction and both standings", function()
+    local t, s = both(F({ signal = "accept-refused", name = "Pre", qid = 7, reasons = { "reputation" },
+      rep = { faction = 72, name = "Stormwind", bound = "min", value = 3000, points = 2000 } }))
+    assert.equal('"Pre" can\'t be taken: reputation too low', t)
+    assert.equal("The quest data needs Friendly with Stormwind; this character has Neutral (2000). "
+      .. "Reputation from kills, item turn-ins and encounters isn't modelled, so a real player may have it.", s)
+  end)
+  it("accept-refused by reputation above a max gate, at a value inside a band", function()
+    local t, s = both(F({ signal = "accept-refused", name = "Pre", qid = 7, reasons = { "reputation" },
+      rep = { faction = 92, name = "Gelkis Clan Centaur", bound = "max", value = 2500, points = 2600 } }))
+    assert.equal('"Pre" can\'t be taken: reputation too high', t)
+    assert.equal("The quest data needs less than Neutral (2500) with Gelkis Clan Centaur; this character has Neutral (2600). "
+      .. "Reputation from kills, item turn-ins and encounters isn't modelled, so a real player may have it.", s)
+  end)
+  it("accept-refused by reputation without the gate's details", function()
+    local t, s = both(F({ signal = "accept-refused", name = "Pre", qid = 7, reasons = { "reputation" } }))
+    assert.equal('"Pre" can\'t be taken: reputation too low/high', t)
+    assert.equal("The quest data needs a reputation standing this character doesn't have. "
+      .. "Reputation from kills, item turn-ins and encounters isn't modelled, so a real player may have it.", s)
+  end)
   it("log-full", function()
     local t, s = both(F({ signal = "log-full", name = "Pre", qid = 7 }))
     assert.equal('"Pre" can\'t be taken: quest log full', t)

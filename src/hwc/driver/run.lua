@@ -43,6 +43,7 @@ run.STOP = {
 local REFUSAL_SIGNALS = {
   ["log-full"] = "log-full",
   race = "accept-refused", class = "accept-refused", prerequisite = "accept-refused",
+  reputation = "accept-refused",
 }
 
 local function contains(list, v)
@@ -434,13 +435,30 @@ function Driver:wrong_race_class(cur)
   self:signal("wrong-race-class", cur, { qid = first_qid, reason = first_reason })
 end
 
+-- A reputation refusal is unverified whatever the quest data's confidence: kill,
+-- item turn-in and encounter reputation isn't modelled, so a real player may have the
+-- standing (design 2026-11-18-reputation §4.5, user decision). sig.rep names the
+-- failing gate { faction, name, bound, value, points } when the world can tell.
+function Driver:reputation_refusal(sig)
+  sig.confidence = "unverified"
+  local W = self.W
+  local rep = W.reputation
+  local quest = sig.qid and W.catalog and W.catalog:quest(sig.qid)
+  local gate = rep and quest and rep:gate(quest)
+  if gate then
+    gate.name = rep:name(gate.faction)
+    sig.rep = gate
+  end
+end
+
 -- Sets out.explained when it records a signal that says why the step was refused:
 -- the driver then clicks the step off without a did-not-advance as well.
 function Driver:refusals(cur, out)
   if out.kind == "refused" then
     local r = out.reason
     if REFUSAL_SIGNALS[r] then
-      self:signal(REFUSAL_SIGNALS[r], cur, { qid = out.qid, reason = r, outcome = out.kind })
+      local sig = self:signal(REFUSAL_SIGNALS[r], cur, { qid = out.qid, reason = r, outcome = out.kind })
+      if r == "reputation" then self:reputation_refusal(sig) end
       out.explained = true
     elseif r == "not-in-log" and (cur.action == "T" or cur.action == "C") then
       -- Every listed id the character never had (Review Focus 5).
@@ -647,6 +665,10 @@ function Driver:finish()
     end
   end
   log.stop = { reason = self.stopped, level = W.player.level, gid = self.gid }
+  -- Changes are in turn-in order and assumptions are sorted (ReputationState), so the
+  -- encoded log is the same on every run.
+  local rep = W.reputation
+  if rep then log.reputation = { changes = rep.changes, assumptions = rep:assumptions() } end
 end
 
 -- ctx = { engine, world, cfg, errors = sb.errors, missing_order = sb.missing_order,

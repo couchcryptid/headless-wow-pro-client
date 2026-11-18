@@ -108,6 +108,15 @@ function Source:drops(item_id)
   return #out > 0 and out or nil
 end
 
+-- QuestieDB's faction constants (src/corrections/enum/factions.lua, loaded into
+-- lib.Enum.factionIDs): constant name -> faction id, as a copy; empty when absent.
+function Source:factions()
+  local out = {}
+  local enum = self._lib.Enum
+  for k, v in pairs(type(enum) == "table" and type(enum.factionIDs) == "table" and enum.factionIDs or {}) do out[k] = v end
+  return out
+end
+
 function Source:item_ids()
   local ids = {}
   for i, id in ipairs(self._lib.Item.GetAllIds()) do ids[i] = id end

@@ -23,6 +23,15 @@ local QUESTS = {
     objectives = { { kind = "npc", ids = { 1 }, count = 2, text = "Wolf slain" }, { kind = "object", ids = { 2 }, count = 1, text = "Chest" } },
     pre_single = {}, pre_group = {} },
 }
+-- Reputation gates and rewards (faction ids: 72 Stormwind, 92 Gelkis, 93 Magram).
+QUESTS[189] = { id = 189, name = "Stormwind Honored", level = 1, required_level = 1, xp = 10, objectives = {},
+  min_rep = { faction = 72, value = 9000 }, pre_single = {}, pre_group = {} }
+QUESTS[190] = { id = 190, name = "Not Friendly With Gelkis", level = 1, required_level = 1, xp = 10, objectives = {},
+  max_rep = { faction = 92, value = 3000 }, pre_single = {}, pre_group = {} }
+QUESTS[191] = { id = 191, name = "Centaur Reward", level = 1, required_level = 1, xp = 10, objectives = {},
+  reputation_reward = { { faction = 92, value = 100 }, { faction = 93, value = -500 } }, pre_single = {}, pre_group = {} }
+QUESTS[192] = { id = 192, name = "Level And Rep", level = 4, required_level = 4, xp = 10, objectives = {},
+  min_rep = { faction = 72, value = 9000 }, pre_single = {}, pre_group = { 179 } }
 for i = 1, 45 do
   QUESTS[1000 + i] = { id = 1000 + i, name = "Filler " .. i, level = 1, required_level = 1, xp = 0, objectives = {}, pre_single = {}, pre_group = {} }
 end
@@ -254,5 +263,47 @@ describe("QuestLog", function()
     assert.is_true(ok)
     assert.is_true(bags)
     assert.equal(1, w.player:item_count(2686))
+  end)
+
+  describe("reputation", function()
+    it("refuses a min_rep quest below the value, and accepts it once reached", function()
+      local _, _, w = setup()
+      assert.equal("reputation", w.log:refusal(189)) -- Stormwind 3100 < 9000
+      assert.same({ false, "reputation" }, { w.log:accept(189) })
+      w.reputation:gain(72, 6000)
+      assert.is_true(w.log:accept(189))
+    end)
+
+    it("accepts a max_rep quest for an unmet faction below the value, and refuses it at the value", function()
+      local _, _, w = setup()
+      assert.is_nil(w.log:refusal(190)) -- Gelkis unmet: compared at its met-at 2000
+      w.reputation:gain(92, 1000)
+      assert.equal("reputation", w.log:refusal(190))
+    end)
+
+    it("checks level and prerequisites before reputation", function()
+      local _, _, w = setup()
+      assert.equal("below-level", w.log:refusal(192))
+      assert.equal("prerequisite", w.log:refusal(192, { ignore_level = true }))
+    end)
+
+    it("applies the quest's reputation rewards on turn-in and records them with the qid", function()
+      local _, _, w = setup()
+      assert.is_true(w.log:accept(191))
+      assert.is_true((w.log:turn_in(191)))
+      assert.equal(2100, w.reputation:points(92))
+      assert.equal(1500, w.reputation:points(93))
+      assert.same({
+        { qid = 191, faction = 92, value = 100, total = 2100, assumed_start = false },
+        { qid = 191, faction = 93, value = -500, total = 1500, assumed_start = false },
+      }, w.reputation.changes)
+    end)
+
+    it("gains nothing from a refused turn-in", function()
+      local _, _, w = setup()
+      w.log:accept(181) -- needs First Aid
+      w.log:turn_in(181)
+      assert.same({}, w.reputation.changes)
+    end)
   end)
 end)
