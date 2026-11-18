@@ -69,6 +69,18 @@ export interface GuideEntry {
   flags: GuideFlag[];
 }
 
+/** One catalog source's provenance, as the run recorded it. */
+export interface CatalogSource {
+  present?: boolean;
+  reason?: string;
+  path?: string;
+  tag?: string;
+  build?: string;
+  commit?: string;
+  /** One hash, or one per file (questie). */
+  sha256?: string | Record<string, string>;
+}
+
 export interface Header {
   addon: {
     branch: string | null;
@@ -79,6 +91,8 @@ export interface Header {
     version: string;
   };
   client: { commit: string; dirty: boolean };
+  /** Absent when the run recorded no catalog sources. */
+  catalog?: Record<string, CatalogSource>;
   date: string;
   gaps: string[];
   guides: GuideEntry[];
