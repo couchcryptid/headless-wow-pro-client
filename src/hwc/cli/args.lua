@@ -6,8 +6,14 @@ local args = {}
 -- non-option word is the command; rest is everything else, in order.
 function args.globals(argv)
   local g = { rest = {}, level = "normal" }
+  local ended = false
   for _, a in ipairs(argv) do
-    if a == "-h" or a == "--help" then
+    if ended then
+      g.rest[#g.rest + 1] = a
+    elseif a == "--" then
+      ended = true
+      g.rest[#g.rest + 1] = a
+    elseif a == "-h" or a == "--help" then
       g.help = true
     elseif a == "--version" then
       g.version = true
