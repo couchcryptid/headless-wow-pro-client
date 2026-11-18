@@ -268,6 +268,9 @@ local function standing_words(points, always_points)
   return name
 end
 
+-- What became of a missing prerequisite by the end of the run (Driver:missing_outcomes).
+local OUTCOME_END = { ["never-accepted"] = "which is never accepted", ["never-completed"] = "which is never completed",
+  ["completed-later"] = "which isn't done until later in the run" }
 local REP_UNMODELLED = "Reputation from kills, item turn-ins and encounters isn't modelled, so a real player may have it."
 
 local function article(word)
@@ -390,6 +393,29 @@ local function clauses(f, ctx)
       for i, id in ipairs(f.missing) do
         local nm = names[tostring(id)]
         list[i] = text.quest_ref(id, nm, (f.missing_chain or {})[tostring(id)])
+      end
+      local oc = f.missing_outcome
+      local all = oc ~= nil
+      for _, id in ipairs(f.missing) do
+        if not (oc and oc[tostring(id)] and OUTCOME_END[oc[tostring(id)]]) then all = false end
+      end
+      if all then
+        -- Every id has an outcome: say what became of each. Any-of sharing one outcome collapses.
+        if f.missing_any and #list > 1 then
+          local first = oc[tostring(f.missing[1])]
+          local same = (first == "never-accepted" or first == "never-completed")
+          for _, id in ipairs(f.missing) do
+            if oc[tostring(id)] ~= first then same = false end
+          end
+          if same then
+            return "The guide shows this accept, but the quest data says it needs one of " .. table.concat(list, " or ")
+              .. ", none of which is ever " .. (first == "never-accepted" and "accepted" or "completed") .. "."
+          end
+        end
+        local parts = {}
+        for i, id in ipairs(f.missing) do parts[i] = list[i] .. ", " .. OUTCOME_END[oc[tostring(id)]] end
+        return "The guide shows this accept, but the quest data says it needs "
+          .. table.concat(parts, f.missing_any and ", or " or ", and ") .. "."
       end
       if #list == 1 then
         return "The guide shows this accept, but the quest data says it needs " .. list[1] .. ", which isn't done yet."

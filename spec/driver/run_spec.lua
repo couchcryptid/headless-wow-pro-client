@@ -825,6 +825,36 @@ describe("driver.run", function()
     assert.is_true(ar[1].missing_any)
   end)
 
+  describe("missing_outcome on a prerequisite accept-refused", function()
+    local function refused() return { action = "A", name = "Tharil'zun", qids = { 19 },
+      outcome = { kind = "refused", reason = "prerequisite", missing = { 98387 } } } end
+    local function after(records) return { action = "A", name = "Later", qids = { 5 }, outcome = { kind = "acted", records = records } } end
+    local function outcome_of(steps)
+      local log = drive(one_guide(steps), {}, {}, fx.fake_world({ [98387] = { name = "Blackrock Blockade" } }))
+      return signals(log, "accept-refused")[1]
+    end
+    it("never-accepted when the quest never appears", function()
+      assert.same({ ["98387"] = "never-accepted" }, outcome_of({ refused() }).missing_outcome)
+    end)
+    it("never-completed when it is accepted later but not turned in", function()
+      local sig = outcome_of({ refused(), after({ { kind = "quest_accept", id = 98387 } }) })
+      assert.same({ ["98387"] = "never-completed" }, sig.missing_outcome)
+    end)
+    it("never-completed when accepted, abandoned and re-accepted without a turn-in", function()
+      local sig = outcome_of({ refused(), after({ { kind = "quest_accept", id = 98387 }, { kind = "quest_accept", id = 98387 } }) })
+      assert.same({ ["98387"] = "never-completed" }, sig.missing_outcome)
+    end)
+    it("completed-later when turned in after the refusal", function()
+      local sig = outcome_of({ refused(), after({ { kind = "quest_accept", id = 98387 }, { kind = "quest_turn_in", id = 98387 } }) })
+      assert.same({ ["98387"] = "completed-later" }, sig.missing_outcome)
+    end)
+    it("drops a quest completed before the refusal, without crashing", function()
+      local before = after({ { kind = "quest_accept", id = 98387 }, { kind = "quest_turn_in", id = 98387 } })
+      local sig = outcome_of({ before, refused() })
+      assert.is_nil(sig.missing_outcome)
+    end)
+  end)
+
   it("carries the chain part of a missing prerequisite", function()
     local steps = {
       { action = "A", name = "The Reports", qids = { 291 },

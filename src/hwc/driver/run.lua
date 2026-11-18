@@ -530,7 +530,13 @@ function Driver:refusals(cur, out)
     local r = out.reason
     if REFUSAL_SIGNALS[r] then
       local sig = self:signal(REFUSAL_SIGNALS[r], cur, { qid = out.qid, reason = r, outcome = out.kind })
-      if r == "prerequisite" and out.missing then self:missing_prerequisites(sig, out.missing, out.missing_any) end
+      if r == "prerequisite" and out.missing then
+        self:missing_prerequisites(sig, out.missing, out.missing_any)
+        -- Where in the world's event stream the refusal happened, so finish can tell a quest
+        -- done later from one done earlier. Kept off the signal: it isn't part of the log.
+        self.refusal_marks = self.refusal_marks or {}
+        self.refusal_marks[#self.refusal_marks + 1] = { sig = sig, at = #(self.W.events or {}) }
+      end
       if r == "reputation" then self:reputation_refusal(sig) end
       out.explained = true
     elseif r == "not-in-log" and (cur.action == "T" or cur.action == "C") then
@@ -809,8 +815,37 @@ function Driver:after_settle(acted)
   self:refresh_why()
 end
 
+-- What became of each missing prerequisite of a prerequisite refusal, from the run's own
+-- quest events: never-accepted, never-completed (accepted, any number of times, never
+-- turned in) or completed-later. A quest turned in before the refusal can't be missing,
+-- so it is left out rather than claimed.
+function Driver:missing_outcomes()
+  local events = self.W.events or {}
+  for _, mark in ipairs(self.refusal_marks or {}) do
+    local outcome = {}
+    for _, id in ipairs(mark.sig.missing) do
+      local accepted, before, later = false, false, false
+      for i, e in ipairs(events) do
+        if e.id == id then
+          if e.kind == "quest_accept" then accepted = true
+          elseif e.kind == "quest_turn_in" or e.kind == "abstracted-turnin" then
+            if i > mark.at then later = true else before = true end
+          end
+        end
+      end
+      if later then outcome[tostring(id)] = "completed-later"
+      elseif not before then
+        outcome[tostring(id)] = accepted and "never-completed" or "never-accepted"
+      end
+    end
+    if next(outcome) then mark.sig.missing_outcome = outcome end
+  end
+  self.refusal_marks = nil
+end
+
 function Driver:finish()
   local log, W = self.log, self.W
+  self:missing_outcomes()
   self:close(self.gid, self.stopped == "no-next-guide")
   self:leftovers()
   for _, e in ipairs(self.ctx.errors or {}) do

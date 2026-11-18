@@ -144,6 +144,8 @@ local function scripted_engine(guides, script, start, world)
     local out = { kind = o.kind, reason = o.reason, qid = (step.qids or {})[1], events = {}, levels = 0,
       grind = o.grind, elite = false, abstracted_turnin = o.abstracted_turnin, missing = o.missing,
       missing_any = o.missing_any, arrivals = o.arrivals }
+    -- o.records: world events this step's action leaves behind (quest_accept / quest_turn_in).
+    for _, rec in ipairs(o.records or {}) do ctx.world.events[#ctx.world.events + 1] = rec end
     out.settle = E:settle()
     return out
   end
@@ -153,7 +155,7 @@ end
 -- Minimal world for the driver loop: player, a quest log of qids and a catalog table.
 local function fake_world(quests, log_qids)
   -- The real Player:add_xp, so a level raise is recorded as XP (w.xp_records).
-  local w = { xp_records = {} }
+  local w = { xp_records = {}, events = {} }
   w.player = setmetatable({ level = 1, xp = 0, race_token = "Dwarf", class_token = "WARRIOR", skills = {},
     _record = function(kind, f) if kind == "xp" then w.xp_records[#w.xp_records + 1] = f end end },
     require("hwc.world.player"))

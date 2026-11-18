@@ -77,7 +77,10 @@ local function new_finding(s, key)
     action = s.action, name = s.name, qid = s.qid, why = s.why, before = s.before, after = s.after,
     qname = s.qname, chain = s.chain, pre_qname = s.pre_qname, pre_chain = s.pre_chain, missing_chain = s.missing_chain, grind = s.grind, use = s.use, loot = s.loot, level = s.level, log = s.log, confidence = s.confidence, rep = s.rep,
     faction = s.faction, faction_name = s.faction_name, tag_faction = s.tag_faction,
-    missing = s.missing, missing_names = s.missing_names, missing_any = s.missing_any, combos = {}, causes = {}, reasons = {},
+    missing = s.missing, missing_names = s.missing_names, missing_any = s.missing_any,
+    -- Like missing: new_finding copies the first combo's signal, so a group spanning characters
+    -- reports that combo's outcomes.
+    missing_outcome = s.missing_outcome, combos = {}, causes = {}, reasons = {},
   }
   if s.signal == "lua-error" then
     f.name, f.message, f.stack = s.message, s.message, s.stack

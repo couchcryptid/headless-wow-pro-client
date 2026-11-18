@@ -64,6 +64,14 @@ describe("group.findings", function()
     assert.same({ ["1029"] = { part = 8, total = 11 } }, f.missing_chain)
   end)
 
+  it("carries missing_outcome from the first combo's signal", function()
+    local function sig(o) return { signal = "accept-refused", gid = "G1", file = "f", line = 1, action = "A", name = "T", qid = 19,
+      reason = "prerequisite", missing = { 98387 }, missing_outcome = o } end
+    local f = group.findings({ runlog("Dwarf", "WARRIOR", { sig({ ["98387"] = "never-accepted" }) }),
+      runlog("Human", "MAGE", { sig({ ["98387"] = "never-completed" }) }) })[1]
+    assert.same({ ["98387"] = "never-accepted" }, f.missing_outcome)
+  end)
+
   it("passes a reputation refusal's gate through to the finding", function()
     local rep = { faction = 72, name = "Stormwind", bound = "min", value = 9000, points = 3100 }
     local sig = { signal = "accept-refused", gid = "G1", file = "f", line = 1, action = "A", name = "H", qid = 9,
