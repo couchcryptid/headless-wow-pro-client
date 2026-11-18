@@ -116,8 +116,9 @@ that writes one line to stderr and exits 2:
 - `hwc matrix`: "hwc matrix was removed; hwc run plays one character — see hwc help run"
 - `hwc sync questie`: "hwc sync questie is now hwc update"
 
-The stubs are declared like any command but hidden from help. A later release
-deletes them.
+The stubs are declared like any command but hidden from help and from "did you
+mean". A stub takes any arguments without parsing them, so it always prints its
+one line. A later release deletes them.
 
 This is a breaking change: the subject of the PR's squash commit is `feat!: …`,
 so semantic-release cuts a major version.
@@ -144,8 +145,9 @@ so semantic-release cuts a major version.
     - `--race needs a value`
     - `missing --class`
     - `hwc diff needs 2 files, got 3`
-    - `unknown command: hwc bot (did you mean boot?)`
-  - The "did you mean" suggestion is offered only for an edit distance of 2 or less.
+    - `unknown command: hwc rnu (did you mean run?)`
+  - The "did you mean" suggestion is offered only for an edit distance of 2 or
+    less, and only among visible commands; the hidden stubs never appear in it.
   - Output: one line `hwc: <message>`, then `see hwc <command> --help`
     (`see hwc --help` when there is no command).
 - **Choices:**
@@ -233,6 +235,16 @@ The primary/secondary split moves into that module as data:
 - More than two primaries is an error: `--professions alchemy+herbalism+mining
   has 3 primary professions; a character can know 2`.
 - `none` combined with another name is an error.
+
+**One module owns professions** (my call): `src/hwc/world/professions.lua`, with:
+- `parse(text) -> list | nil, err`
+- `token(list) -> "herbalism+skinning" | "none"`
+- `label(list) -> "Herbalism, Skinning" | nil`
+- `stem(list) -> "herbalism-skinning" | nil`
+
+The CLI, `group.lua` (which builds the combo string from `log.professions`
+via `token`), `text.character` and the output stem all call it. Only primaries
+count toward the cap of two; any number of secondaries is fine.
 
 **Canonical form.** Names are sorted by their canonical spelling, so
 `skinning+herbalism` and `herbalism+skinning` are the same character, with the
@@ -337,7 +349,9 @@ Same checks as today, plus:
   it and never prints. Events:
   - `{ kind = "guide", gid, file, index }` when a guide opens (`Driver:open`)
   - `{ kind = "jump", from, to, passed }` on a jump
-  - `{ kind = "level", level }` on a level up
+  - `{ kind = "level", level }` on a level up. The driver compares
+    `player.level` after each step it plays and after each jump, and emits on a
+    change (my call: keeps `world/` untouched).
 - **The CLI renders** them as:
   `Dwarf Warrior · 12_20_Eastern_Kingdom (guide 2) · level 14 · 0:06`.
   - Elapsed time is wall clock from `os.time` (seconds), in the CLI only. The
@@ -345,15 +359,22 @@ Same checks as today, plus:
   - The guide total isn't known up front (the chain is followed as it goes),
     so no total or ETA is shown.
 - **`--verbose`** adds a `:detail` line for each jump (`jumped over GID…
-  (excluded)`) and the catalog source paths at the start.
+  (excluded)`), the catalog source paths at the start, and at the end the run's
+  total wall time and per-guide wall times (these are the only "timings").
 
 **`init` / `update` downloads:**
 - **On a terminal, not quiet:** curl runs with `-#` and its stderr goes to the
   terminal, giving its own progress bar.
 - **Otherwise:** curl stays silent.
-- **On failure,** curl's stderr is captured and its last line is put in the
-  error, e.g. `hwc: download … failed: curl: (6) Could not resolve host:
-  github.com`. Today the message is only "curl exit 6".
+- **On failure, off a terminal (or quiet):** curl's stderr is captured and its
+  last line is put in the error, e.g. `hwc: download … failed: curl: (6) Could
+  not resolve host: github.com`. Today the message is only "curl exit 6".
+- **On failure, on a terminal:** curl has already printed its own message, so
+  the error reads `hwc: download … failed (curl exit 6; see curl's message
+  above)` (my call: no tee to a temp file).
+- `http.lua`'s `sh()` gains a stderr mode: `"discard"` (today's behaviour, kept
+  for `has_tool`, `sha256`, `unzip`), `"capture"` or `"terminal"`.
+  `install.lua` picks the mode from the `ui` it's given.
 - The `http.lua` injection points stay, so unit specs never touch the network.
 
 ### 5.2 `run` summary (stdout)
@@ -374,9 +395,14 @@ hwc: wrote …/2026-11-18-Dwarf-WARRIOR-herbalism-skinning-3f9a2c17.html and …
   left out.
 - **`stopped early`:** only when `header.stop` is set, with the reason labelled
   by `text.STOPS`.
-- **`harness`:** only when harness findings exist.
+- **`harness`:** only when harness findings exist. The counts are taken from
+  `doc.findings` with `report.is_harness`, split into `lua-error` and
+  `missing-global`, because `summary.*` leaves harness findings out.
 - **Warnings** that today live only in the report header (`header.warnings`)
   are printed through `ui:warn`.
+- **The `wrote` line** drops its "(N characters)" suffix, since there's always
+  one: `hwc: wrote <stem>.html and <stem>.json`. `cli.stem_name` keeps its
+  signature.
 - **The `wrote` line** stays on stdout even with `--quiet`. It's the result:
   the path a contributor hands to `hwc diff`.
 
@@ -412,8 +438,10 @@ Given both, the last one wins. Exit codes are unchanged by level.
   - `boot`, `matrix`, `--variant` and `sync questie` sections are rewritten for
     `doctor`, `run` plus a loop, `--professions` and `update`.
   - Add a "Covering professions" list of combinations that together reach every
-    Camping 101 quest. Today's six pairs plus the three secondaries, written as
-    `--professions` values, are a correct starting list.
+    Camping 101 quest. The list is today's variants, which between them reach every
+    Camping 101 quest: `alchemy+herbalism`, `blacksmithing+mining`,
+    `leatherworking+skinning`, `engineering+enchanting`, `tailoring`,
+    `cooking+first-aid+fishing`.
 
 ## 7. Specs affected
 
