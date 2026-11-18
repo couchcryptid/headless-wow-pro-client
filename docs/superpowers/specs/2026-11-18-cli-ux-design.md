@@ -31,8 +31,8 @@ Looking again at what each command is for, the user decided:
 - **`boot` goes away.** It was the first plan's milestone, not a contributor use case.
 - **Variant becomes `--professions`,** naming the professions themselves, so
   any pair can be played (herbalism,skinning; herbalism,mining;
-  tailoring,enchanting), not just the five fixed pairs. First Aid and Fishing are
-  always known, and Cooking is learned from Camping 101: Cooking.
+  tailoring,enchanting), not just the five fixed pairs. Cooking is learned from
+  Camping 101: Cooking, as today.
 
 **Success:**
 - A contributor who has never used `hwc` can find out, from the tool alone:
@@ -183,9 +183,9 @@ Run it from a WoW-Pro folder (the one holding WoWPro/WoWPro.toc) or below it.
 Options:
   --race RACE           Player race (required). See hwc list races.
   --class CLASS         Player class (required). See hwc list classes RACE.
-  --professions LIST    Primary professions, comma-separated, at most two (default: none),
-                        e.g. herbalism,skinning. First Aid and Fishing are always known;
-                        Cooking is learned from Camping 101: Cooking. See hwc list professions.
+  --professions LIST    Professions known from the start, comma-separated (default: none),
+                        e.g. herbalism,skinning,first-aid. At most two primary. Cooking is
+                        learned from Camping 101: Cooking. See hwc list professions.
   --include PATTERN     ...
 ```
 
@@ -219,49 +219,41 @@ Options:
 ### 4.4 Professions
 
 **Syntax.** `--professions herbalism,alchemy`: a comma list, like `--race` was
-for `matrix`. It names the character's **primary** professions:
-- Case-insensitive.
-- Leaving it out means no primary professions.
+for `matrix`, naming what the character knows from the start:
+- Case-insensitive; a hyphen stands for a space (`first-aid`).
+- Leaving it out means no professions, which is today's `baseline` character.
 
-**Secondary professions (user decisions):**
-- **First Aid and Fishing** are known from the start by every character, the
-  way every real character has them. They are never named on the command line
-  and never appear in labels or file names.
-- **Cooking** is never known at the start. It is learned through Camping 101:
-  Cooking (QID 96629), when the guide's `t` step sends the character to the
-  trainer. That's today's behaviour (`actions.lua`, `completed_by_training`),
-  confirmed in game on 2026-11-11. It keeps the Cooking-quest path, which #3535
-  depends on, exercised on every run.
+**Names.** The keys of `src/hwc/world/profession_spells.lua`, except Cooking:
+- Primary, at most two: Alchemy, Blacksmithing, Enchanting, Engineering,
+  Herbalism, Leatherworking, Mining, Skinning, Tailoring.
+- Secondary, uncapped: First Aid, Fishing.
+- **Cooking can't be named.** It's learned through Camping 101: Cooking (QID
+  96629), when the guide's `t` step sends the character to the trainer.
+  That's today's behaviour (`actions.lua`, `completed_by_training`), confirmed
+  in game on 2026-11-11, and #3535 depends on it.
 
-**Names.** `--professions` takes the primary keys of
-`src/hwc/world/profession_spells.lua`: Alchemy, Blacksmithing, Enchanting,
-Engineering, Herbalism, Leatherworking, Mining, Skinning, Tailoring. The
-primary/secondary split moves into that module as data,
+The primary/secondary split moves into that module as data,
 `{ spell = 2259, primary = true }` per name. Its one other reader
 (`player.lua`) changes with it.
 
 **Validation** (usage errors, exit 2):
 - An unknown name lists the valid ones.
 - A repeated name is an error, and so is an empty item (`herbalism,`).
-- More than two is an error: `--professions alchemy,herbalism,mining names 3
-  professions; a character can know 2`.
-- A secondary is an error with a hint (my call: an error is clearer than
-  silently ignoring it):
-  - `first aid is always known; --professions takes primary professions`
-    (likewise `fishing`)
-  - `cooking is learned from Camping 101: Cooking; --professions takes primary
-    professions`
+- More than two primaries is an error: `--professions alchemy,herbalism,mining
+  has 3 primary professions; a character can know 2`.
+- `cooking` is an error with a hint: `cooking is learned from Camping 101:
+  Cooking; leave it out of --professions`.
 
 **One module owns professions** (my call): `src/hwc/world/professions.lua`, with:
-- `parse(text) -> primaries | nil, err`: sorted canonical primary names; `""` is not accepted, a missing flag is `{}`
-- `known(primaries) -> list`: the primaries plus First Aid and Fishing; what the character starts with (never Cooking)
-- `token(primaries) -> "alchemy,herbalism" | "none"`
-- `label(primaries) -> "Alchemy, Herbalism" | nil`
-- `stem(primaries) -> "alchemy-herbalism" | nil`
+- `parse(text) -> list | nil, err`: sorted canonical names; `""` is not accepted, and a missing flag is `{}`
+- `token(list) -> "first-aid,herbalism" | "none"`
+- `label(list) -> "First Aid, Herbalism" | nil`
+- `stem(list) -> "first-aid-herbalism" | nil`
+- `skills(list)`: the `{ name, rank = 1, max = 75 }` entries the character starts with
 
-The CLI, `group.lua` (which builds the combo string from the primaries in
-`log.character.professions` via `token`), `text.character` and the output stem
-all call it.
+The CLI, `group.lua` (which builds the combo string from
+`log.character.professions` via `token`, leaving out Cooking learned mid-run),
+`text.character` and the output stem all call it.
 
 **Canonical form.** Names are sorted, so `herbalism,alchemy` and
 `alchemy,herbalism` are the same character, with the same file name and the
@@ -272,18 +264,23 @@ do today (`matrix.professions`).
 - The combo string inside findings stays one whitespace-free last token, which
   `text.lua`'s `split_combo` relies on:
   - `"Dwarf WARRIOR alchemy,herbalism"`
-  - `"Dwarf WARRIOR none"` for no primaries
+  - `"Dwarf WARRIOR none"` for no professions
 - `text.character` renders it as:
   - `Dwarf Warrior (Alchemy, Herbalism)`
   - `Dwarf Warrior` for none
 - The run log's `variant` field goes away. `character.professions` (already in
-  the log) lists what the character started with, First Aid and Fishing included.
+  the log) lists what the character started with.
 
-**Consequence:** a character with no professions at all can no longer be
-played. Every run now sees the First Aid and Fishing steps (their Camping 101
-accepts included), so findings change once after upgrading, even for `none`.
-The slow #3535 anchor must still show its Red result on `main`; Task-level
-verification runs it.
+**Unchanged simulation:** what the character knows, and when, is exactly today's
+behaviour for the same professions. Only the way they're chosen changes.
+
+**Follow-up (separate project, user decision 2026-11-18):**
+- Train a profession when the guide's own trainer step for it is played
+  (`= First Aid`, `= Cooking`).
+- Report a finding when a profession-gated accept was permanently skipped
+  (`WoWPro_Broker.lua:2789-2795`) earlier in a guide for a profession the
+  character learns later in that guide. Example: `A Camping 101: First Aid` at
+  `01_12_Dun_Morogh.lua:120` versus `= First Aid` at :138.
 
 **Unchanged:** `header.matrix.combos` keeps its name and shape (findings JSON
 format 2), so the Preact report page needs no rebuild. It already renders
@@ -301,10 +298,10 @@ Re-running `main` once after upgrading fixes it.
 
 | Form | Output (stdout) |
 |---|---|
-| `hwc list` | A table: each race, its faction and its classes; then the primary professions and a line saying First Aid and Fishing are always known and Cooking is learned from Camping 101: Cooking |
+| `hwc list` | A table: each race, its faction and its classes; then the professions, primary and secondary, and a line saying Cooking is learned from Camping 101: Cooking |
 | `hwc list races` | One race token per line |
 | `hwc list classes RACE` | One class token per line |
-| `hwc list professions` | One primary profession per line, lowercase |
+| `hwc list professions` | One profession per line, CLI spelling (`first-aid`); primaries first |
 
 The one-per-line forms exist for shell loops. The README shows a sweep:
 
@@ -462,8 +459,8 @@ Given both, the last one wins. Exit codes are unchanged by level.
   - Add a "Covering professions" list of combinations that together reach every
     Camping 101 quest. The list is today's variants, which between them reach every
     Camping 101 quest: `alchemy,herbalism`, `blacksmithing,mining`,
-    `leatherworking,skinning`, `enchanting,engineering`, `tailoring`. The
-    secondaries need no entry: First Aid and Fishing are always known, and Cooking is learned in the guide.
+    `leatherworking,skinning`, `enchanting,engineering`, `tailoring`,
+    `first-aid,fishing`. Cooking needs no entry, since every run learns it in the guide.
 
 ## 7. Specs affected
 
@@ -475,7 +472,7 @@ Given both, the last one wins. Exit codes are unchanged by level.
 - `spec/integration/boot_spec.lua` keeps testing `boot.run` (the module stays,
   since `run` uses it).
 - `spec/findings/*` and `spec/fixtures/findings/*.json`: the combo tokens
-  `baseline`/`secondary` → `none`, and `alch-herb` … → comma tokens (`alchemy,herbalism`).
+  `baseline` → `none`, `secondary` → `first-aid,fishing`, and `alch-herb` … → comma tokens (`alchemy,herbalism`).
 - `web/report` fixtures are those same JSON files. `npm test` must still pass,
   with `report.html` rebuilt only if a fixture change makes its test demand it.
 - The slow anchors (`spec/integration/anchors_spec.lua`) and the determinism spec
