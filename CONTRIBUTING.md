@@ -16,6 +16,15 @@ Specs run with busted under LuaJIT:
 ~/.luarocks/bin/busted --tags=slow     # full guide runs, determinism, Red/Green anchors
 ```
 
+The report page has its own suite (Node 24, see
+[Working on the report page](README.md#working-on-the-report-page)):
+
+```sh
+cd web/report && npm ci && npm run typecheck && npm test
+```
+
+Run both suites before committing; a change to the page also needs `npm run build`.
+
 The integration specs need two things, and are pending without them:
 - a WoW-Pro-Guides checkout;
 - QuestieDB: `hwc init`.

@@ -6,3 +6,5 @@ findings/**/*.json
 evidence/
 /local
 .claude/worktrees/
+web/report/node_modules/
+web/report/dist/

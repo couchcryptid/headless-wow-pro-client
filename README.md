@@ -85,6 +85,25 @@ this repo: `~/.luarocks/bin/busted` (slow ones: `--tags=slow`).
     anchors) are skipped by default. Run them with
     `~/.luarocks/bin/busted --tags=slow`.
 
+## Working on the report page
+
+The findings report is a small Preact page in `web/report/`, built by Vite into
+one self-contained HTML file. That file, `src/hwc/findings/report.html`, is
+committed, so running `hwc` never needs Node. Node is for working on the page only.
+
+```sh
+cd web/report
+nvm use                  # Node 24 (.nvmrc)
+npm ci
+npm run dev              # http://localhost:5173/?fixture=single (or matrix, empty)
+npm test                 # fixtures parse; the committed report.html equals a fresh build
+npm run typecheck
+npm run build            # writes ../../src/hwc/findings/report.html
+```
+
+Commit the rebuilt `report.html` with the change to the page; `npm test` fails
+when it is stale. The dev server fills the page from `spec/fixtures/findings/<name>.json`.
+
 ## Licence and third-party data
 
 - **This repository** is MIT-licensed; see [LICENSE](LICENSE).
