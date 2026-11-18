@@ -1,6 +1,5 @@
 -- Profession name -> the spell that teaches it. Learning a profession at a trainer
--- teaches this spell; each spell's Wowhead Forever page (wowhead.com/forever/spell=<id>,
--- checked 2026-11-12) has a "Learn Skill (<profession>)" effect. The guides' SPELL tags
+-- teaches this spell, a "Learn Skill (<profession>)" effect. The guides' SPELL tags
 -- test these ids with IsPlayerSpell (WoWPro_Broker.lua:3330-3366), e.g. the Camping 101
 -- accepts' "SPELL|First Aid; 3273; Flip" shows the step only once the spell is known.
 return {

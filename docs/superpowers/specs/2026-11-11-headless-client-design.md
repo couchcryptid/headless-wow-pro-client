@@ -42,7 +42,7 @@ Today the only way to check a WoW-Pro guide fix is to level an alt in the game c
 - **Correcting addon bugs in the harness.** If the engine misbehaves (for example the literal `find("FHbPR")` at `WoWPro_Broker.lua:2422`), the client must reproduce that, and the misbehaviour shows up as findings. The client is faithful to the world and neutral about the addon.
 - **Using the guide as the source of world facts.** Quest levels, XP, objectives and races come from the quest catalog (§6), never from guide lines. Otherwise the client would agree with every guide bug it should catch. The guide is only what's being tested.
 - **Silently clicking steps off.** Every step the client completes by hand rather than through a simulated player action is logged and becomes a finding.
-- **Committing licensed or third-party data** (QuestieDB, Wowhead extracts) to this repo.
+- **Committing licensed or third-party data** (QuestieDB) to this repo.
 
 ## 3. Scope of the first pass
 
@@ -51,7 +51,7 @@ Today the only way to check a WoW-Pro guide fix is to level an alt in the game c
 - **Then:** all Alliance races: Human (Elwynn), Night Elf (Teldrassil, then Darkshore). Each race starts on its `WoWPro.Leveling.ForeverStartGuides` entry (`WoWPro_Leveling/WoWPro_Leveling.lua:49–59`). (Revised 2026-11-18, user's decision: all Horde races, Orc, Troll (Durotar), Tauren (Mulgore) and Undead (Tirisfal Glades, client token `Scourge`), and Skyborne for both factions are in scope. Skyborne is two client races, ChrRaces 95 SKYBORNE_ALLIANCE and 96 SKYBORNE_HORDE, sharing the token `Skyborne`; the client names them `SkyborneAlliance` and `SkyborneHorde`.)
 - **Guide chain:** start guide, then the next guide by the engine's own `GuideNextGuide` autoload (Dun Morogh → `ClassicEasternKingdom1220` → `ClassicAlliance1925` → …). A run plays the chain to its last line (revised by `2026-11-17-guide-filters-design.md` §5: the level-25 and chain-range stops are gone).
 - **Professions and Camping 101 (user's decision, 2026-11-11):** all Camping 101 profession quests are in scope. The quests that require the profession to be trained first are gated on the character having that skill.
-  - **In the world model:** each Camping 101 quest object carries a "requires skill" condition, for example First Aid, Fishing or Leatherworking. Per Wowhead, those end at the profession trainer, whose progress text gates on the skill. The quest can't be completed or turned in until the simulated character knows that skill.
+  - **In the world model:** each Camping 101 quest object carries a "requires skill" condition, for example First Aid, Fishing or Leatherworking. Those end at the profession trainer, whose progress text gates on the skill. The quest can't be completed or turned in until the simulated character knows that skill.
   - **Camping 101: Cooking is the exception.** Its turn-in is completed by training Cooking at Gremlock (confirmed in game 2026-11-11), so training is the step's action.
   - **The guide's own `P|` tags** on the accepts are still applied by the real engine. The client doesn't override them in either direction.
   - **To exercise every Camping 101 quest,** the character matrix gets a profession dimension: a no-profession baseline, plus variants that know each Camping profession (or a small set of variants covering all of them).
@@ -226,19 +226,16 @@ From the existing simulator (`wow-pro-leveling/sim/sim.py`), all Classic rules. 
 A quest is an object: id, name, quest level, required level, races, classes, prerequisites (single and group), objectives (kind npc/item/object, ids, count, text), XP reward, starter and ender. NPCs are objects with level range, rank (elite) and spawns. Items have drop sources and rates.
 
 - **Sources, in priority order:**
-  1. The Wowhead Forever extract (`wow-pro-leveling/sim/data/wh.json`: xp, level, reqlevel, reqrace, reqclass for 476 quests, including Forever-only 9xxxx quests) and its `objs.json` (objective → target) and `rate_overrides.json`.
-  2. QuestieDB Forever (quest, NPC, item and object DBs, plus the `QuestXP` support file) at a pinned commit.
-  3. A small, hand-checked supplement for quests missing from both, built with the triage skill's Wowhead method.
+  1. QuestieDB Forever (quest, NPC, item and object DBs, plus the `QuestXP` and drop-table support files) at a pinned commit.
+  2. A small, hand-checked supplement for quests missing from it.
 - **Pins and provenance (my call, after the builder check):**
-  - Pin QuestieDB at `d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc`, the commit used for the #3535 validation. Fetch its `data/Forever/*` and `support/Forever/QuestXP/*` files (QuestXP is the per-quest XP source above level 20, where `wh.json` thins out: only 20 of its 476 quests are level 20 or above).
+  - Pin QuestieDB at `d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc`, the commit used for the #3535 validation. Fetch its `data/Forever/*` and `support/Forever/QuestXP/*` files (QuestXP is the per-quest XP source).
   - The provenance of `db2.pickle` is unclear: it holds 872 quests with ids of 90000 or more, which pinned QuestieDB Forever lacks. The builder traces it from the wow-pro-leveling docs. If it can't be traced, it's used only as a cross-check, never as a primary source.
 - **Precedence is per field, not per source (my call):** carry over the old simulator's evidence-based rules (`sim.py:804–817`).
-  - Wowhead's race masks are unreliable on Forever-added 9xxxx quests (Elwynn quests listed as Gnome/Night Elf only), so race comes from QuestieDB where it has the quest.
-  - Class is only partly trusted from Wowhead.
   - Each rule is written in the catalog code with its citation. A disagreement between sources on a field is noted on the quest object, so triage can see it.
 - **A quest missing from every source** gets placeholder values: required level 1, no race or class limits, objectives taken from the step's `QO` numbers, 0 XP. Every finding touching it is marked **"unverified quest data"**. The run continues.
-- **Licensing and storage:** catalog sources are read from **external paths given in configuration** and never committed here. QuestieDB is GPLv3 only for consenting contributors and "all rights reserved" otherwise. Wowhead data isn't openly licensed. A one-time exporter converts the old simulator's Python formats (`db2.pickle` is a pickle) into a plain JSON or Lua catalog under a gitignored local directory. The exporter itself is committed; its output isn't. Each catalog records its source commit or date and a SHA-256.
-- **Known source gaps** (also checked by triage): QuestieDB Classic and Forever swap quests 26 and 27; QuestieDB Forever has no 9xxxx quests; Wowhead tooltips round coordinates to 0.2.
+- **Licensing and storage:** catalog sources are read from **external paths given in configuration** and never committed here. QuestieDB is GPLv3 only for consenting contributors and "all rights reserved" otherwise. A one-time exporter converts the old simulator's Python formats (`db2.pickle` is a pickle) into a plain JSON or Lua catalog under a gitignored local directory. The exporter itself is committed; its output isn't. Each catalog records its source commit or date and a SHA-256.
+- **Known source gaps** (also checked by triage): QuestieDB Classic and Forever swap quests 26 and 27; QuestieDB Forever has no 9xxxx quests.
 
 ## 7. Findings
 
@@ -296,11 +293,6 @@ A Claude Code skill in this repo (`.claude/skills/triage/SKILL.md`), run on dema
   - **Lead:** runs at the session's model (Opus). It groups findings that share a question (for example every finding touching quest 314), dispatches work and writes verdicts. It **never takes a subagent's claim without the quoted raw data**.
   - **QuestieDB reader:** Sonnet, read-only. Reads the pinned catalog files from the external path and quotes raw rows.
   - **Guide cross-checker:** Sonnet, read-only. Compares other WoW-Pro flavors (Vanilla, TBC, Horde copies), checks `git log -S` for where a line came from, and reads engine code for `engine-bug` candidates.
-  - **Wowhead reader:** Sonnet. There's **at most one at a time**, since there's one browser.
-    - It uses the Claude in Chrome tools: a new tab, same-origin `fetch`, Quick Facts, Series and comments, and saves raw captures locally.
-    - It paces requests 2 seconds or more apart.
-    - On a "Human Verification" page it **leaves that tab open, stops, and returns** so the lead can show the user the check right away and wait. It never bypasses it and never closes that tab.
-    - The browser tool blocks some output: text containing `?`, `=` or `&`, and encoded data. Don't work around that filter. Fall back to rendered page text and label it.
 - **Rules written into the skill:**
   - work through findings in file order; batch by shared question;
   - external sources over in-game checks, and `needs-human` only when no source can settle it;

@@ -15,8 +15,7 @@ The point is to check guide fixes without levelling an alt in the game.
 The addon's code is loaded unmodified from a WoW-Pro-Guides checkout and is
 never patched. The client fakes the WoW API underneath it: a player, a 40-slot
 quest log, Classic XP rules, a virtual clock, frames and events. Quest facts
-come from a catalog built from QuestieDB and a Wowhead extract, never from the
-guide lines.
+come from a catalog built from QuestieDB, never from the guide lines.
 
 **Status:**
 - **Scope:** Forever Alliance and Horde, the race's chain to its last guide. The XP
@@ -129,7 +128,6 @@ when it is stale. The dev server fills the page from `spec/fixtures/findings/<na
 - **QuestieDB** is GPL-3.0. It is downloaded to `~/.hwc` on your machine and
   never committed. See [World and catalog](#world-and-catalog).
 - **LibDeflate** is vendored under the zlib licence at `src/hwc/vendor/`.
-- **Wowhead data** is an optional local source. It is never committed.
 - **Not affiliated with Blizzard Entertainment.** World of Warcraft is a
   trademark of Blizzard Entertainment, Inc.
 
@@ -212,15 +210,14 @@ guide tags: the guide is what's under test, and a guide edit must not change
 which characters are played. Dwarf: HUNTER, PALADIN, PRIEST, ROGUE, SHAMAN,
 WARRIOR; Gnome: MAGE, PRIEST, ROGUE, WARLOCK, WARRIOR. That's 11 classes and
 23 runs for `--races Dwarf,Gnome`. Variants start with each profession at rank 1, max 75, and with the spell that
-teaches it (`src/hwc/world/profession_spells.lua`, checked on Wowhead Forever),
+teaches it (`src/hwc/world/profession_spells.lua`),
 which the guides' `SPELL|<Profession>; <id>; Flip` tags test. Together they
 cover every `A Camping 101: <Profession>` quest in the 1-25 guides. The Camping
-101 rules key on the quest's name, and no catalog source names the
+101 rules key on the quest's name, which QuestieDB supplies for the
 Forever-added Camping 101 quests (96031-96059, 96626/96629/96634,
-97915-97950), so they are recognised only once `local/catalog/supplement.json`
-names them (see Catalog). Without that file the quests are marked `unverified`
-and every profession variant plays like its baseline; the findings header lists
-this under Gaps. A Camping accept hidden by a `P|` profession the character
+97915-97950). A quest no source names is marked `unverified` and its
+profession variant plays like its baseline; the findings header lists this
+under Gaps. A Camping accept hidden by a `P|` profession the character
 doesn't know is by design (spec §3) and is not reported. The variants:
 
 | Variant | Professions |
@@ -332,12 +329,12 @@ skipped, and the `missing-global` list. "Farsen's Watch why names
 
 The stubs answer from a simulated world (`src/hwc/world/`): the player, bags,
 XP and a 40-slot quest log. Quest, NPC and item facts come from a catalog
-(design spec §6) merged from three local sources. The guide lines are never a
+(design spec §6) merged from two local sources: QuestieDB and an optional
+hand-checked supplement. The guide lines are never a
 source.
 
 **Data policy: no third-party data is committed.** QuestieDB lives in
-`~/.hwc`, and the Wowhead extract stays on your machine at an external path. The
-repo holds only the loaders and the structure-only `catalog/supplement.example.json`.
+`~/.hwc`. The repo holds only the loaders and the structure-only `catalog/supplement.example.json`.
 
 Setup:
 
@@ -365,7 +362,9 @@ hwc sync questie --tag TAG    # one release by tag
 ```
 
 The old releases stay in `~/.hwc/questie/`. The findings header records the
-tag and build of the one in use. Wowhead has no sync: you supply it yourself.
+tag and build of the one in use. Quest XP, levels, races, classes, objectives,
+starters and item drop rates all come from the installed release (drop rates
+from its `support/Forever/DropTables`).
 
 Default source paths (`src/hwc/config.lua`; override with
 `config.load{ catalog = { ... } }`). Relative paths resolve against the repo
@@ -374,15 +373,10 @@ root, not the working directory.
 | Key | Default |
 |---|---|
 | `questie_dir` | the active release under `~/.hwc/questie/` |
-| `wh_json`, `objs_json`, `rate_overrides` | `~/Projects/wow-pro-leveling/sim/data/{wh,objs,rate_overrides}.json` |
 | `supplement` | `local/catalog/supplement.json` (format: `catalog/supplement.example.json`) |
 
-The supplement holds hand-checked facts that no other source has. Each entry
-names its source. The local copy names the 36 Forever Camping 101 quests the
-1-25 guides use (96031-96059, 96626, 96629, 96634, 97915-97950), plus Flintfire's
-Shipment (98321) and Farsen's Watch (96392). Each name and objective was read
-from its Wowhead Forever quest page on 2026-11-12. Like all third-party data,
-the file is not committed.
+The supplement holds hand-checked facts that QuestieDB lacks. Each entry
+names its source. It is optional and not committed.
 
 Every source is optional. A missing source is recorded in `sources` with
 `present: false`, never treated as an error; a partial QuestieDB copy is recorded as `present: "partial"` with the missing files listed. `hwc boot` loads the catalog into

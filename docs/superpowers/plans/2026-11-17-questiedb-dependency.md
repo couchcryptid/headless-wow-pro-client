@@ -33,7 +33,6 @@ QuestieDB's own corrections apply.
 - Dynamic corrections read the character: `UnitClassBase("player")` → `cfg.class`, `UnitFactionGroup("player")` → `cfg.faction` (`"Alliance"`). `C_Seasons.GetActiveSeason()` → `0` (QuestieDB `src/corrections/register.lua:68-70`: "Offline and in the emulator … returns 0").
 - `C_EncodingUtil.DecompressString(data, method)`: `0` = raw deflate, `1` = zlib. It errors `"C_EncodingUtil.DecompressString: invalid compressed data"` when the output is nil or the leftover isn't 0.
 - `doctor` is read-only, and a network failure is a **warn**. Exit codes: `0`, or `1` when any check is **fail**. CLI usage errors exit `2`, as elsewhere in `cli.lua`.
-- Wowhead (`wh_json`, `objs_json`, `rate_overrides`) is untouched: not fetched, not checked by doctor, and still read by the catalog when present.
 - Earlier installed versions are never deleted automatically.
 
 ## Review Focus

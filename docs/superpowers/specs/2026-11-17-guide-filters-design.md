@@ -48,9 +48,7 @@ last line of the last guide, and up to level 25 its findings match today's
 - Filters that can unload the addon's engine files. They only select guides.
 - An installed `hwc` that quietly depends on one machine's layout (the hidden
   `~/Projects/WoW-Pro-Guides` default, the hard-coded
-  `/opt/homebrew/bin/luajit`). Quest data read from
-  `~/Projects/wow-pro-leveling` is the known exception until §8's separate
-  plan lands. LuaRocks packages under `~/.luarocks` are
+  `/opt/homebrew/bin/luajit`). LuaRocks packages under `~/.luarocks` are
   the one accepted exception: that is LuaRocks' default install location.
 - A no-filter run whose findings up to level 25 differ from today's for the
   same folder.
@@ -245,10 +243,6 @@ user), so a fresh clone plus LuaRocks packages is a complete install:
   to a tracked `data/questie/<pin>/`, with their `SHA256SUMS`.
   `tools/fetch-questie.sh` writes there, so updating the pin is still one
   command plus a commit.
-- `wh.json`, `objs.json` and `rate_overrides.json` (about 90 KB together),
-  read today from `~/Projects/wow-pro-leveling/sim/data/`, are copied into
-  `data/sim/`. `db2.pickle` and `zones.csv` there are not read by the client
-  and are not copied.
 - The hand-checked `local/catalog/supplement.json` moves to
   `data/supplement.json`; `catalog/supplement.example.json` is removed, since
   the real file is now tracked.
@@ -261,8 +255,7 @@ user), so a fresh clone plus LuaRocks packages is a complete install:
   and its licence. Licences must be checked before the first commit of the
   data: QuestieDB is (to Claude's knowledge, unverified here) GPL-3.0 while
   this repo is MIT, so the bundled files keep their own licence and notice in
-  `data/`; Wowhead-derived files (`wh.json`, `objs.json`) need their origin
-  stated. Finding a licence that forbids redistribution stops this section
+  `data/`. Finding a licence that forbids redistribution stops this section
   and goes back to the user.
 
 ## 9. Left to the builder

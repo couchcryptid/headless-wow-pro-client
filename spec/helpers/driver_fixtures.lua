@@ -8,9 +8,6 @@ local FIX = "spec/fixtures/catalog"
 local function new_catalog()
   return catalog.load({ catalog = {
     questie_source = dofile(FIX .. "/questie_source.lua"),
-    wh_json = FIX .. "/wh.json",
-    objs_json = FIX .. "/objs.json",
-    rate_overrides = FIX .. "/rate_overrides.json",
     supplement = FIX .. "/actions_supplement.json",
   } })
 end

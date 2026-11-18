@@ -57,8 +57,9 @@ local function install_standins(env, version_dir, character)
 end
 
 -- Returns QuestieDB's private addon table (the second vararg every file
--- receives) and the sandbox it ran in. lib.xp_db is hwc's: the QuestXP db
--- the support files populated (src/support/data.lua:21).
+-- receives) and the sandbox it ran in. lib.xp_db and lib.drop_tables are hwc's:
+-- the QuestXP db and the drop tables the support files populated
+-- (src/support/data.lua:21; support/Forever/DropTables/*.lua).
 function M.load(version_dir, character)
   local sb = sandbox.new({ class = character.class, faction = character.faction })
   install_standins(sb.env, version_dir, character)
@@ -82,6 +83,12 @@ function M.load(version_dir, character)
   local xp = lib.Support and lib.Support.Get("QuestXP")
   if not (xp and type(xp.db) == "table") then fail("no QuestXP data") end
   lib.xp_db = xp.db
+  -- Optional: a release without drop tables leaves item drops rate-less.
+  lib.drop_tables = {
+    data = lib.Support.Get("QuestieClassicItemDrops"),
+    corrections = lib.Support.Get("QuestieItemDropCorrections"),
+    keys = lib.Support.Get("DropDB") and lib.Support.Get("DropDB").correctionKeys,
+  }
   return lib, sb
 end
 

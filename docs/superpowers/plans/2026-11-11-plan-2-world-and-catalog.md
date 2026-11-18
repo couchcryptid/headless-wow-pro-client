@@ -8,7 +8,7 @@
 - **World state:** a `World` object owned by the sandbox (`sb.world`) holds the player, quest log, completed history, bags and skills.
 - **Stubs:** every WoW API stub that reports player or world state reads `sb.world` on each call. Nothing is captured at install time, because the addon looks these up per call (`WoWPro_CompatUtil.lua:121–123`).
 - **Catalog:**
-  - **Sources:** the pinned QuestieDB Lua data files plus the old simulator's Wowhead extract. Both are read from local, git-ignored paths.
+  - **Sources:** the pinned QuestieDB Lua data files, read from local, git-ignored paths.
   - **How QuestieDB is read:** its files are executed in an empty sandbox env. They're data tables, but they're still downloaded code, so they get no `io` or `os` access.
   - **Merging:** per-field precedence rules merge the sources into plain quest, NPC and item objects.
 
@@ -22,7 +22,7 @@
 - **The addon is read-only input** (default `~/Projects/WoW-Pro-Guides`).
 - **Fidelity:** addon behaviour, bugs included, is reproduced, never corrected. The harness never writes engine state (`WoWPro.*` decisions, `ActiveStep`, `completion`, `GuideLoaded`, `LockdownTimer`).
 - **World facts come from the catalog, never from guide lines.** Only the catalog's marked placeholder path may use a step's own `QO` numbers, and it flags "unverified quest data".
-- **Data storage:** no QuestieDB, Wowhead or other third-party data committed. Catalog sources live under `local/` (git-ignored) and are referenced by path in config. Only scripts, loaders and structure-only examples are committed.
+- **Data storage:** no QuestieDB or other third-party data committed. Catalog sources live under `local/` (git-ignored) and are referenced by path in config. Only scripts, loaders and structure-only examples are committed.
 - **No GPL code copied. No LICENSE file.**
 - **Determinism:**
   - identical inputs give identical output;
@@ -176,8 +176,7 @@
 **Files:** Create `tools/fetch-questie.sh`, `src/hwc/catalog/questie.lua`, `src/hwc/catalog/init.lua` and `catalog/supplement.example.json`. Modify `src/hwc/config.lua` (catalog paths), `src/hwc/cli.lua` (`hwc quest <id>`) and `.gitignore` (confirm `local/`). Test: `spec/catalog/questie_spec.lua` and `spec/catalog/catalog_spec.lua`, with tiny hand-written fixtures under `spec/fixtures/catalog/`. The fixtures are invented rows in QuestieDB's layout, not copied data.
 
 **Interfaces:**
-- **Config:** `catalog = {questie_dir = "local/questie/d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc", wh_json = "<path>", objs_json = "<path>", rate_overrides = "<path>", supplement = "local/catalog/supplement.json"}`.
-  - The `wh_json`, `objs_json` and `rate_overrides` paths default to `$HOME/Projects/wow-pro-leveling/sim/data/{wh.json,objs.json,rate_overrides.json}`.
+- **Config:** `catalog = {questie_dir = "local/questie/d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc", supplement = "local/catalog/supplement.json"}`.
   - Every source is optional; a missing source is recorded in `catalog.sources[name] = {path, present = false}`.
 - **`tools/fetch-questie.sh <commit>`:**
   - Downloads `data/Forever/{foreverQuestDB,foreverNpcDB,foreverItemDB,foreverObjectDB}.lua` and `support/Forever/QuestXP/{xpDB-classic,xpDB-traces}.lua` from `https://raw.githubusercontent.com/Questie/QuestieDB/<commit>/<path>` into `local/questie/<commit>/`.
@@ -206,24 +205,22 @@
   - `confidence = "verified"|"unverified"`;
   - `notes` (an array of source-disagreement strings).
 - **Per-field precedence** (spec §6; carry over `sim.py:205–222, 795–825` *without* its use of the guide's `C|` tag, since world facts never come from the guide):
-  - `level`, `required_level`: Wowhead extract (`wh.json` `level`/`reqlevel`), then QuestieDB `questLevel`/`requiredLevel`, then the QuestXP level. Required level defaults to 1.
-  - `xp`: Wowhead `xp`, then QuestXP, then 0 with `confidence = "unverified"`.
+  - `level`, `required_level`: QuestieDB `questLevel`/`requiredLevel`, then the QuestXP level. Required level defaults to 1.
+  - `xp`: QuestXP, then 0 with `confidence = "unverified"`.
   - `races`:
     - For quests below 90000: QuestieDB `requiredRaces`. 4294967373, 77 and 2047 mean any.
-    - Otherwise: Wowhead `reqrace` when it is non-zero and below 2^32. A mask of 2^32 or more is unreliable on Forever-added quests and is ignored, with a note.
     - When the two sources disagree, add a note.
-  - `classes`: QuestieDB `requiredClasses`, otherwise Wowhead `reqclass` when it names a single class and the quest name doesn't start with "Camping 101", otherwise nil.
+  - `classes`: QuestieDB `requiredClasses`, otherwise nil.
   - `pre_single`/`pre_group`: QuestieDB.
-  - `objectives`: `objs.json` (keep `from_db_only` as a note), then QuestieDB `objectives`, then none.
+  - `objectives`: QuestieDB `objectives`, then none.
   - `name`, `starter`, `ender`: QuestieDB, then the supplement.
   - `requires_skill`: the supplement only, a hand-checked file in local storage (its format is shown in `catalog/supplement.example.json`).
   - The supplement may override any field for a listed quest, each with a `source` string.
 - **NPC** (from QuestieDB `npcKeys`): `{id, name, level_min, level_max, rank (0 normal, 1 elite, 2 rare elite, 3 boss, 4 rare), spawns = {[zone_id] = {{x, y}, ...}}, zone_id}`.
 - **Item:** `{id, name, drops = {{npc = id, rate = 0..1}, ...}}`.
-  - Drops come from the Wowhead extract's `item[id].drops`, where each row is `[npc, rate, ...]`, with QuestieDB item `npcDrops` as a fallback (rate nil).
-  - `rate_overrides.json[id].rate` replaces the rate for all of that item's drops, with its `source` string kept as a note.
+  - Drops come from QuestieDB's drop tables (`support/Forever/DropTables`), with QuestieDB item `npcDrops` as a fallback (rate nil).
   - Plan 3's kill-count model reads these.
-- **`db2.pickle` is not used** (spec §6 allows it only as a cross-check, and its provenance is untraced; loading a pickle also executes code). Pinned QuestieDB plus the Wowhead extract are the sources.
+- **`db2.pickle` is not used** (spec §6 allows it only as a cross-check, and its provenance is untraced; loading a pickle also executes code). Pinned QuestieDB is the source.
 - **Placeholder** (spec §6): `placeholder(id, qo_count)` gives required level 1, any race and class, `qo_count` objectives `{kind = "other", count = 1, text = "Objective <n>"}`, 0 XP and `confidence = "unverified"`. It's the only path that uses a guide-derived value, and Plan 3 calls it.
 - **`hwc quest <id>`** prints the Quest as sorted JSON with its sources.
 
@@ -231,21 +228,19 @@
   - A fixture QuestieDB quest file with a `questKeys` block decodes into named fields.
   - A fixture file that calls `io.open` or `os.execute`, or reads an undefined global, fails to load with an error naming the file. [Review Focus 5]
   - Precedence:
-    - a fixture quest present in both sources takes Wowhead `level`;
-    - a Forever 9xxxx fixture with a Wowhead race mask of 2^32 or more gets `races == nil` plus a note;
     - a fixture "Camping 101: First Aid" with supplement `requires_skill = "First Aid"` carries it.
   - An id in no source: `quest(id) == nil`, and `placeholder(id, 2)` has 2 objectives, `xp == 0` and `confidence == "unverified"`. [Review Focus 3]
   - **Integration** (pending when `local/questie/<pin>` is absent):
     - `questKeys.preQuestSingle == 13`;
     - quest 282 has `pre_single == {218}`, starter NPC 786 and ender 1965;
-    - quest 179 has `xp == 80` and objective item 750 ×8 (`objs.json`);
+    - quest 179 has objective item 750;
     - NPC 1388 (Vagash) has `rank == 1` and level 11;
     - item 750 has at least one drop with a numeric rate;
     - `catalog.sources.questie.sha256` matches the pin's files.
 - [ ] **Step 2:** Run. Expect FAIL.
 - [ ] **Step 3:** Implement. Run `tools/fetch-questie.sh d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc` once locally (network) so the integration specs exercise real data. Commit only code and the example.
 - [ ] **Step 4:** Run the full suite and `bin/hwc quest 282`. Expect PASS, with the JSON showing `pre_single [218]`.
-- [ ] **Step 5:** Commit: "Add quest catalog from pinned QuestieDB and Wowhead extract".
+- [ ] **Step 5:** Commit: "Add quest catalog from pinned QuestieDB".
 
 ### Task 5: Quest log model and the real quest-log API
 

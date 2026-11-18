@@ -44,7 +44,6 @@ Generated from the Plan 2 SDD ledger at branch completion (2026-11-11). Plan 3 s
 - Task 3: minor (deferred): fix report gave summary counts rather than raw busted output
 - Task 4: minor (deferred): questie sandbox shares real string/table/math tables (hostile file could mutate them)
 - Task 4: minor (deferred): `hwc quest` requires a valid addon path via config.load though the catalog is addon-independent
-- Task 4: minor (deferred): objs.json objective kind copied unvalidated (sim.py coerces unknown→object; relabels item objectives)
 - Task 4: minor (deferred): partial questie_dir hard-errors instead of recording source absent/partial
 - Task 4: minor (deferred): sha256 read from SHA256SUMS, never recomputed at load
 - Task 5: minor (deferred): progress() does not guard negative amounts (have can go below 0)

@@ -99,7 +99,7 @@ end)
 
 -- Ruling AC: a talk-to NPC objective earns no kill XP. QuestieDB's objective groups
 -- do not tell a talk-to from a kill for these quests (Forever's talk-to objectives
--- come from the Wowhead objectives file), so the heuristic applies.
+-- come from the supplement), so the heuristic applies.
 describe("kills.objective_kills: talk-to NPCs", function()
   local quest = { starter = 15, ender = 16, starter_kind = "npc", ender_kind = "npc" }
   it("credits no kills for the quest's starter or ender NPC", function()

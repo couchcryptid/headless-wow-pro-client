@@ -44,6 +44,11 @@ local OBJECTS = {
   [3001] = { name = "Fixture Chest", spawns = { [12] = { { 50, 50 } } } },
 }
 
+-- Drop tables (Source:drops shape, rate 0-1); 5002 has none, so npcDrops serves it.
+local DROPS = {
+  [5001] = { { npc = 2001, rate = 0.5 }, { npc = 2003, rate = 0.25 } },
+}
+
 -- QuestXP rows {level, xp}; 1006 is in no other table.
 local XP = {
   [1001] = { 18, 700 },
@@ -71,6 +76,14 @@ function Source:object(id) return record(OBJECTS, id) end
 function Source:xp(id)
   local e = XP[id]
   return e and { e[1], e[2] } or nil
+end
+
+function Source:drops(id)
+  local d = DROPS[id]
+  if not d then return nil end
+  local out = {}
+  for i, r in ipairs(d) do out[i] = { npc = r.npc, rate = r.rate } end
+  return out
 end
 
 function Source:item_ids()

@@ -25,7 +25,7 @@
 - **The addon is read-only input:** the client reads it from a configured path (default `~/Projects/WoW-Pro-Guides`) and never writes, patches or vendors anything there.
 - **Fidelity:** addon behaviour, bugs included, is reproduced, never corrected. Stubs model the WoW client, not what the addon "should" see.
 - **Licensing and data:**
-  - No committing QuestieDB, Wowhead or other third-party data.
+  - No committing QuestieDB or other third-party data.
   - No copying code from GPL projects (e.g. Mechanic). The licence for this repo is undecided, so add no LICENSE file.
 - **Python:** offline tooling only, stdlib, run with `python3 -I` (not used in this plan).
 - **Determinism:** identical inputs (addon commit, config, seed) give identical output.

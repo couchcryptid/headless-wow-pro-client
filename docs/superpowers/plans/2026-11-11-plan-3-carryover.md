@@ -12,7 +12,7 @@ Generated from the Plan 3 SDD ledger at branch completion (2026-11-12). Plan 4 s
 - Ruling B: the cross-process byte-identical findings spec moves from Task 7 to Task 8 (after the CLI exists); Task 7 keeps the in-process shuffle-determinism test — cost if wrong: none, same test later.
 - Ruling C: Task 6 adds opts.max_guides (default nil = unlimited) to run.character's opts — cost if wrong: an unused option.
 - Ruling: complete_manual/update_guide return false, err (addon errors are findings the driver records and continues past, never raised); current/rows/rank return nil, err on failed engine calls — cost if wrong: callers change to raise later.
-- Ruling D: catalog drop rates are already 0–1 probabilities (wh.json 0.32, rate_overrides 0.15); the plan's "÷100" is wrong and dropped — cost if wrong: kill counts off by 100×, caught by kills_spec values.
+- Ruling D: catalog drop rates are already 0–1 probabilities; the plan's "÷100" is wrong and dropped — cost if wrong: kill counts off by 100×, caught by kills_spec values.
 - Ruling E: drop-source choice mirrors sim.py:520-551 (ordinary mob over elite/rare, then highest rate; unique named elite always drops; unknown rate → count×3 kills; no source → nil) — the brief left source choice open — cost if wrong: XP per drop objective differs from the old sim.
 - Ruling F: Task 3 credit example corrected to 488 XP / xp 88 (the plan's 500/100 ignored its own per-kill recompute: 8×50 dings at 400, then 2×floor(55×4/5)=44) — cost if wrong: none, arithmetic checked by controller.
 - Ruling G: E:update_guide() after any level gain from grinding or C/K kill XP, not only turn-ins (spec §5.2 "after every ding") — cost if wrong: extra engine updates, harmless.
