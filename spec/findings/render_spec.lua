@@ -29,8 +29,8 @@ end
 local function header()
   return { scope = "Dwarf-WARRIOR-baseline", date = "2026-11-12",
     addon = { path = "../WoW-Pro-Guides", branch = "main", commit = "64fe6b3aabbccddeeff00112233445566778899", dirty = false },
-    catalog = { questie = { path = "local/questie", present = true,
-      sha256 = "deadbeef0123456789abcdef0123456789abcdef", commit = "d57637f" } },
+    catalog = { questie = { path = "/home/u/.hwc/questie/v1.1.2", present = true,
+      sha256 = "deadbeef0123456789abcdef0123456789abcdef", tag = "v1.1.2", build = "e1652ce" } },
     client = { commit = "c0ffee1234567890", dirty = false }, matrix = { combos = { "Dwarf WARRIOR baseline" } },
     rank = 2, dungeons = { skip = true, skipped = 12 }, paths_relative_to = "headless-wow-pro-client" }
 end
@@ -275,14 +275,19 @@ describe("render.markdown", function()
     assert.truthy(plain(out, "- Guide rank: `2`", s))
     assert.truthy(plain(out, "- Skip dungeon quests: on (WoWPro's `EnableDungeons`). This client doesn't run "
       .. "dungeons, so the 12 dungeon accepts WoWPro skipped aren't listed as findings.\n", s))
-    assert.truthy(plain(out, "  - `questie`: present · commit `d57637f` · sha256 `deadbeef0123` · `local/questie`\n", s))
+    assert.truthy(plain(out, "  - `questie`: present · `v1.1.2` · build `e1652ce` · sha256 `deadbeef0123` · `/home/u/.hwc/questie/v1.1.2`\n", s))
     assert.falsy(plain(out, "deadbeef01234", s))
     assert.truthy(plain(out, "  - rested XP\n", s))
     local h = header()
     h.catalog.questie.sha256 = { ["b.lua"] = "2222222222222222", ["a.lua"] = "1111111111111111" }
     local o = render.markdown({}, h)
-    assert.truthy(plain(o, "  - `questie`: present · commit `d57637f` · `local/questie`\n"
+    assert.truthy(plain(o, "  - `questie`: present · `v1.1.2` · build `e1652ce` · `/home/u/.hwc/questie/v1.1.2`\n"
       .. "    - `a.lua` `111111111111`\n    - `b.lua` `222222222222`\n"))
+    h.catalog.questie = { path = "/home/u/.hwc/questie/v1.1.2", present = false, reason = "no QuestieDB installed" }
+    assert.truthy(plain(render.markdown({}, h),
+      "  - `questie`: absent (no QuestieDB installed) · `/home/u/.hwc/questie/v1.1.2`\n"))
+    h.catalog.questie = { present = false, reason = "not installed" }
+    assert.truthy(plain(render.markdown({}, h), "  - `questie`: absent (not installed) · `-`\n"))
   end)
 
   it("About this run states the Skip Dungeon Quests setting: one accept, off, unknown", function()

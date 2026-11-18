@@ -18,7 +18,7 @@ Specs run with busted under LuaJIT:
 
 The integration specs need two things, and are pending without them:
 - a WoW-Pro-Guides checkout;
-- the local catalog: `tools/fetch-questie.sh <commit>`.
+- QuestieDB: `hwc init`.
 
 The anchors also need the pinned addon worktrees; see
 [Addon worktrees and Red/Green anchors](README.md#addon-worktrees-and-redgreen-anchors).

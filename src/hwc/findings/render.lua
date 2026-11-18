@@ -491,11 +491,19 @@ local function catalog_lines(out, catalog)
   out[#out + 1] = "- Catalog:"
   for _, name in ipairs(names) do
     local s = catalog[name]
-    local parts = { s.present == false and "missing" or "present" }
-    if s.commit then parts[#parts + 1] = "commit " .. code(s.commit) end
-    if type(s.sha256) == "string" then parts[#parts + 1] = "sha256 " .. code(s.sha256:sub(1, 12)) end
-    if s.path then parts[#parts + 1] = code(s.path) end
-    out[#out + 1] = "  - " .. code(name) .. ": " .. table.concat(parts, " · ")
+    local line
+    if s.present == false then
+      line = "absent (" .. tostring(s.reason or "unknown") .. ") · " .. code(s.path or "-")
+    else
+      local parts = { "present" }
+      if s.tag then parts[#parts + 1] = code(s.tag) end
+      if s.build then parts[#parts + 1] = "build " .. code(s.build) end
+      if s.commit then parts[#parts + 1] = "commit " .. code(s.commit) end
+      if type(s.sha256) == "string" then parts[#parts + 1] = "sha256 " .. code(s.sha256:sub(1, 12)) end
+      if s.path then parts[#parts + 1] = code(s.path) end
+      line = table.concat(parts, " · ")
+    end
+    out[#out + 1] = "  - " .. code(name) .. ": " .. line
     if type(s.sha256) == "table" then
       -- the questie source hashes several files: one per line, sorted by name
       for _, file in ipairs(sorted_keys(s.sha256)) do

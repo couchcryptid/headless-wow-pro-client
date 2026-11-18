@@ -576,3 +576,103 @@ describe("cli JSON output for a folder without git", function()
     assert.is_nil(addon.commit)
   end)
 end)
+
+describe("cli init, doctor and sync questie", function()
+  local cli = require("hwc.cli")
+  local install = require("hwc.questie.install")
+  local doctor = require("hwc.doctor")
+
+  local function buf()
+    local b = { t = {} }
+    function b:write(...) for _, v in ipairs({ ... }) do self.t[#self.t + 1] = v end end
+    function b:text() return table.concat(self.t) end
+    return b
+  end
+
+  -- Replaces mod[name] with stub for one call of fn, then restores it.
+  local function with_stub(mod, name, stub, fn)
+    local real = mod[name]
+    mod[name] = stub
+    local ok, res = pcall(fn)
+    mod[name] = real
+    assert(ok, res)
+    return res
+  end
+
+  local function run(args, env)
+    local out, err = buf(), buf()
+    local code = cli.main(args, out, err, env or { home = tmpdir(), hwc_home = false, pwd = "/", cwd = "/" })
+    return code, out:text(), err:text()
+  end
+
+  it("exits 2 with usage for unknown subcommands and bad flags", function()
+    local code, _, err = run({ "sync", "foo" })
+    assert.equal(2, code)
+    assert.truthy(err:find("Usage: hwc", 1, true))
+    assert.equal(2, (run({ "doctor", "--bogus" })))
+    assert.equal(2, (run({ "sync", "questie", "--bogus" })))
+    assert.equal(2, (run({ "sync", "questie", "--tag" })))
+  end)
+
+  it("exits 2 when HOME and HWC_HOME are both unset", function()
+    for _, args in ipairs({ { "init" }, { "doctor" }, { "sync", "questie" } }) do
+      local code, _, err = run(args, { home = false, hwc_home = false, pwd = "/", cwd = "/" })
+      assert.equal(2, code)
+      assert.truthy(err:find("hwc: HOME is not set; set HWC_HOME", 1, true))
+    end
+  end)
+
+  it("sync questie passes --tag through", function()
+    local seen
+    local code = with_stub(install, "sync", function(_, opts)
+      seen = opts
+      return { to = "v1.1.2", build = "e1652ce0123", skipped = {} }
+    end, function() return (run({ "sync", "questie", "--tag", "v1.1.2" })) end)
+    assert.equal(0, code)
+    assert.equal("v1.1.2", seen.tag)
+  end)
+
+  it("sync questie prints the change, the skipped releases and the already line", function()
+    local r = with_stub(install, "sync", function()
+      return { to = "v1.1.2", build = "e1652ce0123", skipped = { "v1.1.3" } }
+    end, function() local c, o = run({ "sync", "questie" }); return { c, o } end)
+    assert.equal(0, r[1])
+    assert.equal("QuestieDB none \226\134\146 v1.1.2 (build e1652ce)\nskipped v1.1.3: no Forever build\n", r[2])
+    r = with_stub(install, "sync", function() return { to = "v1.1.2", already = true, skipped = {} } end,
+      function() local c, o = run({ "sync", "questie" }); return { c, o } end)
+    assert.equal("QuestieDB v1.1.2 already installed; active\n", r[2])
+  end)
+
+  it("sync questie failure exits 1 with the error", function()
+    local r = with_stub(install, "sync", function() return nil, "hwc: no network" end,
+      function() local c, _, e = run({ "sync", "questie" }); return { c, e } end)
+    assert.equal(1, r[1])
+    assert.equal("hwc: no network\n", r[2])
+  end)
+
+  it("doctor exits 1 when the report failed, 0 otherwise", function()
+    local function doctor_with(report, args)
+      return with_stub(doctor, "run", function() return report end,
+        function() local c, o = run(args); return { c, o } end)
+    end
+    local bad = doctor_with({ checks = { { id = "luajit", status = "fail", detail = "x" } }, failed = true }, { "doctor" })
+    assert.equal(1, bad[1])
+    assert.truthy(bad[2]:find("FAIL luajit: x", 1, true))
+    local good = doctor_with({ checks = { { id = "luajit", status = "ok", detail = "y" } }, failed = false },
+      { "doctor", "--json" })
+    assert.equal(0, good[1])
+    assert.truthy(good[2]:find('"failed":false', 1, true))
+  end)
+
+  it("init prints the sync line then the doctor report", function()
+    local r = with_stub(install, "init", function()
+      return { already = false, sync_result = { to = "v1.1.2", build = "e1652ce0123", skipped = {} } }
+    end, function()
+      return with_stub(doctor, "run", function()
+        return { checks = { { id = "luajit", status = "ok", detail = "fine" } }, failed = false }
+      end, function() local c, o = run({ "init" }); return { c, o } end)
+    end)
+    assert.equal(0, r[1])
+    assert.equal("QuestieDB none \226\134\146 v1.1.2 (build e1652ce)\nok   luajit: fine\n", r[2])
+  end)
+end)

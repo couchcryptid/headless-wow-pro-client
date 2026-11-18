@@ -44,7 +44,8 @@ guide lines.
 - **A WoW-Pro folder:** a git checkout of WoW-Pro-Guides, or the game's
   `Interface/AddOns` folder. `hwc` must be run from inside it (see
   [Choosing guides](#choosing-guides)).
-- **Optional:** `curl` and `shasum` for `tools/fetch-questie.sh`, and `python3`.
+- **`curl` and `unzip`**, which `hwc init` uses to download QuestieDB.
+- **Optional:** `python3`.
 
 ## Install
 
@@ -65,7 +66,7 @@ LuaRocks modules from `~/.luarocks`.
 Run `hwc` from inside a WoW-Pro folder (a git checkout or `Interface/AddOns`):
 
 ```sh
-tools/fetch-questie.sh d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc   # local catalog data (from this repo)
+hwc init                                                       # download QuestieDB into ~/.hwc, check the setup (any folder)
 cd ~/Projects/WoW-Pro-Guides
 hwc boot --race Dwarf --class WARRIOR                          # load the addon, show the first step
 hwc run --race Dwarf --class WARRIOR                           # play one character along the chain
@@ -92,9 +93,10 @@ this repo: `~/.luarocks/bin/busted` (slow ones: `--tags=slow`).
   - The client reads your own checkout at run time.
   - Source comments cite addon file and line numbers so harness behaviour can be
     checked against the engine.
-- **QuestieDB and Wowhead data** is never committed. It's fetched into, or kept
-  in, the git-ignored `local/` directory on your machine. See
-  [World and catalog](#world-and-catalog).
+- **QuestieDB** is GPL-3.0. It is downloaded to `~/.hwc` on your machine and
+  never committed. See [World and catalog](#world-and-catalog).
+- **LibDeflate** is vendored under the zlib licence at `src/hwc/vendor/`.
+- **Wowhead data** is an optional local source. It is never committed.
 - **Not affiliated with Blizzard Entertainment.** World of Warcraft is a
   trademark of Blizzard Entertainment, Inc.
 
@@ -295,20 +297,37 @@ XP and a 40-slot quest log. Quest, NPC and item facts come from a catalog
 (design spec §6) merged from three local sources. The guide lines are never a
 source.
 
-**Data policy: no third-party data is committed.** QuestieDB and the Wowhead
-extract stay on your machine, under `local/` (git-ignored) or at external
-paths. The repo holds only the loaders, `tools/fetch-questie.sh` and the
-structure-only `catalog/supplement.example.json`.
+**Data policy: no third-party data is committed.** QuestieDB lives in
+`~/.hwc`, and the Wowhead extract stays on your machine at an external path. The
+repo holds only the loaders and the structure-only `catalog/supplement.example.json`.
 
 Setup:
 
 ```sh
-tools/fetch-questie.sh d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc   # the pinned QuestieDB commit
+hwc init      # from any folder
 ```
 
-This writes the Forever quest, NPC, item, object and XP files to
-`local/questie/<commit>/` with a `SHA256SUMS`. It won't overwrite a copy whose
-hashes differ.
+This downloads the latest QuestieDB Forever release into `~/.hwc/questie/<tag>/`,
+makes it the active one, then runs the health check. `HWC_HOME` moves `~/.hwc`.
+
+### Health check
+
+```sh
+hwc doctor          # LuaJIT, rocks, tools, the WoW-Pro folder, QuestieDB, the supplement
+hwc doctor --json   # the same, as JSON
+```
+
+It exits 1 when a check fails, and prints the fix beside each failure.
+
+### Updating QuestieDB
+
+```sh
+hwc sync questie              # the newest Forever release
+hwc sync questie --tag TAG    # one release by tag
+```
+
+The old releases stay in `~/.hwc/questie/`. The findings header records the
+tag and build of the one in use. Wowhead has no sync: you supply it yourself.
 
 Default source paths (`src/hwc/config.lua`; override with
 `config.load{ catalog = { ... } }`). Relative paths resolve against the repo
@@ -316,7 +335,7 @@ root, not the working directory.
 
 | Key | Default |
 |---|---|
-| `questie_dir` | `local/questie/d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc` |
+| `questie_dir` | the active release under `~/.hwc/questie/` |
 | `wh_json`, `objs_json`, `rate_overrides` | `~/Projects/wow-pro-leveling/sim/data/{wh,objs,rate_overrides}.json` |
 | `supplement` | `local/catalog/supplement.json` (format: `catalog/supplement.example.json`) |
 
@@ -337,7 +356,7 @@ hwc quest 179      # the merged quest as JSON, with each source's path, presence
 
 The integration spec `spec/integration/world_engine_spec.lua` drives the real
 engine through Dwarven Outfitters (179) for a Dwarf Warrior and a Gnome Mage.
-It is pending when the addon checkout or `local/questie/<pin>` is absent.
+It is pending when the addon checkout or an installed QuestieDB is absent.
 
 ## Skip list
 

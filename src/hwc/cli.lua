@@ -10,15 +10,22 @@ Usage: hwc [-h|--help]
        hwc matrix [--race RACE]... [--races LIST]
                   [--include PATTERN]... [--exclude PATTERN]...
                   [--date D] [--out DIR] [--relative-to DIR]
+       hwc init
+       hwc doctor [--json]
+       hwc sync questie [--tag TAG]
 
 Headless WoW-Pro client: loads the real WoW-Pro addon under LuaJIT. Run it from
 the WoW-Pro folder (the one holding WoWPro/WoWPro.toc) or any folder below it.
+init, doctor and sync run from any folder.
 
 Commands:
   boot          Boot the addon to the first shown steps and print them
   quest         Print a quest from the catalog, with its sources, as JSON
   run           Play one character along the guide chain; write findings and a run log
   matrix        Play every race x class (and profession variant); write findings and run logs
+  init          Download QuestieDB (latest Forever release) into ~/.hwc and check the setup
+  doctor        Check LuaJIT, rocks, tools, the WoW-Pro folder, QuestieDB and the supplement
+  sync questie  Install the newest QuestieDB Forever release (or --tag TAG) and make it active
 
 Options:
   -h, --help    Show this help
@@ -383,6 +390,85 @@ end
 
 local function strip(msg) return (tostring(msg):gsub("^hwc: ", "")) end
 
+local function print_skipped(out, res)
+  for _, tag in ipairs(res.skipped or {}) do out:write("skipped ", tag, ": no Forever build\n") end
+end
+
+local function sync_line(res)
+  if res.already then return "QuestieDB " .. res.to .. " already installed; active\n" end
+  return "QuestieDB " .. (res.from or "none") .. " \226\134\146 " .. res.to .. " (build " .. tostring(res.build):sub(1, 7) .. ")\n"
+end
+
+-- hwc init / doctor / sync questie: they work on ~/.hwc, so they need no WoW-Pro
+-- folder. Returns an exit status.
+local function run_store(cmd, args, out, err, env)
+  local home = require("hwc.questie.home")
+  local install = require("hwc.questie.install")
+  local doctor = require("hwc.doctor")
+  local tag, json
+  if cmd == "sync" then
+    local i = 3
+    if args[2] ~= "questie" then
+      err:write("hwc: sync needs a source: questie\n", USAGE)
+      return 2
+    end
+    while i <= #args do
+      if args[i] == "--tag" and args[i + 1] then
+        tag = args[i + 1]
+        i = i + 2
+      else
+        err:write("hwc: unknown or incomplete option: ", args[i], "\n", USAGE)
+        return 2
+      end
+    end
+  elseif cmd == "doctor" then
+    for i = 2, #args do
+      if args[i] == "--json" then
+        json = true
+      else
+        err:write("hwc: unknown option: ", args[i], "\n", USAGE)
+        return 2
+      end
+    end
+  elseif #args > 1 then
+    err:write("hwc: init takes no options\n", USAGE)
+    return 2
+  end
+  local root, herr = home.root({ hwc_home = env.hwc_home, home = env.home })
+  if not root then
+    err:write(herr, "\n", USAGE)
+    return 2
+  end
+  if cmd == "sync" then
+    local res, serr = install.sync(root, { tag = tag })
+    if not res then
+      err:write("hwc: ", strip(serr), "\n")
+      return 1
+    end
+    out:write(sync_line(res))
+    print_skipped(out, res)
+    return 0
+  elseif cmd == "init" then
+    local res, ierr = install.init(root)
+    if not res then
+      err:write("hwc: ", strip(ierr), "\n")
+      return 1
+    end
+    if res.already then
+      out:write("QuestieDB ", tostring(home.active(root)), " already installed\n")
+    else
+      out:write(sync_line(res.sync_result))
+      print_skipped(out, res.sync_result)
+    end
+    local report = doctor.run(env)
+    out:write(doctor.text(report))
+    return 0
+  end
+  local report = doctor.run(env)
+  out:write(json and (doctor.json(report) .. "\n") or doctor.text(report))
+  return report.failed and 1 or 0
+end
+
 -- The WoW-Pro folder hwc runs in: root and start, or nil and a usage message.
 local function locate(env)
   local source = require("hwc.source")
@@ -482,6 +568,7 @@ function M.main(args, out, err, env)
     cwd = env.cwd or require("lfs").currentdir(),
     -- false (specs) stands for an unset HOME
     home = env.home == nil and os.getenv("HOME") or env.home,
+    hwc_home = env.hwc_home == nil and os.getenv("HWC_HOME") or env.hwc_home,
   }
   for _, a in ipairs(args) do
     if a == "-h" or a == "--help" then
@@ -506,6 +593,9 @@ function M.main(args, out, err, env)
       return 1
     end
     return res
+  end
+  if args[1] == "init" or args[1] == "doctor" or args[1] == "sync" then
+    return run_store(args[1], args, out, err, env)
   end
   if args[1] == "quest" then
     local id = tonumber(args[2] or "")
