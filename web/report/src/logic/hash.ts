@@ -35,11 +35,15 @@ export function fromHash(h: string, doc: ReportDoc): FilterState {
     if (eq < 0) continue;
     const name = part.slice(0, eq);
     const val = part.slice(eq + 1);
-    if (name === "q") s.q = decodeURIComponent(val);
-    else if (name === "order") s.order = val === "guide" ? "guide" : "prio";
-    else {
-      const key = SET_KEYS.find(([, n]) => n === name)?.[0];
-      if (key) s[key] = new Set(val === "" ? [] : val.split(",").map(decodeURIComponent));
+    try {
+      if (name === "q") s.q = decodeURIComponent(val);
+      else if (name === "order") s.order = val === "guide" ? "guide" : "prio";
+      else {
+        const key = SET_KEYS.find(([, n]) => n === name)?.[0];
+        if (key) s[key] = new Set(val === "" ? [] : val.split(",").map(decodeURIComponent));
+      }
+    } catch {
+      // Malformed percent-encoding (hand-edited or truncated URL): keep this part's default.
     }
   }
   return s;

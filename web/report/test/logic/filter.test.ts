@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { childrenShown, counts, matches, visible } from "../../src/logic/filter";
 import { counted, defaultState } from "../../src/logic/state";
+import type { Finding, ReportDoc } from "../../src/types";
 import { load, pick } from "./helpers";
 
 const single = load("single");
@@ -155,8 +156,54 @@ describe("matrix", () => {
   });
 });
 
+function synthetic(middle: Partial<Finding>): ReportDoc {
+  const base = { signal: "did-not-advance", sentence: "", severity: "medium" as const, combos: ["c"], file: "g.lua" };
+  const root: Finding = { ...base, id: "R", title: "root thing", line: 1, causes: ["M"], explains: 1 };
+  const mid: Finding = { ...base, id: "M", title: "middle thing", line: 2, caused_by: "R", causes: ["L"], ...middle };
+  const leaf: Finding = { ...base, id: "L", title: "leaf thing", line: 3, caused_by: "M" };
+  return {
+    format: 2,
+    header: { guides: [{ file: "g.lua" }], matrix: { combos: ["c"] } },
+    labels: { signals: { "did-not-advance": "x", "lua-error": "y" }, severities: { medium: "Medium" } },
+    findings: [root, mid, leaf],
+  } as unknown as ReportDoc;
+}
+
+function visits(doc: ReportDoc, s: ReturnType<typeof defaultState>): Map<string, number> {
+  const v = visible(doc, s);
+  const seen = new Map<string, number>();
+  const walk = (f: Finding, path: Set<string>) => {
+    seen.set(f.id, (seen.get(f.id) ?? 0) + 1);
+    for (const c of childrenShown(f, doc, s)) if (!path.has(c.id)) walk(c, new Set(path).add(c.id));
+  };
+  for (const f of [...v.roots, ...v.lifted]) walk(f, new Set([f.id]));
+  return seen;
+}
+
+describe("a counted finding below an uncounted middle link", () => {
+  const cases: [string, Partial<Finding>][] = [
+    ["harness lua-error", { signal: "lua-error", harness: true }],
+    ["expected", { expected: true, severity: undefined }],
+  ];
+  for (const [name, mid] of cases) {
+    it(`${name} middle: the leaf is lifted and appears exactly once`, () => {
+      const doc = synthetic(mid);
+      expect(counted(doc.findings[1]!)).toBe(false);
+      for (const q of ["", "thing", "leaf", "root"]) {
+        const s = { ...defaultState(doc), q };
+        const seen = visits(doc, s);
+        for (const f of doc.findings.filter((x) => counted(x) && matches(x, s))) {
+          expect(seen.get(f.id), `${f.id} q=${q}`).toBe(1);
+        }
+        expect(seen.has("M")).toBe(false);
+      }
+      expect(visible(doc, defaultState(doc)).lifted.map((f) => f.id)).toEqual(["L"]);
+    });
+  }
+});
+
 describe("every visible finding is rendered exactly once", () => {
-  const states = (doc: typeof single) => {
+  const states = (doc: ReportDoc) => {
     const d = defaultState(doc);
     const qs = ["", "the", "93", "94", "advance", "never", "offered", "lua", "Dun_1_5", "Dun_5_11.lua:99", "warrior", "300", "zzz"];
     const out = qs.map((q) => ({ ...d, q }));
@@ -165,16 +212,16 @@ describe("every visible finding is rendered exactly once", () => {
     out.push({ ...d, q: "advance", sev: new Set(["medium"]) });
     return out;
   };
-  for (const [name, doc] of [["single", single], ["matrix", matrix]] as const) {
+  const docs: [string, ReportDoc][] = [
+    ["single", single],
+    ["matrix", matrix],
+    ["synthetic harness middle", synthetic({ signal: "lua-error", harness: true })],
+    ["synthetic expected middle", synthetic({ expected: true, severity: undefined })],
+  ];
+  for (const [name, doc] of docs) {
     it(`${name}: walking roots+lifted through childrenShown visits each matching counted finding once`, () => {
       for (const s of states(doc)) {
-        const v = visible(doc, s);
-        const seen = new Map<string, number>();
-        const walk = (f: (typeof doc.findings)[number], path: Set<string>) => {
-          seen.set(f.id, (seen.get(f.id) ?? 0) + 1);
-          for (const c of childrenShown(f, doc, s)) if (!path.has(c.id)) walk(c, new Set(path).add(c.id));
-        };
-        for (const f of [...v.roots, ...v.lifted]) walk(f, new Set([f.id]));
+        const seen = visits(doc, s);
         for (const f of doc.findings.filter((x) => counted(x) && matches(x, s))) {
           expect(seen.get(f.id), `${f.id} under ${JSON.stringify([s.q, [...s.sev]])}`).toBe(1);
         }

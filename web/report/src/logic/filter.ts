@@ -48,7 +48,9 @@ function ancestors(f: Finding, ids: Map<string, Finding>): Finding[] {
   const out: Finding[] = [];
   const seen = new Set<string>([f.id]);
   let cur = f.caused_by ? ids.get(f.caused_by) : undefined;
-  while (cur && !seen.has(cur.id)) {
+  // Stop at the first uncounted ancestor: childrenShown never walks through one,
+  // so a finding below it must be lifted rather than left unreachable.
+  while (cur && counted(cur) && !seen.has(cur.id)) {
     out.push(cur);
     seen.add(cur.id);
     cur = cur.caused_by ? ids.get(cur.caused_by) : undefined;
@@ -64,7 +66,7 @@ export function visible(doc: ReportDoc, s: FilterState): { roots: Finding[]; lif
     if (!counted(f) || !matches(f, s)) continue;
     if (!f.caused_by) roots.push(f);
     // Lifted only when no counted ancestor matches; otherwise childrenShown nests it.
-    else if (!ancestors(f, ids).some((a) => counted(a) && matches(a, s))) lifted.push(f);
+    else if (!ancestors(f, ids).some((a) => matches(a, s))) lifted.push(f);
   }
   return { roots, lifted };
 }

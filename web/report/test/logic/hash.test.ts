@@ -32,4 +32,10 @@ describe("hash", () => {
     expect(fromHash("sev=", doc)).toEqual(s);
     expect(toHash({ ...defaultState(doc), q: "x y" }, doc)).toBe("q=x%20y");
   });
+  it("falls back to the default for a part with malformed percent-encoding", () => {
+    const s = fromHash("q=%E0%A4%A&sev=high", doc);
+    expect(s.q).toBe("");
+    expect([...s.sev]).toEqual(["high"]);
+    expect(fromHash("kind=%E0%A4%A", doc)).toEqual(defaultState(doc));
+  });
 });
