@@ -3,7 +3,7 @@
 -- tools/addon-worktree.sh under local/addon/ (never ~/Projects/WoW-Pro-Guides,
 -- whose branch the game's AddOns folder follows). Each anchor is pending while its
 -- worktree or an installed QuestieDB is absent.
--- Slow (full Dwarf Warrior runs to level 25): busted --tags=slow spec/integration/anchors_spec.lua
+-- Slow (Dwarf Warrior runs from Dun Morogh through 19_25): busted --tags=slow spec/integration/anchors_spec.lua
 --
 -- Facts cited from the worktrees (main = 9851a40f2, fix/forever-prereq-gates =
 -- 64fe6b36f, fix/u-step-loot-result = 476a5d8fd when written):
@@ -45,8 +45,12 @@ local function absent(slug)
   return nil
 end
 
--- One full Dwarf Warrior baseline run per worktree (stop level 25 or chain end),
--- kept with its Engine so the guide loaded at the stop can be read.
+-- One Dwarf Warrior baseline run per worktree, kept with its Engine so the guide
+-- loaded at the stop can be read. The anchors were written when a run stopped at
+-- level 25, inside 19_25; since runs play the whole chain (55439ed), the run is
+-- limited to that scope with the guide filter: Dun Morogh -> 12_20 -> 19_25, then
+-- the excluded 25_30 ends it (no-next-guide) with 19_25 still loaded.
+local ANCHOR_GUIDES = { ClassicDunMorogh0112 = true, ClassicEasternKingdom1220 = true, ClassicAlliance1925 = true }
 local runs = {}
 local function run_of(slug)
   if runs[slug] then return runs[slug] end
@@ -56,7 +60,7 @@ local function run_of(slug)
   local log = require("hwc.driver.run").drive({
     engine = E, world = result.world, cfg = cfg,
     errors = result.sb.errors, missing_order = result.sb.missing_order, addon = result.addon,
-  }, {})
+  }, { included = ANCHOR_GUIDES })
   runs[slug] = { log = log, engine = E, world = result.world, findings = group.findings({ log }) }
   return runs[slug]
 end
@@ -192,6 +196,11 @@ describe("anchor #3554 (U step gated on its L result) #slow", function()
     local r = run_of(slug)
     local gid = r.log.stop.gid
     assert.equal(ALLIANCE_19_25, r.engine:guide(gid).file, "run stopped outside 19_25: " .. tostring(gid))
+    -- Finishing 19_25 makes the engine load 25_30 itself; the driver then sees it is
+    -- excluded and stops with 19_25 as its last played guide. Load 19_25 back to read
+    -- its steps (indices are fixed per character, so they match the run's snapshots).
+    if r.engine:gid() ~= gid then r.engine:load_guide(gid) end
+    assert.equal(gid, r.engine:gid(), "could not reload " .. tostring(gid))
     local idx, s = u_step_index(r.engine)
     assert.is_truthy(idx, "no U|5456 step for QID 1016 in " .. tostring(gid))
     print(string.format("#3554 %s: %s:%d %s (index %d)", slug, ALLIANCE_19_25, s.line, s.name, idx))
