@@ -62,7 +62,8 @@ export function App({ doc }: { doc: ReportDoc }) {
     });
 
   const goToCause = (cause: Finding) => {
-    if (counted(cause)) setS(defaultState(doc));
+    // Ruling R9: clear the filters but keep the order.
+    if (counted(cause)) setS({ ...defaultState(doc), order: s.order });
     else setOpen((o) => new Set(o).add(isHarness(cause) ? "harness" : "expected"));
     setPending(cardId(cause.id));
   };

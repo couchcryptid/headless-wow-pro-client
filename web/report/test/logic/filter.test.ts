@@ -94,8 +94,9 @@ describe("visible", () => {
     expect(v.roots).toEqual([]);
     expect(v.lifted).toEqual([]);
   });
-  it("by default there are no lifted findings", () => {
-    expect(visible(single, defaultState(single)).lifted).toEqual([]);
+  it("by default the only lifted finding is the one whose cause is uncounted", () => {
+    // single.json links the Tunnel Rats leftover (qid 530) to the harness missing global.
+    expect(visible(single, defaultState(single)).lifted.map((f) => f.qid)).toEqual([530]);
   });
 });
 

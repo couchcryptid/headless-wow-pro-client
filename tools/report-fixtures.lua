@@ -55,10 +55,13 @@ local function header(scope, combos, guide_entries, stop)
   }
 end
 
-local function document(scope, logs, combos, stop)
+-- relink, when given, edits the grouped findings' links before the report is built.
+local function document(scope, logs, combos, stop, relink)
   local entries = {}
   for i, l in ipairs(logs) do entries[i] = { combo = combos[i], guide_levels = l.guide_levels or {} } end
-  local doc = report.build(group.findings(logs), header(scope, combos, entries, stop))
+  local findings = group.findings(logs)
+  if relink then relink(findings) end
+  local doc = report.build(findings, header(scope, combos, entries, stop))
   return json.encode(doc, { indent = true }) .. "\n"
 end
 
@@ -121,6 +124,8 @@ local function single_signals()
   add(sig("below-level", G3, DUN_11_14, 303, "A", "Deep Digging", 510,
     { qname = "Gnome Trouble", before = { name = "Mine the Vein", action = "C" }, after = { name = "Report", action = "T" } }))
   add(sig("did-not-advance", G3, DUN_11_14, 520, "C", "Clear the Tunnel", 520, { level = 13, log = { 520 } }))
+  -- Linked below (single_relink) to the harness missing global: a counted finding under an uncounted cause.
+  add(sig("leftover-quests", G3, DUN_11_14, 560, "T", "Tunnel Rats", 530, { qname = "Tunnel Rats" }))
 
   -- Not guide findings: a Lua error with no file, one with a file, and the one harness item (a missing global).
   add({ signal = "lua-error", message = "attempt to index a nil value (field 'frame')",
@@ -131,6 +136,20 @@ local function single_signals()
   return s
 end
 
+-- group.lua never links a finding to an uncounted one today, but the page must cope if it
+-- does (filter.ts lifts such a finding; a fold entry must not nest it). Force one such link:
+-- the Tunnel Rats leftover (qid 530) follows from the missing global.
+local function single_relink(findings)
+  local cause, child
+  for _, f in ipairs(findings) do
+    if f.signal == "missing-global" then cause = f end
+    if f.qid == 530 then child = f end
+  end
+  child.caused_by = cause.id
+  cause.causes[#cause.causes + 1] = child.id
+  table.sort(cause.causes)
+end
+
 function fixtures.single()
   -- G1 is entered under its level, so the page has one enter-under flag; G3 is 600 lines long.
   local gl = {
@@ -139,7 +158,7 @@ function fixtures.single()
     levels("Dun Morogh 11-14", DUN_11_14, 11, 14, 11, 14, true, 600),
   }
   local log = runlog("Dwarf", "WARRIOR", single_signals(), gl)
-  return document("Dwarf-WARRIOR-baseline", { log }, { DWARF_WARRIOR })
+  return document("Dwarf-WARRIOR-baseline", { log }, { DWARF_WARRIOR }, nil, single_relink)
 end
 
 ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 // One finding (spec §4.6), with its shown follow-ons nested below it.
 import { useContext, useState } from "preact/hooks";
-import { childrenShown } from "../logic/filter";
+import { cardChildren } from "../logic/filter";
 import { counted } from "../logic/state";
 import type { Finding, StepRef } from "../types";
 import { PageContext, cardId, comboLabel, shortFile } from "./context";
@@ -93,7 +93,7 @@ export function Card({ f, showFile }: { f: Finding; showFile: boolean }) {
   const page = useContext(PageContext);
   const { doc, s, multi, lifted } = page;
   const [open, setOpen] = useState(false);
-  const kids = childrenShown(f, doc, s);
+  const kids = cardChildren(f, doc, s);
   // Expected findings carry no severity: no dot, a neutral edge.
   const sev = f.severity ?? "none";
   const sevLabel = f.severity ? (doc.labels.severities[f.severity] ?? f.severity) : undefined;

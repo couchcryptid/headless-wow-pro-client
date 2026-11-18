@@ -17,7 +17,10 @@ describe("prioritySections", () => {
     expect(secs.map((x) => x.severity)).toEqual(["high", "medium-high", "medium", "low"]);
   });
   it("follow-ons are not top-level cards unless lifted", () => {
-    for (const sec of secs) for (const c of sec.cards) expect(c.caused_by).toBeUndefined();
+    // single.json's one lifted finding (qid 530) follows from an uncounted harness notice.
+    const lifted = new Set(visible(single, s0).lifted.map((f) => f.id));
+    expect(lifted.size).toBe(1);
+    for (const sec of secs) for (const c of sec.cards) if (!lifted.has(c.id)) expect(c.caused_by).toBeUndefined();
     expect(high.primary).toBe(8);
     expect(high.follow).toBe(2);
   });

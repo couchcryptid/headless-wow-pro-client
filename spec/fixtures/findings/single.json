@@ -468,6 +468,28 @@
       "title":"Stuck on \"Run to Ironforge\""
     },{
       "action":"T",
+      "caused_by":"F-da5d3755",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_11_14.lua",
+      "gid":"Dun Morogh 11-14",
+      "id":"F-96f9c1f4",
+      "line":560,
+      "name":"Tunnel Rats",
+      "qid":530,
+      "qname":"Tunnel Rats",
+      "reasons":[],
+      "sentence":"The run passed this turn-in step, but quest \"Tunnel Rats\" (530) was still in the log when the run ended.",
+      "severity":"low",
+      "signal":"leftover-quests",
+      "step":{
+        "action":"T",
+        "name":"Tunnel Rats"
+      },
+      "title":"Quest \"Tunnel Rats\" (530) is left in the log"
+    },{
+      "action":"T",
       "causes":[],
       "combos":["Dwarf WARRIOR baseline"],
       "confidence":"verified",
@@ -511,9 +533,9 @@
       },
       "title":"Quest \"Ore for Ironforge\" (470) is left in the log"
     },{
-      "causes":[],
+      "causes":["F-96f9c1f4"],
       "combos":["Dwarf WARRIOR baseline"],
-      "explains":0,
+      "explains":1,
       "id":"F-da5d3755",
       "name":"GetNumGroupMembers",
       "reasons":[],
@@ -688,7 +710,7 @@
           "primary":8
         },
         "low":{
-          "follow":0,
+          "follow":1,
           "primary":2
         },
         "medium":{
@@ -706,6 +728,10 @@
         "high":{
           "follow":0,
           "primary":1
+        },
+        "low":{
+          "follow":1,
+          "primary":0
         },
         "medium":{
           "follow":0,
@@ -747,7 +773,7 @@
     },
     "by_severity":{
       "high":10,
-      "low":2,
+      "low":3,
       "medium":8,
       "medium-high":2
     },
@@ -756,7 +782,7 @@
       "below-level":2,
       "did-not-advance":6,
       "hidden-use-step":1,
-      "leftover-quests":2,
+      "leftover-quests":3,
       "log-full":1,
       "lua-error":2,
       "manual-completion":1,
@@ -765,7 +791,7 @@
       "stuck":1,
       "wrong-race-class":1
     },
-    "findings":22,
+    "findings":23,
     "roots":17
   }
 }

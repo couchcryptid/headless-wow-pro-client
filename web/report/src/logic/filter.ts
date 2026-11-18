@@ -126,3 +126,12 @@ export function counts(doc: ReportDoc, s: FilterState): Counts {
   }
   return { shown: all.filter((f) => matches(f, s)).length, total: all.length, options };
 }
+
+/**
+ * The follow-ons a card nests. An uncounted card (a harness or expected fold entry)
+ * nests none: visible() already lifts its counted follow-ons to the top level, so
+ * nesting them too would show them twice.
+ */
+export function cardChildren(f: Finding, doc: ReportDoc, s: FilterState): Finding[] {
+  return counted(f) ? childrenShown(f, doc, s) : [];
+}
