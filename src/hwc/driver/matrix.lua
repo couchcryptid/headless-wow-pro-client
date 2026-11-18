@@ -29,16 +29,8 @@ function matrix.professions(variant)
   return nil
 end
 
--- The race's Forever classes (Player.RACES, from Blizzard's race/class table), as a
--- copy. Never from guide tags: the guide is what's under test, and an upstream edit
--- once dropped Gnome Priest from the matrix that way (WoW-Pro 9310ff2ab).
-function matrix.classes_for(race)
-  local r = Player.RACES[race]
-  if not r then error("hwc: race not in scope: " .. tostring(race), 0) end
-  local out = {}
-  for i, c in ipairs(r.classes) do out[i] = c end
-  return out
-end
+-- The race's Forever classes; kept until the CLI rework deletes this file.
+matrix.classes_for = Player.classes_for
 
 -- Every class x baseline, plus each non-baseline variant on the race's first
 -- class (Camping 101 quests are not class-gated, so one class covers them).

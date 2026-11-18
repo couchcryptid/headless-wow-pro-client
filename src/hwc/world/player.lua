@@ -60,6 +60,17 @@ Player.RACES = {
     start = { "Zephras Isle", 2521, 0.43, 0.23 } },
 }
 
+-- The race's Forever classes (Player.RACES, from Blizzard's race/class table), as a
+-- copy. Never from guide tags: the guide is what's under test, and an upstream edit
+-- once dropped Gnome Priest from the matrix that way (WoW-Pro 9310ff2ab).
+function Player.classes_for(race)
+  local r = Player.RACES[race]
+  if not r then error("hwc: race not in scope: " .. tostring(race), 0) end
+  local out = {}
+  for i, c in ipairs(r.classes) do out[i] = c end
+  return out
+end
+
 -- Can the race play the class (an upper-case token) in Forever?
 function Player.can_play(race, class)
   local r = Player.RACES[race]
@@ -146,7 +157,8 @@ function Player:learn_skill(name, rank, max)
   self.skills[name] = { rank = rank, max = max }
   self._record("learn_skill", { name = name, rank = rank, max = max })
   -- A profession comes with the spell that teaches it (hwc.world.profession_spells).
-  local spell = PROFESSION_SPELLS[name]
+  local info = PROFESSION_SPELLS[name]
+  local spell = info and info.spell
   if spell and not self.spells[spell] then self:learn_spell(spell) end
 end
 
