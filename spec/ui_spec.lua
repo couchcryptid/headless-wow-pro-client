@@ -1,0 +1,127 @@
+local ui = require("hwc.ui")
+
+local function buffer()
+  local b = { data = {} }
+  function b:write(...)
+    for _, s in ipairs({ ... }) do
+      self.data[#self.data + 1] = s
+    end
+    return self
+  end
+  function b:text()
+    return table.concat(self.data)
+  end
+  return b
+end
+
+local function make(level, tty)
+  local out, err = buffer(), buffer()
+  return ui.new({ out = out, err = err, level = level, tty = tty }), out, err
+end
+
+describe("ui levels", function()
+  it("quiet suppresses info, warn and detail but not error or result", function()
+    local u, out, err = make("quiet", false)
+    u:info("i")
+    u:warn("w")
+    u:detail("d")
+    assert.equals("", err:text())
+    u:error("e")
+    u:result("r")
+    assert.equals("hwc: e\n", err:text())
+    assert.equals("r", out:text())
+  end)
+
+  it("normal writes info, warn and error but not detail", function()
+    local u, _, err = make("normal", false)
+    u:detail("d")
+    assert.equals("", err:text())
+    u:info("i")
+    u:warn("w")
+    u:error("e\n")
+    assert.equals("i\nwarning: w\nhwc: e\n", err:text())
+  end)
+
+  it("verbose writes detail", function()
+    local u, _, err = make("verbose", false)
+    u:detail("d")
+    assert.equals("d\n", err:text())
+  end)
+
+  it("result writes text as given", function()
+    local u, out = make("normal", false)
+    u:result("a")
+    u:result("b\n")
+    assert.equals("ab\n", out:text())
+  end)
+
+  it("exposes level and tty", function()
+    local u = make("verbose", true)
+    assert.equals("verbose", u.level)
+    assert.is_true(u.tty)
+  end)
+end)
+
+describe("ui progress on a tty", function()
+  it("redraws in place", function()
+    local u, _, err = make("normal", true)
+    u:progress("a")
+    assert.equals("\ra", err:text())
+    u:progress("b")
+    assert.equals("\ra\r\27[Kb", err:text())
+  end)
+
+  it("clears the line for a warning, then redraws progress", function()
+    local u, _, err = make("normal", true)
+    u:progress("a")
+    local before = #err:text()
+    u:warn("x")
+    assert.equals("\r\27[Kwarning: x\n\r\27[Ka", err:text():sub(before + 1))
+  end)
+
+  it("done clears the line", function()
+    local u, _, err = make("normal", true)
+    u:progress("a")
+    local before = #err:text()
+    u:done()
+    assert.equals("\r\27[K", err:text():sub(before + 1))
+    u:done()
+    assert.equals("\ra\r\27[K", err:text())
+  end)
+
+  it("does not redraw after done", function()
+    local u, _, err = make("normal", true)
+    u:progress("a")
+    u:done()
+    local before = #err:text()
+    u:warn("x")
+    assert.equals("warning: x\n", err:text():sub(before + 1))
+  end)
+
+  it("writes nothing when quiet", function()
+    local u, _, err = make("quiet", true)
+    u:progress("a")
+    u:done()
+    assert.equals("", err:text())
+  end)
+end)
+
+describe("ui progress without a tty", function()
+  it("prints plain lines and skips repeats", function()
+    local u, _, err = make("normal", false)
+    u:progress("a")
+    u:progress("a")
+    u:progress("b")
+    u:done()
+    assert.equals("a\nb\n", err:text())
+    assert.is_nil(err:text():find("\r", 1, true))
+    assert.is_nil(err:text():find("\27", 1, true))
+  end)
+end)
+
+describe("ui.isatty", function()
+  it("returns a boolean", function()
+    assert.is_boolean(ui.isatty(2))
+    assert.is_boolean(ui.isatty(2))
+  end)
+end)
