@@ -3,7 +3,7 @@ local text = require("hwc.findings.text")
 
 local function F(t)
   t.id = t.id or "F-AAAA0001"
-  t.combos = t.combos or { "Dwarf WARRIOR baseline" }
+  t.combos = t.combos or { "Dwarf WARRIOR none" }
   t.reasons = t.reasons or {}
   return t
 end
@@ -87,26 +87,28 @@ describe("text.step", function()
 end)
 
 describe("text.character", function()
-  it("title-cases the class and drops baseline", function()
-    assert.equal("Dwarf Warrior", text.character("Dwarf WARRIOR baseline"))
+  it("title-cases the class and drops an empty profession set", function()
+    assert.equal("Dwarf Warrior", text.character("Dwarf WARRIOR none"))
   end)
-  it("keeps a non-baseline variant", function()
-    assert.equal("Dwarf Hunter (lw-skin)", text.character("Dwarf HUNTER lw-skin"))
+  it("lists the professions", function()
+    assert.equal("Dwarf Hunter (Leatherworking, Skinning)", text.character("Dwarf HUNTER leatherworking,skinning"))
+    assert.equal("Dwarf Warrior (Herbalism, Skinning)", text.character("Dwarf WARRIOR herbalism,skinning"))
+    assert.equal("Dwarf Warrior (First Aid, Fishing)", text.character("Dwarf WARRIOR first-aid,fishing"))
   end)
   it("handles a two-word race", function()
-    assert.equal("Night Elf Rogue", text.character("Night Elf ROGUE baseline"))
+    assert.equal("Night Elf Rogue", text.character("Night Elf ROGUE none"))
   end)
   it("shows a race token by its display name", function()
-    assert.equal("Night Elf Warrior", text.character("NightElf WARRIOR baseline"))
-    assert.equal("Night Elf Hunter (lw-skin)", text.character("NightElf HUNTER lw-skin"))
+    assert.equal("Night Elf Warrior", text.character("NightElf WARRIOR none"))
+    assert.equal("Night Elf Hunter (Tailoring)", text.character("NightElf HUNTER tailoring"))
   end)
 end)
 
 describe("text.combos", function()
   local matrix = {}
-  for _, v in ipairs({ "baseline", "a", "b", "c", "d", "e", "f" }) do matrix[#matrix + 1] = "Dwarf HUNTER " .. v end
-  for _, c in ipairs({ "Dwarf PRIEST baseline", "Gnome MAGE baseline", "Dwarf WARRIOR baseline",
-    "Gnome PRIEST baseline", "Gnome WARRIOR baseline", "Dwarf MAGE baseline" }) do matrix[#matrix + 1] = c end
+  for _, v in ipairs({ "none", "alchemy", "herbalism", "mining", "skinning", "tailoring", "fishing" }) do matrix[#matrix + 1] = "Dwarf HUNTER " .. v end
+  for _, c in ipairs({ "Dwarf PRIEST none", "Gnome MAGE none", "Dwarf WARRIOR none",
+    "Gnome PRIEST none", "Gnome WARRIOR none", "Dwarf MAGE none" }) do matrix[#matrix + 1] = c end
 
   local function without(...)
     local skip = {}
@@ -122,36 +124,36 @@ describe("text.combos", function()
     assert.is_false(dropped) -- "all" is complete
   end)
   it("lists the excluded characters when at most 3 are unaffected", function()
-    local s, dropped = text.combos(without("Dwarf PRIEST baseline", "Gnome MAGE baseline"), matrix)
+    local s, dropped = text.combos(without("Dwarf PRIEST none", "Gnome MAGE none"), matrix)
     assert.equal("all except Dwarf Priest, Gnome Mage", s)
     assert.is_false(dropped) -- names every excluded character
   end)
   it("groups by race and class otherwise", function()
-    local aff = { "Dwarf WARRIOR baseline" }
+    local aff = { "Dwarf WARRIOR none" }
     for i = 1, 7 do aff[#aff + 1] = matrix[i] end
     local s, dropped = text.combos(aff, matrix)
-    assert.equal("Dwarf Hunter (all 7 variants), Dwarf Warrior", s)
+    assert.equal("Dwarf Hunter (all 7 profession sets), Dwarf Warrior", s)
     assert.is_true(dropped)
   end)
-  it("names the variants when only some are affected", function()
-    local s, dropped = text.combos({ "Dwarf HUNTER baseline", "Dwarf HUNTER a", "Gnome MAGE baseline" }, matrix)
-    assert.equal("Dwarf Hunter (baseline, a), Gnome Mage", s)
-    assert.is_false(dropped) -- every variant is named
+  it("names the profession sets when only some are affected", function()
+    local s, dropped = text.combos({ "Dwarf HUNTER none", "Dwarf HUNTER alchemy", "Gnome MAGE none" }, matrix)
+    assert.equal("Dwarf Hunter (none, Alchemy), Gnome Mage", s)
+    assert.is_false(dropped) -- every profession set is named
   end)
   it("uses race display names in every summary form", function()
-    local m = { "NightElf WARRIOR baseline", "NightElf HUNTER baseline", "NightElf HUNTER a", "Dwarf MAGE baseline",
-      "Dwarf PRIEST baseline", "Gnome ROGUE baseline", "Dwarf ROGUE baseline" }
+    local m = { "NightElf WARRIOR none", "NightElf HUNTER none", "NightElf HUNTER tailoring", "Dwarf MAGE none",
+      "Dwarf PRIEST none", "Gnome ROGUE none", "Dwarf ROGUE none" }
     assert.equal("all except Night Elf Warrior", (text.combos({ m[2], m[3], m[4], m[5], m[6], m[7] }, m)))
-    assert.equal("Night Elf Hunter (all 2 variants), Night Elf Warrior", (text.combos({ m[1], m[2], m[3] }, m)))
-    assert.equal("Night Elf Hunter (a)", (text.combos({ m[3] }, m)))
+    assert.equal("Night Elf Hunter (all 2 profession sets), Night Elf Warrior", (text.combos({ m[1], m[2], m[3] }, m)))
+    assert.equal("Night Elf Hunter (Tailoring)", (text.combos({ m[3] }, m)))
     local f = F({ signal = "accept-refused", name = "Pre", qid = 7, reasons = { "race" },
-      combos = { "NightElf WARRIOR baseline", "Dwarf MAGE baseline" } })
+      combos = { "NightElf WARRIOR none", "Dwarf MAGE none" } })
     assert.equal('"Pre" can\'t be taken by a Dwarf/Night Elf', text.title(f))
   end)
   it("drops no detail when the summary is the plain list", function()
-    local m = { "Dwarf WARRIOR baseline", "Gnome MAGE baseline", "Gnome PRIEST baseline", "Dwarf MAGE baseline",
-      "Dwarf PRIEST baseline", "Gnome ROGUE baseline", "Dwarf ROGUE baseline" }
-    local s, dropped = text.combos({ "Dwarf WARRIOR baseline", "Gnome MAGE baseline" }, m)
+    local m = { "Dwarf WARRIOR none", "Gnome MAGE none", "Gnome PRIEST none", "Dwarf MAGE none",
+      "Dwarf PRIEST none", "Gnome ROGUE none", "Dwarf ROGUE none" }
+    local s, dropped = text.combos({ "Dwarf WARRIOR none", "Gnome MAGE none" }, m)
     assert.equal("Dwarf Warrior, Gnome Mage", s)
     assert.is_false(dropped)
   end)
@@ -230,13 +232,13 @@ describe("text.title and text.sentence (design spec §4.7)", function()
   end)
   it("accept-refused by class across several combos", function()
     local f = F({ signal = "accept-refused", name = "Pre", qid = 7, reasons = { "class" },
-      combos = { "Gnome MAGE baseline", "Dwarf PRIEST baseline", "Dwarf PRIEST lw-skin" } })
+      combos = { "Gnome MAGE none", "Dwarf PRIEST none", "Dwarf PRIEST leatherworking,skinning" } })
     local t, s = both(f, { by_id = {} })
     assert.equal('"Pre" can\'t be taken by a Mage/Priest', t)
     assert.equal("The guide shows this accept, but the quest data says a Mage/Priest can't take quest 7.", s)
   end)
   it("uses an for a vowel-initial race", function()
-    local f = F({ signal = "accept-refused", name = "Pre", qid = 7, reasons = { "race" }, combos = { "Orc WARRIOR baseline" } })
+    local f = F({ signal = "accept-refused", name = "Pre", qid = 7, reasons = { "race" }, combos = { "Orc WARRIOR none" } })
     assert.equal("The guide shows this accept, but the quest data says an Orc can't take quest 7.",
       text.sentence(f, { single = "Orc Warrior", by_id = {} }))
   end)
@@ -267,7 +269,7 @@ describe("text.title and text.sentence (design spec §4.7)", function()
   end)
   it("wrong-race-class, multi-combo run", function()
     local f = F({ signal = "wrong-race-class", name = "Shown", qid = 7, reasons = { "class" },
-      combos = { "Dwarf PRIEST baseline", "Gnome MAGE baseline" } })
+      combos = { "Dwarf PRIEST none", "Gnome MAGE none" } })
     local t, s = both(f, { by_id = {} })
     assert.equal('"Shown" is shown to the wrong class', t)
     assert.equal("WoWPro shows this step to characters that quest 7 excludes.", s)

@@ -42,9 +42,15 @@ for i, s in ipairs(SEVERITY_ORDER) do SEVERITY_RANK[s] = i end
 local REFUSALS = { ["accept-refused"] = true, ["log-full"] = true }
 local FOLLOWS_REFUSAL = { ["orphan-turnin"] = true, ["did-not-advance"] = true, ["leftover-quests"] = true }
 
-local function combo(log)
+local professions = require("hwc.world.professions")
+
+function group.combo(log)
   local c = log.character or {}
-  return string.format("%s %s %s", tostring(c.race), tostring(c.class), log.variant or "baseline")
+  -- Sorted so the same set of professions is always the same combo.
+  local names = {}
+  for i, n in ipairs(c.professions or {}) do names[i] = n end
+  table.sort(names)
+  return string.format("%s %s %s", tostring(c.race), tostring(c.class), professions.token(names))
 end
 
 -- Second sort key when two RunLogs share a combo: their professions, joined.
@@ -173,7 +179,7 @@ end
 function group.findings(runlogs)
   local groups, order = {}, {}
   for _, log in ipairs(runlogs) do
-    local c = combo(log)
+    local c = group.combo(log)
     for i, s in ipairs(log.signals or {}) do
       local key = key_of(s)
       local g = groups[key]

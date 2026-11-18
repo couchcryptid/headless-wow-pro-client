@@ -85,11 +85,23 @@ function text.step(action, name)
   return (text.VERBS[action] or action) .. " " .. quoted(name)
 end
 
--- Split "Night Elf HUNTER lw-skin" into race (may hold spaces), class, variant.
+-- Split "Night Elf HUNTER herbalism,skinning" into race (may hold spaces), class, and the
+-- profession token ("none" for no professions).
 local function split_combo(combo)
-  local rest, variant = combo:match("^(.*) (%S+)$")
+  local rest, token = combo:match("^(.*) (%S+)$")
   local race, class = (rest or ""):match("^(.*) (%S+)$")
-  return race or combo, class or "", variant or "baseline"
+  return race or combo, class or "", token or "none"
+end
+
+-- "first-aid,herbalism" -> "First Aid, Herbalism"; nil for "none". Reads the token as
+-- written (no validation), so Cooking and any future name label too.
+local function token_label(token, sep)
+  if token == "none" then return nil end
+  local names = {}
+  for part in token:gmatch("[^,]+") do
+    names[#names + 1] = (part:gsub("%-", " "):gsub("(%a)(%a*)", function(a, b) return a:upper() .. b end))
+  end
+  return table.concat(names, sep or ", ")
 end
 
 -- A race token as the game shows it: "NightElf" -> "Night Elf". Unknown
@@ -100,9 +112,10 @@ local function race_name(token)
 end
 
 function text.character(combo)
-  local race, class, variant = split_combo(combo)
+  local race, class, token = split_combo(combo)
   local out = race_name(race) .. " " .. titlecase(class)
-  if variant ~= "baseline" then out = out .. " (" .. variant .. ")" end
+  local label = token_label(token)
+  if label then out = out .. " (" .. label .. ")" end
   return out
 end
 
@@ -115,8 +128,8 @@ function text.combos(affected, matrix)
   for _, c in ipairs(matrix) do if not aff[c] then unaffected[#unaffected + 1] = c end end
   table.sort(unaffected)
 
-  -- Detail is dropped only when a group reads "(all N variants)": "all N
-  -- characters", "all except ..." and named-variant groups lose nothing.
+  -- Detail is dropped only when a group reads "(all N profession sets)": "all N
+  -- characters", "all except ..." and named-set groups lose nothing.
   local summary
   local dropped = false
   if #unaffected == 0 then
@@ -127,7 +140,7 @@ function text.combos(affected, matrix)
     table.sort(list)
     summary = "all except " .. table.concat(list, ", ")
   else
-    -- Group by race and class, remembering how many matrix variants each has.
+    -- Group by race and class, remembering how many matrix profession sets each has.
     local groups, order = {}, {}
     local function group_for(combo)
       local race, class = split_combo(combo)
@@ -141,8 +154,8 @@ function text.combos(affected, matrix)
     for _, c in ipairs(matrix) do group_for(c).total = group_for(c).total + 1 end
     for c in pairs(aff) do
       local g = group_for(c)
-      local _, _, variant = split_combo(c)
-      g.hit[#g.hit + 1] = variant
+      local _, _, token = split_combo(c)
+      g.hit[#g.hit + 1] = token
     end
     local parts = {}
     for _, key in ipairs(order) do
@@ -155,15 +168,18 @@ function text.combos(affected, matrix)
         else
           local name = race_name(g.race) .. " " .. titlecase(g.class)
           if #g.hit >= g.total then
-            label = name .. " (all " .. g.total .. " variants)"
+            label = name .. " (all " .. g.total .. " profession sets)"
             dropped = true
           else
-            -- baseline first, then the rest alphabetically.
+            -- "none" first, then the rest alphabetically; a set reads "Alchemy + Herbalism"
+            -- so it isn't mistaken for two entries of the list.
             table.sort(g.hit, function(a, b)
-              if (a == "baseline") ~= (b == "baseline") then return a == "baseline" end
+              if (a == "none") ~= (b == "none") then return a == "none" end
               return a < b
             end)
-            label = name .. " (" .. table.concat(g.hit, ", ") .. ")"
+            local shown = {}
+            for i, t in ipairs(g.hit) do shown[i] = token_label(t, " + ") or "none" end
+            label = name .. " (" .. table.concat(shown, ", ") .. ")"
           end
         end
         parts[#parts + 1] = label

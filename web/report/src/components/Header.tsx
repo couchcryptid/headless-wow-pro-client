@@ -8,7 +8,7 @@ function who(doc: ReportDoc): string {
   const combos = doc.header.matrix.combos;
   if (combos.length === 0) return "Findings";
   if (combos.length === 1) return comboLabel(doc, combos[0]);
-  // A label is "<race> <class>" with an optional "(variant)": the race is all but the last word.
+  // A label is "<race> <class>" with an optional "(professions)": the race is all but the last word.
   const races = combos.map((c) => {
     const l = comboLabel(doc, c).replace(/ \([^)]*\)$/, "");
     return l.replace(/ \S+$/, "") || l;

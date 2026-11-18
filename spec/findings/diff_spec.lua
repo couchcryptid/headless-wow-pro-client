@@ -1,6 +1,6 @@
 local diff = require("hwc.findings.diff")
 
-local DWARF, GNOME = "Dwarf WARRIOR baseline", "Gnome MAGE baseline"
+local DWARF, GNOME = "Dwarf WARRIOR none", "Gnome MAGE none"
 
 local function doc(opts)
   opts = opts or {}
@@ -72,10 +72,10 @@ describe("diff.compare", function()
 
   it("keeps fixed_for on a spread finding that also lost characters", function()
     local r = diff.compare(
-      doc({ combos = { DWARF, GNOME, "Human PRIEST baseline" }, findings = { f("F-1", { DWARF, GNOME }) } }),
-      doc({ combos = { DWARF, GNOME, "Human PRIEST baseline" }, findings = { f("F-1", { GNOME, "Human PRIEST baseline" }) } }))
+      doc({ combos = { DWARF, GNOME, "Human PRIEST none" }, findings = { f("F-1", { DWARF, GNOME }) } }),
+      doc({ combos = { DWARF, GNOME, "Human PRIEST none" }, findings = { f("F-1", { GNOME, "Human PRIEST none" }) } }))
     assert.equal(1, r.counts.spread)
-    assert.same({ "Human PRIEST baseline" }, r.spread[1].added_for)
+    assert.same({ "Human PRIEST none" }, r.spread[1].added_for)
     assert.same({ DWARF }, r.spread[1].fixed_for)
   end)
 
@@ -169,7 +169,7 @@ describe("diff.compare", function()
     end)
 
     it("ignores a stop on a character that is not shared", function()
-      local priest = "Human PRIEST baseline"
+      local priest = "Human PRIEST none"
       local r = diff.compare(doc({ commit = "b", combos = { DWARF, GNOME } }),
         doc({ commit = "c", combos = { DWARF, priest }, stop = { { combo = priest, reason = "stuck" } } }))
       assert.same({ "combos", "combos" }, codes(r))
@@ -280,7 +280,7 @@ describe("diff.render", function()
   end)
 
   it("shows both sides of a spread finding that also lost characters", function()
-    local priest = "Human PRIEST baseline"
+    local priest = "Human PRIEST none"
     local out = render(
       doc({ combos = { DWARF, GNOME, priest }, findings = { f("F-1", { DWARF, GNOME }) } }),
       doc({ combos = { DWARF, GNOME, priest }, findings = { f("F-1", { GNOME, priest }) } }))

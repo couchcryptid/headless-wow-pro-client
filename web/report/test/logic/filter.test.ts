@@ -153,7 +153,7 @@ describe("counts", () => {
 
 describe("matrix", () => {
   it("filtering to one combo hides findings only other combos hit", () => {
-    const only = "Gnome PRIEST baseline";
+    const only = "Gnome PRIEST none";
     const s = { ...defaultState(matrix), combo: new Set([only]) };
     const v = visible(matrix, s);
     const ids = [...v.roots, ...v.lifted].map((f) => f.id);

@@ -309,13 +309,12 @@ local function play(combos, scope, opts, out, err)
     })
     cfg.variant = c.variant
     local log = runner.character(cfg, { included = opts.included })
-    log.variant = c.variant
     if opts.included and #(log.guides or {}) == 0 then
       if not skipped_seen[c.race] then skipped_seen[c.race] = true; skipped_races[#skipped_races + 1] = c.race end
     else
       played[#played + 1] = c
       raw[#raw + 1] = log
-      labels[#labels + 1] = string.format("%s %s %s", c.race, c.class, c.variant)
+      labels[#labels + 1] = group.combo(log)
     end
   end
   if #played == 0 and #combos > 0 and opts.matrix then

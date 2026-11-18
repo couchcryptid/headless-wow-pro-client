@@ -21,9 +21,9 @@ local json = require("hwc.json")
 
 local fixtures = {}
 
-local DWARF_WARRIOR = "Dwarf WARRIOR baseline"
-local GNOME_MAGE = "Gnome MAGE baseline"
-local GNOME_PRIEST = "Gnome PRIEST baseline"
+local DWARF_WARRIOR = "Dwarf WARRIOR none"
+local GNOME_MAGE = "Gnome MAGE none"
+local GNOME_PRIEST = "Gnome PRIEST none"
 
 -- Guide files, named like the real ones under the WoW-Pro checkout.
 local DUN_1_5 = "WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua"
@@ -223,7 +223,7 @@ end
 function fixtures.empty()
   local log = runlog("Dwarf", "WARRIOR", {}, {})
   return document("Dwarf-WARRIOR-baseline", { log }, { DWARF_WARRIOR },
-    { { combo = "Dwarf WARRIOR baseline", reason = "iterations" } })
+    { { combo = "Dwarf WARRIOR none", reason = "iterations" } })
 end
 
 -- { [name] = json_text }, pure.

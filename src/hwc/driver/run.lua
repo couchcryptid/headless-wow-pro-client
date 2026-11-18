@@ -645,7 +645,6 @@ function run.drive(ctx, opts)
   local addon = ctx.addon or {}
   local log = {
     character = { race = cfg.race, class = cfg.class, professions = profs },
-    variant = cfg.variant or o.variant,
     addon = { path = addon.path, git = addon.git, branch = addon.branch, commit = addon.commit,
       dirty = addon.dirty, version = addon.version },
     catalog = { sources = W.catalog and W.catalog.sources },

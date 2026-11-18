@@ -2,7 +2,7 @@
   "findings":[{
       "action":"A",
       "causes":[],
-      "combos":["Gnome MAGE baseline"],
+      "combos":["Gnome MAGE none"],
       "confidence":"verified",
       "explains":0,
       "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
@@ -23,7 +23,7 @@
     },{
       "action":"A",
       "causes":[],
-      "combos":["Dwarf WARRIOR baseline"],
+      "combos":["Dwarf WARRIOR none"],
       "confidence":"verified",
       "explains":0,
       "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
@@ -52,7 +52,7 @@
         "name":"Go"
       },
       "causes":[],
-      "combos":["Gnome PRIEST baseline"],
+      "combos":["Gnome PRIEST none"],
       "confidence":"verified",
       "explains":0,
       "file":"WoWPro_Leveling/Guides/Alliance/Wes_12_15.lua",
@@ -74,7 +74,7 @@
     },{
       "action":"T",
       "causes":[],
-      "combos":["Dwarf WARRIOR baseline","Gnome MAGE baseline","Gnome PRIEST baseline"],
+      "combos":["Dwarf WARRIOR none","Gnome MAGE none","Gnome PRIEST none"],
       "confidence":"verified",
       "explains":0,
       "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
@@ -97,7 +97,7 @@
     },{
       "action":"C",
       "causes":[],
-      "combos":["Gnome MAGE baseline"],
+      "combos":["Gnome MAGE none"],
       "confidence":"verified",
       "explains":0,
       "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
@@ -148,17 +148,17 @@
         "gid":"Dun Morogh 1-5",
         "last_line":220,
         "levels":{
-          "Dwarf WARRIOR baseline":{
+          "Dwarf WARRIOR none":{
             "enter":1,
             "finished":true,
             "leave":5
           },
-          "Gnome MAGE baseline":{
+          "Gnome MAGE none":{
             "enter":1,
             "finished":true,
             "leave":5
           },
-          "Gnome PRIEST baseline":{
+          "Gnome PRIEST none":{
             "enter":1,
             "finished":true,
             "leave":5
@@ -172,12 +172,12 @@
         "gid":"Dun Morogh 5-11",
         "last_line":180,
         "levels":{
-          "Dwarf WARRIOR baseline":{
+          "Dwarf WARRIOR none":{
             "enter":5,
             "finished":true,
             "leave":11
           },
-          "Gnome MAGE baseline":{
+          "Gnome MAGE none":{
             "enter":7,
             "finished":true,
             "leave":11
@@ -188,18 +188,18 @@
         "end_level":15,
         "file":"WoWPro_Leveling/Guides/Alliance/Wes_12_15.lua",
         "flags":[{
-            "combo":"Gnome PRIEST baseline",
+            "combo":"Gnome PRIEST none",
             "rule":"enter-over"
           }],
         "gid":"Westfall 12-15",
         "last_line":300,
         "levels":{
-          "Dwarf WARRIOR baseline":{
+          "Dwarf WARRIOR none":{
             "enter":12,
             "finished":false,
             "leave":14
           },
-          "Gnome PRIEST baseline":{
+          "Gnome PRIEST none":{
             "enter":16,
             "finished":true,
             "leave":16
@@ -208,7 +208,7 @@
         "start_level":12
       }],
     "matrix":{
-      "combos":["Dwarf WARRIOR baseline","Gnome MAGE baseline","Gnome PRIEST baseline"]
+      "combos":["Dwarf WARRIOR none","Gnome MAGE none","Gnome PRIEST none"]
     },
     "notes":{
       "filters":"Filters: --include \"WoWPro_Leveling/Guides/Alliance\", --exclude \"WoWPro_Leveling/Guides/Alliance/Elw_*\".",
@@ -251,9 +251,9 @@
       "t":"Turn in when complete"
     },
     "combos":{
-      "Dwarf WARRIOR baseline":"Dwarf Warrior",
-      "Gnome MAGE baseline":"Gnome Mage",
-      "Gnome PRIEST baseline":"Gnome Priest"
+      "Dwarf WARRIOR none":"Dwarf Warrior",
+      "Gnome MAGE none":"Gnome Mage",
+      "Gnome PRIEST none":"Gnome Priest"
     },
     "flags":{
       "enter-over":"Entered above the guide's end level",
@@ -296,7 +296,7 @@
   },
   "summary":{
     "by_combo":{
-      "Dwarf WARRIOR baseline":{
+      "Dwarf WARRIOR none":{
         "high":{
           "follow":0,
           "primary":1
@@ -306,7 +306,7 @@
           "primary":1
         }
       },
-      "Gnome MAGE baseline":{
+      "Gnome MAGE none":{
         "high":{
           "follow":0,
           "primary":1
@@ -316,7 +316,7 @@
           "primary":2
         }
       },
-      "Gnome PRIEST baseline":{
+      "Gnome PRIEST none":{
         "medium":{
           "follow":0,
           "primary":1

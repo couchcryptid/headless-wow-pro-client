@@ -138,9 +138,9 @@ describe("flags", () => {
     const doc = structuredClone(matrix);
     const g = doc.header.guides[0]!;
     g.flags = [
-      { combo: "Gnome MAGE baseline", rule: "leave-under" },
-      { combo: "Dwarf WARRIOR baseline", rule: "enter-under" },
-      { combo: "Gnome PRIEST baseline", rule: "leave-under" },
+      { combo: "Gnome MAGE none", rule: "leave-under" },
+      { combo: "Dwarf WARRIOR none", rule: "enter-under" },
+      { combo: "Gnome PRIEST none", rule: "leave-under" },
     ];
     expect(trackOf(doc, g.file, defaultState(doc)).flags).toEqual([
       { rule: "leave-under", combos: ["Gnome Mage", "Gnome Priest"] },
