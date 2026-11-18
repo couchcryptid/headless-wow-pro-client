@@ -285,6 +285,15 @@ describe("group.findings", function()
     }, sev)
   end)
 
+  it("carries a rep-faction-unmet signal's faction, name and tag name onto its finding", function()
+    local fs = group.findings({ runlog("Dwarf", "WARRIOR", { { signal = "rep-faction-unmet", gid = "G", file = "f",
+      line = 6, action = "C", name = "r", qid = 3, faction = 91, faction_name = "Faction 91",
+      tag_faction = "Gelkis Clan Centaur" } }) })
+    assert.equal(91, fs[1].faction)
+    assert.equal("Faction 91", fs[1].faction_name)
+    assert.equal("Gelkis Clan Centaur", fs[1].tag_faction)
+  end)
+
   it("groups harness lua-errors apart from addon lua-errors", function()
     local fs = group.findings({ runlog("Dwarf", "WARRIOR", {
       { signal = "lua-error", message = "boom" },

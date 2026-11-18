@@ -304,8 +304,11 @@ function text.title(f)
     if (f.reasons or {})[1] == "not-turned-in" then return which .. " is not turned in within scope" end
     return which .. " is left in the log"
   elseif s == "rep-faction-unmet" then
-    return "REP step checks " .. (f.faction_name or ("Faction " .. tostring(f.faction)))
-      .. ", which this character never met"
+    local checks = f.faction_name or ("Faction " .. tostring(f.faction))
+    if f.tag_faction and f.tag_faction ~= "" then
+      return "REP step names " .. f.tag_faction .. " but checks " .. checks .. ", which this character never met"
+    end
+    return "REP step checks " .. checks .. ", which this character never met"
   elseif s == "lua-error" then
     local first = tostring(f.message or f.name or ""):match("^[^\n]*")
     if #first > 80 then first = first:sub(1, 80) .. "…" end

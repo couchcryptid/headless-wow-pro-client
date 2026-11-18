@@ -279,6 +279,14 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     local t = both(F({ signal = "rep-faction-unmet", name = "x", faction = 92, faction_name = "Gelkis Clan Centaur" }))
     assert.equal("REP step checks Gelkis Clan Centaur, which this character never met", t)
   end)
+  it("rep-faction-unmet names the tag's own faction and the id it checks", function()
+    local t, s = both(F({ signal = "rep-faction-unmet", action = "C", name = "Strange Alliance", qid = 1382,
+      faction = 91, faction_name = "Faction 91", tag_faction = "Gelkis Clan Centaur" }))
+    assert.equal("REP step names Gelkis Clan Centaur but checks Faction 91, which this character never met", t)
+    assert.equal("WoWPro asks for reputation with faction 91, but this character has never met that faction, "
+      .. "so the step is skipped. Reputation from kills and encounters isn't modelled; if the guide meant "
+      .. "another faction, the id is wrong.", s)
+  end)
   it("log-full", function()
     local t, s = both(F({ signal = "log-full", name = "Pre", qid = 7 }))
     assert.equal('"Pre" can\'t be taken: quest log full', t)

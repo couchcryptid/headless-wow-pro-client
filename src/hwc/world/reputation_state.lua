@@ -1,7 +1,8 @@
 -- One character's reputation (design spec 2026-11-18-reputation-design.md §4.2, §4.5),
 -- built on the pure rules in hwc.world.reputation. Points for the factions the
 -- character knows, the changes quest rewards made, and the faction ids the
--- C_Reputation stub was asked for (`lookups`, written by the stub).
+-- C_Reputation stub was asked for (`lookups`) and those it returned nil for because
+-- the character hadn't met them (`unmet_lookups`); the stub writes both.
 local reputation = require("hwc.world.reputation")
 
 local ReputationState = {}
@@ -10,13 +11,13 @@ ReputationState.__index = ReputationState
 local SCALING = "reward scaling by level is unverified for Forever"
 
 -- names: { [id] = name } or function(id) -> name; any id without one shows as "Faction <id>".
--- faction_side ("Alliance"/"Horde") is kept for callers; the start table follows the race.
-function ReputationState.new(race_key, faction_side, names)
+-- The second argument (the faction side) is ignored: the start table follows the race.
+function ReputationState.new(race_key, _, names)
   local start, inferred = reputation.start(race_key)
   return setmetatable({
-    race_key = race_key, side = faction_side, _names = names,
+    race_key = race_key, _names = names,
     _points = start, _inferred = inferred, _assumed_met = {},
-    changes = {}, lookups = {},
+    changes = {}, lookups = {}, unmet_lookups = {},
   }, ReputationState)
 end
 

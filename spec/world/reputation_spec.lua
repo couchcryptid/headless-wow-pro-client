@@ -17,6 +17,12 @@ describe("reputation.standing", function()
     assert.equals(1, (reputation.standing(-42000)))
     assert.equals(8, (reputation.standing(42999)))
   end)
+
+  it("puts the Honored, Revered and Exalted lower bounds in their own bands", function()
+    assert.same({ 6, 9000, 21000 }, { reputation.standing(9000) })
+    assert.same({ 7, 21000, 42000 }, { reputation.standing(21000) })
+    assert.same({ 8, 42000, 42999 }, { reputation.standing(42000) })
+  end)
 end)
 
 describe("reputation.clamp", function()
@@ -28,23 +34,56 @@ describe("reputation.clamp", function()
 end)
 
 describe("reputation.start", function()
-  it("is the captured Dwarf table, not inferred", function()
+  -- Forever, in game, fresh level-1 characters, 2026-11-18.
+  it("is the captured Dwarf table, Alliance header included, not inferred", function()
     local pts, inferred = reputation.start("Dwarf")
-    assert.same({ [47] = 4000, [54] = 3100, [69] = 3100, [72] = 3100 }, pts)
+    assert.same({ [47] = 4000, [54] = 3100, [69] = 3100, [72] = 3100, [469] = 3300 }, pts)
     assert.is_false(inferred)
   end)
 
-  it("infers other races from the Dwarf pattern", function()
-    local pts, inferred = reputation.start("Gnome")
-    assert.same({ [54] = 4000, [47] = 3100, [69] = 3100, [72] = 3100 }, pts)
-    assert.is_true(inferred)
-    assert.equals(4000, reputation.start("Orc")[76])
+  it("is the captured Orc table, Horde header included, not inferred", function()
+    local pts, inferred = reputation.start("Orc")
+    assert.same({ [76] = 4000, [81] = 3100, [530] = 3100, [68] = 500, [67] = 3500 }, pts)
+    assert.is_false(inferred)
   end)
 
-  it("gives Skyborne the three other capitals of its side and no home", function()
-    local pts, inferred = reputation.start("SkyborneHorde")
-    assert.same({ [76] = 3100, [81] = 3100, [530] = 3100, [68] = 3100 }, pts)
-    assert.is_true(inferred)
+  it("is the captured Undead table, Horde header included, not inferred", function()
+    local pts, inferred = reputation.start("Undead")
+    assert.same({ [68] = 4000, [76] = 2000, [530] = 2000, [81] = 500, [67] = 3500 }, pts)
+    assert.is_false(inferred)
+  end)
+
+  it("infers the other Alliance races from the Dwarf table", function()
+    for race, home in pairs({ Human = 72, Gnome = 54, NightElf = 69 }) do
+      local pts, inferred = reputation.start(race)
+      local want = { [47] = 3100, [54] = 3100, [69] = 3100, [72] = 3100, [469] = 3300 }
+      want[home] = 4000
+      assert.same(want, pts, race)
+      assert.is_true(inferred, race)
+    end
+  end)
+
+  it("infers Troll and Tauren from the Orc table", function()
+    for race, home in pairs({ Troll = 530, Tauren = 81 }) do
+      local pts, inferred = reputation.start(race)
+      local want = { [76] = 3100, [81] = 3100, [530] = 3100, [68] = 500, [67] = 3500 }
+      want[home] = 4000
+      assert.same(want, pts, race)
+      assert.is_true(inferred, race)
+    end
+  end)
+
+  it("infers Skyborne from its side's capitals with no home", function()
+    local a, ia = reputation.start("SkyborneAlliance")
+    assert.same({ [72] = 3100, [47] = 3100, [54] = 3100, [69] = 3100, [469] = 3300 }, a)
+    assert.is_true(ia)
+    local h, ih = reputation.start("SkyborneHorde")
+    assert.same({ [76] = 3100, [81] = 3100, [530] = 3100, [68] = 500, [67] = 3500 }, h)
+    assert.is_true(ih)
+  end)
+
+  it("raises for a race out of scope", function()
+    assert.has_error(function() reputation.start("Nope") end)
   end)
 
   it("returns a fresh copy each call", function()

@@ -7,16 +7,15 @@
 --     Ironforge and Stormwind read Honored (9000-21000).
 --   reaction numbers: 1 Hated ... 4 Neutral, 5 Friendly, 6 Honored, 7 Revered, 8 Exalted.
 --     Forever, in game (2026-11-18): 4 at 2000, 5 at 3100 and 4000, 6 at 9475 and 16362.
+--     Reactions 1-3, 7 and 8 are unverified for Forever (Classic numbering).
 --   Other bands (Hated -42000..-6000, Hostile -6000..-3000, Unfriendly -3000..0,
 --     Revered 21000..42000, Exalted 42000..42999): band widths from
 --     https://warcraft.wiki.gg/wiki/Reputation; unverified for Forever.
---   Dwarf start: Forever, in game, fresh level-1 Dwarf, 2026-11-18: Ironforge (47) 4000,
---     Gnomeregan Exiles (54) 3100, Darnassus (69) 3100, Stormwind (72) 3100; nothing else listed.
---   Other races' start: inferred from the Dwarf pattern on their own side (home city 4000, the
---     other three capitals 3100); unverified for Forever. Skyborne has no known home faction.
---   Met at: Forever, in game, level-29 Human with no centaur quests, 2026-11-18: Gelkis Clan
---     Centaur (92) 2000, Magram Clan Centaur (93) 2000. Any other faction is met at 0: an
---     assumption, unverified for Forever.
+--   Starting tables: see reputation.START below; each row names its evidence.
+--   Met at: observed in Forever (level-29 Human, no centaur quests, 2026-11-18): Gelkis Clan
+--     Centaur (92) 2000, Magram Clan Centaur (93) 2000. That a faction becomes known on its
+--     first quest reward is inferred. Any other faction is met at 0: an assumption,
+--     unverified for Forever.
 --   Racial bonus: none (Human Diplomacy was removed in Forever; user, 2026-11-18).
 local Player = require("hwc.world.player")
 
@@ -53,28 +52,44 @@ function reputation.clamp(points)
   return math.max(reputation.MIN, math.min(reputation.MAX, points))
 end
 
--- Faction ids: Stormwind 72, Ironforge 47, Gnomeregan Exiles 54, Darnassus 69,
--- Orgrimmar 76, Thunder Bluff 81, Darkspear Trolls 530, Undercity 68.
-reputation.CAPITALS = { Alliance = { 72, 47, 54, 69 }, Horde = { 76, 81, 530, 68 } }
+-- Faction ids: Stormwind 72, Ironforge 47, Gnomeregan Exiles 54, Darnassus 69, Alliance 469
+-- (header); Orgrimmar 76, Thunder Bluff 81, Darkspear Trolls 530, Undercity 68, Horde 67 (header).
+-- Forever, in game 2026-11-18: 469 and 67 report isHeader true, isHeaderWithRep false.
+reputation.HEADERS = { [469] = true, [67] = true }
 
-reputation.HOME = {
-  Dwarf = 47, Gnome = 54, Human = 72, NightElf = 69,
-  Orc = 76, Troll = 530, Tauren = 81, Undead = 68,
+-- Fresh level-1 tables, { points = { [factionID] = points }, inferred }.
+-- `inferred` is true when the table is not an in-game capture.
+local START = {
+  -- Forever, in game, fresh level-1 Dwarf, 2026-11-18 (verified).
+  Dwarf = { points = { [47] = 4000, [54] = 3100, [69] = 3100, [72] = 3100, [469] = 3300 }, inferred = false },
+  -- Forever, in game, fresh level-1 Orc, 2026-11-18 (verified).
+  Orc = { points = { [76] = 4000, [81] = 3100, [530] = 3100, [68] = 500, [67] = 3500 }, inferred = false },
+  -- Forever, in game, fresh level-1 Undead, 2026-11-18 (verified).
+  Undead = { points = { [68] = 4000, [76] = 2000, [530] = 2000, [81] = 500, [67] = 3500 }, inferred = false },
+  -- Inferred, unverified for Forever: the Dwarf table with the race's own home at 4000
+  -- and Ironforge at 3100.
+  Human = { points = { [72] = 4000, [47] = 3100, [54] = 3100, [69] = 3100, [469] = 3300 }, inferred = true },
+  Gnome = { points = { [54] = 4000, [47] = 3100, [69] = 3100, [72] = 3100, [469] = 3300 }, inferred = true },
+  NightElf = { points = { [69] = 4000, [47] = 3100, [54] = 3100, [72] = 3100, [469] = 3300 }, inferred = true },
+  -- Inferred, unverified for Forever: the Orc table with the race's own home at 4000
+  -- and Orgrimmar at 3100.
+  Troll = { points = { [530] = 4000, [76] = 3100, [81] = 3100, [68] = 500, [67] = 3500 }, inferred = true },
+  Tauren = { points = { [81] = 4000, [76] = 3100, [530] = 3100, [68] = 500, [67] = 3500 }, inferred = true },
+  -- Inferred, unverified for Forever: Skyborne has no known home faction. Alliance: the
+  -- four Alliance capitals at 3100 plus the header; Horde: the Orc table's Undercity and
+  -- header rows with Orgrimmar, Thunder Bluff and Darkspear at 3100.
+  SkyborneAlliance = { points = { [72] = 3100, [47] = 3100, [54] = 3100, [69] = 3100, [469] = 3300 }, inferred = true },
+  SkyborneHorde = { points = { [76] = 3100, [81] = 3100, [530] = 3100, [68] = 500, [67] = 3500 }, inferred = true },
 }
 
-local HOME_POINTS, OTHER_POINTS = 4000, 3100
-
--- A fresh character's { [factionID] = points }, as a new table, and whether it is inferred.
--- Dwarf is captured; every other race follows the Dwarf pattern (unverified for Forever).
+-- A fresh character's { [factionID] = points }, as a new table, and whether it is
+-- inferred. Raises for a race out of scope.
 function reputation.start(race_key)
-  local race = Player.RACES[race_key]
-  if not race then error("hwc: race not in scope: " .. tostring(race_key), 2) end
-  local home = reputation.HOME[race_key]
+  local t = Player.RACES[race_key] and START[race_key]
+  if not t then error("hwc: race not in scope: " .. tostring(race_key), 2) end
   local out = {}
-  for _, id in ipairs(reputation.CAPITALS[race.faction]) do
-    out[id] = (id == home) and HOME_POINTS or OTHER_POINTS
-  end
-  return out, race_key ~= "Dwarf"
+  for id, v in pairs(t.points) do out[id] = v end
+  return out, t.inferred
 end
 
 local MET_AT = { [92] = 2000, [93] = 2000 }

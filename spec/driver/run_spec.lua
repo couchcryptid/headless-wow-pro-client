@@ -519,23 +519,23 @@ describe("driver.run", function()
     assert.is_nil(log.reputation)
   end)
 
-  -- Design 2026-11-18-reputation §4.5, §6: REP|Gelkis Clan Centaur;91;... (Galak) at
-  -- 30_41_Alliance.lua:544. The stub was asked for 91 and the character never met it.
+  -- Design 2026-11-18-reputation §4.5, §6: REP|Gelkis Clan Centaur;91;hated-neutral (Galak) at
+  -- 30_41_Alliance.lua:544. The stub returned nil for 91 (unmet_lookups) when WoWPro asked.
   describe("rep-faction-unmet", function()
     local ReputationState = require("hwc.world.reputation_state")
-    local function rep_run(prepare)
+    local function rep_run(prepare, rep, steps_override, opts, script)
       local world = fx.fake_world({ [1382] = { name = "Strange Alliance", confidence = "verified" } })
       world.reputation = ReputationState.new("Dwarf", "Alliance", {})
       prepare(world.reputation)
-      local steps = {
+      local steps = steps_override or {
         { action = "R", name = "Go" },
-        { action = "C", name = "Strange Alliance", qids = { 1382 }, rep = "Gelkis Clan Centaur;91;hated-neutral", hidden = true },
+        { action = "C", name = "Strange Alliance", qids = { 1382 }, rep = rep or "Gelkis Clan Centaur;91;hated-neutral", hidden = true },
       }
-      return drive(one_guide(steps), { G1 = completes(1) }, {}, world)
+      return drive(one_guide(steps), script or { G1 = completes(1) }, opts or {}, world)
     end
 
-    it("reports a REP step whose faction the stub was asked for and the character never met", function()
-      local log = rep_run(function(r) r.lookups[91] = true end)
+    it("reports a REP step whose faction the stub returned nil for", function()
+      local log = rep_run(function(r) r.lookups[91] = true; r.unmet_lookups[91] = true end)
       local u = signals(log, "rep-faction-unmet")
       assert.equal(1, #u)
       assert.equal(91, u[1].faction)
@@ -547,16 +547,62 @@ describe("driver.run", function()
       assert.equal("Strange Alliance", u[1].name)
       assert.equal(1382, u[1].qid)
       assert.equal("Faction 91", u[1].faction_name)
+      assert.equal("Gelkis Clan Centaur", u[1].tag_faction)
     end)
 
-    it("reports nothing once the character knows the faction", function()
+    it("reports nothing when the stub only ever found the faction", function()
       local log = rep_run(function(r) r.lookups[91] = true; r:gain(91, 0) end)
       assert.same({}, signals(log, "rep-faction-unmet"))
+    end)
+
+    it("still reports a faction looked up while unmet and met later in the same guide", function()
+      local log = rep_run(function(r) r.lookups[91] = true; r.unmet_lookups[91] = true; r:gain(91, 0) end)
+      assert.equal(1, #signals(log, "rep-faction-unmet"))
     end)
 
     it("reports nothing when the stub was never asked for the faction", function()
       local log = rep_run(function() end)
       assert.same({}, signals(log, "rep-faction-unmet"))
+    end)
+
+    -- Driver:close's limit: a run that stops early never reached steps at or past the
+    -- furthest one it acted on.
+    it("reports nothing for a REP step at or after where an early stop left the run", function()
+      local steps = {
+        { action = "C", name = "loop", qids = { 1 } },
+        { action = "C", name = "Strange Alliance", qids = { 1382 }, rep = "Gelkis Clan Centaur;91;hated-neutral", hidden = true },
+      }
+      local log = rep_run(function(r) r.unmet_lookups[91] = true end, nil, steps,
+        { max_iterations = 3, stuck_limit = 100 }, { G1 = { { on_manual = { uncomplete = { 1 } } } } })
+      assert.equal("iterations", log.stop.reason)
+      assert.same({}, signals(log, "rep-faction-unmet"))
+    end)
+
+    it("gives no signal and no error for a tag with no id or a non-numeric id", function()
+      for _, tag in ipairs({ "Gelkis Clan Centaur", "Gelkis Clan Centaur;", "Gelkis Clan Centaur;abc;neutral", ";;" }) do
+        local log = rep_run(function(r) r.unmet_lookups[91] = true end, tag)
+        assert.same({}, signals(log, "rep-faction-unmet"), tag)
+      end
+    end)
+
+    it("gives no signal and no error for a spaced tag whose id was never looked up", function()
+      local log = rep_run(function() end, " Gelkis Clan Centaur ; 91 ; hated-neutral ")
+      assert.same({}, signals(log, "rep-faction-unmet"))
+    end)
+
+    -- WoWPro_Broker.lua:2807/:2816 split on ";" and tonumber the id, which accepts spaces.
+    it("trims the tag's faction name and reads a spaced id as WoWPro does", function()
+      local log = rep_run(function(r) r.unmet_lookups[91] = true end, " Gelkis Clan Centaur ; 91 ; hated-neutral ")
+      local u = signals(log, "rep-faction-unmet")
+      assert.equal(1, #u)
+      assert.equal("Gelkis Clan Centaur", u[1].tag_faction)
+    end)
+
+    it("leaves the tag name out when the tag's first field is empty", function()
+      local log = rep_run(function(r) r.unmet_lookups[91] = true end, " ;91;neutral")
+      local u = signals(log, "rep-faction-unmet")
+      assert.equal(1, #u)
+      assert.is_nil(u[1].tag_faction)
     end)
   end)
 

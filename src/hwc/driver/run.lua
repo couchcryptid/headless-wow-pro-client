@@ -315,24 +315,32 @@ function Driver:close(gid, full)
       self:record_hidden_step(gid, info, i, "hidden-use-step", { use = s.use, loot = s.loot })
     end
   end
-  self:unmet_factions(gid, info)
+  self:unmet_factions(gid, info, limit)
 end
 
 -- REP steps whose faction the character never met (design 2026-11-18-reputation §4.5),
 -- in step order, one per step. Detected from the C_Reputation stub: it records every
--- faction id WoWPro asks for (ReputationState.lookups) and returns nil for one the
--- character doesn't know, after which WoWPro logs "Bad Faction number" and skips the step
--- (WoWPro_Broker.lua:2882-2885; :2807 splits the tag, whose second field is the faction id).
+-- faction id it returned nil for because the character hadn't met it
+-- (ReputationState.unmet_lookups), after which WoWPro logs "Bad Faction number" and skips
+-- the step (WoWPro_Broker.lua:2882-2885; :2807 splits the tag on ";", :2816 tonumbers the
+-- second field). Recorded at lookup time, so a faction met later in the guide still counts.
+-- Only steps below `limit` (Driver:close's bound for reached steps) are considered.
 -- Unverified: kill and encounter reputation isn't modelled, so a real player may have met it.
-function Driver:unmet_factions(gid, info)
+function Driver:unmet_factions(gid, info, limit)
   local rep = self.W.reputation
-  if not rep then return end
-  for i = 1, table.maxn(info.steps) do
+  if not rep or not rep.unmet_lookups then return end
+  for i = 1, math.min(table.maxn(info.steps), limit - 1) do
     local s = info.steps[i]
-    local id = s and type(s.rep) == "string" and tonumber(s.rep:match("^[^;]*;([^;]*)"))
-    if id and rep.lookups[id] and not rep:known(id) then
-      local sig = self:record_hidden_step(gid, info, i, "rep-faction-unmet", { faction = id, faction_name = rep:name(id) })
-      sig.confidence = "unverified"
+    if s and type(s.rep) == "string" then
+      local tag_name, id_field = s.rep:match("^([^;]*);([^;]*)")
+      local id = id_field and tonumber(id_field)
+      if id and rep.unmet_lookups[id] then
+        tag_name = tag_name:match("^%s*(.-)%s*$")
+        local sig = self:record_hidden_step(gid, info, i, "rep-faction-unmet", {
+          faction = id, faction_name = rep:name(id), tag_faction = tag_name ~= "" and tag_name or nil,
+        })
+        sig.confidence = "unverified"
+      end
     end
   end
 end
