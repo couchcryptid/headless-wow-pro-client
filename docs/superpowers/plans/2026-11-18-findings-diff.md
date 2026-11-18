@@ -33,6 +33,33 @@
 
 ---
 
+### Task 0: Findings file names carry a content hash
+
+Spec §4.6. Without this, the second run of the contributor loop overwrites the first.
+
+**Files:**
+- Modify: `src/hwc/cli.lua` (`play`: build `doc` before writing run logs; stem and log folder take the hash)
+- Modify: `spec/cli_spec.lua`, `spec/integration/findings_determinism_spec.lua` (every hard-coded `<date>-<scope>` path)
+- Modify: `README.md` ("Running characters and findings" output list)
+
+**Interfaces:**
+- Consumes: `group.fnv1a32(s) -> string` (8 hex digits) from `hwc.findings.group`.
+- Produces: `cli.stem_name(date, scope, doc) -> string` returning `date .. "-" .. scope .. "-" .. group.fnv1a32(doc)`, where `doc` is the exact findings JSON text written to `.json`.
+
+- [ ] **Step 1: Write the failing tests** in `spec/cli_spec.lua`:
+  - `it("names the stem by date, scope and the findings hash")`: `cli.stem_name("2026-11-17", "s", "{}\n") == "2026-11-17-s-" .. group.fnv1a32("{}\n")`.
+  - `it("keeps both runs when the findings differ")`: two `with_runner` runs with the same options whose runners return different signals → two `.json` and two `.html` files in `outdir`.
+  - `it("writes run logs under the hashed stem")`: the log folder is `<stem>/` for the stem the `wrote` line prints.
+  - Replace each hard-coded path (`cli_spec.lua` lines ~282-597) with a helper `only(outdir, pattern)` that globs `outdir` for exactly one file matching `^2026%-11%-17%-<scope>%-%x%x%x%x%x%x%x%x%.json$` and returns its path; the `.html` assertions use the same stem.
+- [ ] **Step 2: Run to verify they fail.** Run: `~/.luarocks/bin/busted spec/cli_spec.lua`. Expected: the new tests FAIL (one file only; no hash in the name).
+- [ ] **Step 3: Implement.** In `play`, move the run-log writes after `doc` is built; `stem = outdir .. "/" .. M.stem_name(date, scope, doc)`; `logdir = stem`. `mkdirs(logdir)` moves with them. The "writes nothing" early returns stay before any write.
+- [ ] **Step 4: Update `findings_determinism_spec.lua`** to find the stem from the `wrote` line (or the one `*.json` in the dir) instead of `STEM`; it still asserts the two processes write byte-identical files **and the same file name**.
+- [ ] **Step 5: Run to verify.** `~/.luarocks/bin/busted` and `~/.luarocks/bin/busted --tags=slow spec/integration/findings_determinism_spec.lua`. Expected: all pass.
+- [ ] **Step 6: README**: the output list shows `DIR/<date>-<scope>-<hash>.html|.json` and `DIR/<date>-<scope>-<hash>/…`, with one line on why (two runs with different results never overwrite each other; identical results share a name).
+- [ ] **Step 7: Commit.** `git commit -am "feat: Name findings files by a hash of their contents"`
+
+---
+
 ### Task 1: `diff.compare`: classify findings and collect warnings
 
 **Files:**

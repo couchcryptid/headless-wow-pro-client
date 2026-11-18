@@ -25,6 +25,7 @@ findings.
 - Report fixed, new, partly fixed (same id, fewer characters) and still-present counts.
 - Name every reason two files may not be comparable.
 - Exit codes a script or CI job can use.
+- A second run on another branch doesn't overwrite the first run's files (§4.6).
 
 **Non-goals**
 - An HTML compare page (possible follow-up).
@@ -124,7 +125,31 @@ One object: `old` and `new` (addon branch/commit/dirty, path given),
 present on), partly/spread entries adding `fixed_for`/`still`/`added_for`. Arrays
 are always arrays, even when empty.
 
-### 4.6 Exit codes
+### 4.6 Findings file names carry a content hash
+
+Today `run`/`matrix` write `DIR/<date>-<scope>.json` (and `.html`, and the run
+log folder `<date>-<scope>/`). The contributor loop runs the same options on
+`main` and then on the fix branch, on the same day, so the second run
+overwrites the first and leaves nothing to diff.
+
+The stem becomes `<date>-<scope>-<hash>`, where `<hash>` is the 8 hex digits of
+`group.fnv1a32` over the findings JSON text written to `.json`, e.g.
+`2026-11-18-Dwarf-WARRIOR-baseline-3f9a2c17.json`. The `.html` and the run log
+folder use the same stem.
+
+- Why content, not the addon commit: two runs on the same commit with different
+  uncommitted edits (the usual case while fixing) would collide.
+- Why not a timestamp: a fixed `--date` with the same inputs must still give the
+  same files, names included (README, determinism spec).
+- Two runs with the same hash wrote identical findings, so the overwrite loses
+  nothing.
+- The closing `hwc: wrote …` line already prints the full stem, so the user
+  learns the name from the run.
+
+The run logs are written after the findings JSON is built (today they are
+written first), so their folder can take the hash.
+
+### 4.7 Exit codes
 
 | Code | When |
 |---|---|
