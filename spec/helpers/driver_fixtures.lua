@@ -164,7 +164,12 @@ local function fake_world(quests, log_qids)
     get = function(_, q) for _, x in ipairs(order) do if x == q then return { id = q } end end return nil end,
     history = {},
   }
-  w.catalog = { quest = function(_, q) return (quests or {})[q] end }
+  w.catalog = { quest = function(_, q) return (quests or {})[q] end,
+    -- A quest table's `chain = { part, total }` stands in for the catalog's chain_part.
+    chain_part = function(_, q)
+      local x = (quests or {})[q]
+      if x and x.chain then return x.chain[1], x.chain[2] end
+    end }
   return w
 end
 

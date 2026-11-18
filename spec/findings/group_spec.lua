@@ -53,6 +53,17 @@ describe("group.findings", function()
     assert.same({ name = "c", action = "C" }, f.after)
   end)
 
+  it("passes the chain parts through to the finding", function()
+    local sig = { signal = "never-shown-accept", gid = "G1", file = "f", line = 1, action = "A", name = "L", qid = 1030,
+      chain = { part = 9, total = 11 }, pre_qname = "L", pre_chain = { part = 8, total = 11 },
+      missing_chain = { ["1029"] = { part = 8, total = 11 } } }
+    local f = group.findings({ runlog("Dwarf", "WARRIOR", { sig }) })[1]
+    assert.same({ part = 9, total = 11 }, f.chain)
+    assert.equal("L", f.pre_qname)
+    assert.same({ part = 8, total = 11 }, f.pre_chain)
+    assert.same({ ["1029"] = { part = 8, total = 11 } }, f.missing_chain)
+  end)
+
   it("passes a reputation refusal's gate through to the finding", function()
     local rep = { faction = 72, name = "Stormwind", bound = "min", value = 9000, points = 3100 }
     local sig = { signal = "accept-refused", gid = "G1", file = "f", line = 1, action = "A", name = "H", qid = 9,

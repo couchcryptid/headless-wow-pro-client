@@ -228,6 +228,7 @@ local function build_quest(self, id)
 
   quest.pre_single = sorted_values(q.preQuestSingle)
   quest.pre_group = sorted_values(q.preQuestGroup)
+  quest.next_in_chain = nz(q.nextQuestInChain)
   quest.objectives = objectives_for(self, q, notes)
   quest.starter, quest.starter_kind = starter_of(q.startedBy)
   quest.ender, quest.ender_kind = starter_of(q.finishedBy)
@@ -291,6 +292,49 @@ function Catalog:quest(id)
   if not id then return nil end
   if self._quests[id] == nil then self._quests[id] = build_quest(self, id) or false end
   return self._quests[id] or nil
+end
+
+-- The part and total of a quest in a chain whose parts share one name (design
+-- 2026-11-18-quest-chain-parts): part = 1 + same-name predecessors walked back (the
+-- lowest-id one when several), total = the same-name run walked forward from part 1
+-- through nextQuestInChain. nil for a quest with no same-name neighbour, one not in
+-- the catalog, or a cycle. Pure: catalog data only.
+function Catalog:chain_part(qid)
+  local quest = self:quest(qid)
+  local name = quest and quest.name
+  if type(name) ~= "string" or name == "" then return nil end
+  local function same_name(id)
+    local o = id and self:quest(id)
+    return o and o.name == name and o or nil
+  end
+  local function predecessor(o)
+    local best
+    for _, list in ipairs({ o.pre_single or {}, o.pre_group or {} }) do
+      for _, id in ipairs(list) do
+        if same_name(id) and (not best or id < best) then best = id end
+      end
+    end
+    return best
+  end
+  local seen, part, cur = { [quest.id] = true }, 1, quest
+  while true do
+    local pid = predecessor(cur)
+    if not pid then break end
+    if seen[pid] then return nil end -- a cycle
+    seen[pid] = true
+    part, cur = part + 1, same_name(pid)
+  end
+  local total, walk = 1, cur
+  local fwd = { [cur.id] = true }
+  while walk.next_in_chain and same_name(walk.next_in_chain) do
+    if fwd[walk.next_in_chain] then return nil end
+    fwd[walk.next_in_chain] = true
+    walk = same_name(walk.next_in_chain)
+    total = total + 1
+  end
+  if total < part then total = part end
+  if total < 2 then return nil end
+  return part, total
 end
 
 -- The only guide-derived path (design spec §6): a quest in no source, shaped from

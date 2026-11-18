@@ -75,7 +75,7 @@ local function new_finding(s, key)
   local f = {
     id = "F-" .. group.fnv1a32(key), signal = s.signal, file = s.file, line = s.line, gid = s.gid,
     action = s.action, name = s.name, qid = s.qid, why = s.why, before = s.before, after = s.after,
-    qname = s.qname, grind = s.grind, use = s.use, loot = s.loot, level = s.level, log = s.log, confidence = s.confidence, rep = s.rep,
+    qname = s.qname, chain = s.chain, pre_qname = s.pre_qname, pre_chain = s.pre_chain, missing_chain = s.missing_chain, grind = s.grind, use = s.use, loot = s.loot, level = s.level, log = s.log, confidence = s.confidence, rep = s.rep,
     faction = s.faction, faction_name = s.faction_name, tag_faction = s.tag_faction,
     missing = s.missing, missing_names = s.missing_names, missing_any = s.missing_any, combos = {}, causes = {}, reasons = {},
   }
@@ -178,7 +178,7 @@ local function link_roots(findings)
       -- The engine's only format (WoWPro_Broker.lua:2292):
       -- "NextStep:PRE&(%s): A mandatory prereq was not met: %s". Only the id after
       -- "not met:" counts; a why without that phrase links nothing.
-      local n = tonumber(f.why:match("not met:%s*(%d+)"))
+      local n = tonumber(f.why:match(require("hwc.findings.text").PRE_NOT_MET))
       local target = n and blocker(n)
       if target and target ~= f then link(f, target, by_id) end
     elseif f.signal == "accept-refused" and has(f.reasons, "prerequisite") and f.missing then

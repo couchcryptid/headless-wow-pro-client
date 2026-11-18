@@ -12,6 +12,7 @@
 -- walked 1..n); nothing in it is built from pairs.
 local actions = require("hwc.driver.actions")
 local xp = require("hwc.world.xp")
+local findings_text = require("hwc.findings.text")
 
 local run = {}
 
@@ -110,6 +111,23 @@ function Driver:quest_name(qid)
   return nil
 end
 
+-- { part, total } for a quest in a same-name chain, else nil.
+function Driver:chain_of(qid)
+  local catalog = self.W.catalog
+  if qid == nil or not (catalog and catalog.chain_part) then return nil end
+  local part, total = catalog:chain_part(qid)
+  if part then return { part = part, total = total } end
+  return nil
+end
+
+-- Names the quest a hidden accept's unmet prerequisite refers to ("not met: N").
+function Driver:prerequisite_ref(sig)
+  local pre = sig.why and sig.why:match(findings_text.PRE_NOT_MET)
+  if not pre then return end
+  pre = tonumber(pre)
+  sig.pre_qname, sig.pre_chain = self:quest_name(pre), self:chain_of(pre)
+end
+
 -- Appends a Signal. step (an Engine:step record) supplies the location fields;
 -- fields may override any of them. Step signals wait for `after` (the name of
 -- the next step acted on).
@@ -136,6 +154,7 @@ function Driver:signal(kind, step, fields)
   end
   for k, v in pairs(fields) do s[k] = v end
   s.qname = self:quest_name(s.qid)
+  s.chain = self:chain_of(s.qid)
   s.confidence = self:confidence(s.qid)
   self.log.signals[#self.log.signals + 1] = s
   if step and fields.after == nil then self.awaiting[#self.awaiting + 1] = s end
@@ -270,6 +289,8 @@ function Driver:record_hidden_step(gid, info, i, signal, extra)
   }
   for k, v in pairs(extra or {}) do sig[k] = v end
   sig.qname = self:quest_name(sig.qid)
+  sig.chain = self:chain_of(sig.qid)
+  if signal == "never-shown-accept" then self:prerequisite_ref(sig) end
   sig.confidence = self:confidence(sig.qid)
   self.log.signals[#self.log.signals + 1] = sig
   return sig
@@ -385,10 +406,11 @@ function Driver:leftovers()
         log = self:log_qids(),
       }
       sig.qname = self:quest_name(q)
+      sig.chain = self:chain_of(q)
       sig.confidence = self:confidence(q)
       self.log.signals[#self.log.signals + 1] = sig
     else
-      self.log.carried[#self.log.carried + 1] = { qid = q, qname = self:quest_name(q) }
+      self.log.carried[#self.log.carried + 1] = { qid = q, qname = self:quest_name(q), chain = self:chain_of(q) }
     end
   end
 end
@@ -491,12 +513,15 @@ end
 -- missing and the linker can attach it under that quest's own failure. any_of: the list
 -- is a pre_single one (any one of them would do).
 function Driver:missing_prerequisites(sig, missing, any_of)
-  local ids, names = {}, {}
+  local ids, names, chains = {}, {}, {}
   for i, id in ipairs(missing) do
     ids[i] = id
     names[tostring(id)] = self:quest_name(id)
+    local chain = self:chain_of(id)
+    if chain then chains[tostring(id)] = chain end
   end
   sig.missing, sig.missing_names = ids, names
+  if next(chains) then sig.missing_chain = chains end
   sig.missing_any = any_of and true or nil
 end
 
