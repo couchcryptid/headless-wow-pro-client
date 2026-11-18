@@ -140,6 +140,8 @@ function output.write(run)
     unreached = sel and unreached_gids(sel, log) or nil,
     guides = report.guides({ { combo = label, guide_levels = log.guide_levels or {} } }),
     stop = reason and reason ~= "no-next-guide" and { { combo = label, reason = reason } } or nil,
+    -- report.build appends these to the static gaps (design 2026-11-18-reputation §4.5).
+    assumptions = raw.reputation and raw.reputation.assumptions or nil,
   }
   header = paths.rewrite(header, roots, base, cwd)
   header.paths_relative_to = base:match("([^/]+)$") or "/"

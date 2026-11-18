@@ -40,6 +40,17 @@ describe("questie source adapter", function()
     assert.is_nil(s:xp(8))
   end)
 
+  it("serves QuestieDB's faction constants as a copy, empty when the release has none", function()
+    local lib = fake_lib()
+    lib.Enum = { factionIDs = { STORMWIND = 72 } }
+    local s = source.from_lib(lib, info)
+    local t = s:factions()
+    assert.are.same({ STORMWIND = 72 }, t)
+    t.STORMWIND = 1
+    assert.are.equal(72, lib.Enum.factionIDs.STORMWIND)
+    assert.are.same({}, source.from_lib(fake_lib(), info):factions())
+  end)
+
   it("carries info", function()
     assert.are.same(info, source.from_lib(fake_lib(), info).info)
   end)

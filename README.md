@@ -18,10 +18,14 @@ quest log, Classic XP rules, a virtual clock, frames and events. Quest facts
 come from a catalog built from QuestieDB, never from the guide lines.
 
 **Status:**
-- **Scope:** Forever Alliance and Horde, the race's chain to its last guide. The XP
-  table caps at level 26, so play past 25 currently runs at level 26 (quest
-  data to level 60 is a separate future plan). Each race starts from its guide in
-  the addon's `ForeverStartGuides` table:
+- **Scope:** Forever Alliance and Horde, the race's chain to its last guide.
+- **XP:** the character levels with Classic's XP rules (`src/hwc/world/xp.lua`).
+  One row is verified in Forever: level 29 (`UnitXPMax` 44300, in game,
+  2026-11-18). The rest is unverified for Forever (Classic): the other rows of
+  the XP table, the mob-XP formula, the gray-level and zero-difference bands,
+  and the level cap of 60.
+- **Start:** each race starts from its guide in the addon's `ForeverStartGuides`
+  table:
 
   | Race (`--race`) | Faction | Start |
   |---|---|---|
@@ -445,6 +449,46 @@ hwc init      # from any folder
 This downloads the latest QuestieDB Forever release into `~/.hwc/questie/<tag>/`,
 makes it the active one, then runs the health check. `HWC_HOME` moves the QuestieDB store (`~/.hwc/questie`); findings still default to `~/.hwc/findings` unless `--out` is given.
 
+### Reputation
+
+Reputation is simulated from quest rewards (`src/hwc/world/reputation.lua`,
+`reputation_state.lua`, `stubs/reputation.lua`). It lets guide steps that need a
+faction standing be played, and it reports a faction the character never met.
+What is known about Forever, and how:
+
+| Fact | Evidence |
+|---|---|
+| The API is `C_Reputation.GetFactionDataByID`; `GetFactionInfoByID` is absent; a faction the character hasn't met returns nil | Verified in Forever |
+| Bands: Neutral 0-3000, Friendly 3000-9000, Honored 9000-21000 | Verified in Forever |
+| Bands: Hated -42000 to -6000, Hostile -6000 to -3000, Unfriendly -3000 to 0, Revered 21000-42000, Exalted 42000-42999, and their reaction numbers 1-3, 7 and 8 | Unverified for Forever (Classic values) |
+| Alliance (469) and Horde (67) are headers (`isHeader` true, `isHeaderWithRep` false) | Verified in Forever |
+| Starting tables for Dwarf, Orc, Undead and Tauren (below) | Verified (fresh level-1 characters, 2026-11-18) |
+| Starting tables for every other race (below) | Inferred, unverified for Forever; each run names it in its gaps |
+| Gelkis (92) and Magram (93) are at 2000 when first listed | Observed in Forever (level-29 Human, no centaur quests) |
+| A faction becomes known on its first quest reward | Inferred |
+| Every other faction is met at an assumed 0 | Assumption; each run lists them in its gaps |
+| Gains come only from quest rewards (QuestieDB `reputationReward`), at full value, with no racial bonus (Diplomacy is gone in Forever) | Reward scaling is unverified for Forever |
+| `requiredMinRep` and `requiredMaxRep` gate accepts | Refusals and the `rep-faction-unmet` finding are unverified |
+
+Starting tables (faction id = points; Stormwind 72, Ironforge 47, Gnomeregan
+Exiles 54, Darnassus 69, Alliance 469, Orgrimmar 76, Thunder Bluff 81,
+Darkspear Trolls 530, Undercity 68, Horde 67):
+
+| Race | Table | Evidence |
+|---|---|---|
+| `Dwarf` | 47 = 4000, 54/69/72 = 3100, 469 = 3300 | Verified |
+| `Orc` | 76 = 4000, 81/530 = 3100, 68 = 500, 67 = 3500 | Verified |
+| `Undead` | 68 = 4000, 76/530 = 2000, 81 = 500, 67 = 3500 | Verified |
+| `Tauren` | 81 = 4000, 76/530 = 3100, 68 = 500, 67 = 3500 | Verified |
+| `Human`, `Gnome`, `NightElf` | The Dwarf table with the race's home (72, 54, 69) at 4000 and Ironforge at 3100 | Inferred, unverified for Forever |
+| `Troll` | The Orc table with Darkspear Trolls (530) at 4000 and Orgrimmar at 3100 | Inferred, unverified for Forever |
+| `SkyborneAlliance` | 72/47/54/69 = 3100, 469 = 3300 | Inferred, unverified for Forever |
+| `SkyborneHorde` | 76/81/530 = 3100, 68 = 500, 67 = 3500 | Inferred, unverified for Forever |
+
+An accept the standing refuses is an `accept-refused` finding. A step that needs
+a faction the character has not met is a `rep-faction-unmet` finding, with the
+faction name the tag gives and the id it checks.
+
 ### Health check
 
 `hwc doctor` checks the setup, including that the addon loads; see
@@ -543,6 +587,14 @@ load.
 | `GetItemCooldown` | probed by `WoWPro_CompatUtil.lua:232`; Forever uses `C_Container.GetItemCooldown` |
 | `issecretvalue` | guarded probe (`WoWPro_AutoComplete.lua:118`, `:131`, `:432`) |
 | `GetBindLocation` | guarded probe (`WoWPro_Events.lua:249`). The hearth location is player state for a later plan, so `WoWProDB.char.hearth` stays unset. |
+
+A Lua error that indexes or calls one of these nil names counts as a harness
+error (a gap in hwc, not an addon bug) only when the name is not the addon's own
+(no `WoWPro` prefix) and not in `boot.EXPECTED_ABSENT` (`src/hwc/boot.lua`): the
+APIs absent in Forever (`GetFactionInfoByID`, checked in game 2026-11-18; the
+retail-only probes above, unverified for Forever), the other addons (`Grail`,
+`Nx`, `TourGuide`) and `LibStub`, which the addon ships. `TomTom` is not in that
+set: the guides expect it installed, so it stays a harness gap until stubbed.
 
 Frame methods the mock doesn't model show up as `Frame:<Name>`, and
 unstubbed namespaced APIs show up as `<Namespace>.<Field>`. The Dwarf Warrior load

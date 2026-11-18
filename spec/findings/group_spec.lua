@@ -53,6 +53,15 @@ describe("group.findings", function()
     assert.same({ name = "c", action = "C" }, f.after)
   end)
 
+  it("passes a reputation refusal's gate through to the finding", function()
+    local rep = { faction = 72, name = "Stormwind", bound = "min", value = 9000, points = 3100 }
+    local sig = { signal = "accept-refused", gid = "G1", file = "f", line = 1, action = "A", name = "H", qid = 9,
+      reason = "reputation", confidence = "unverified", rep = rep }
+    local f = group.findings({ runlog("Dwarf", "WARRIOR", { sig }) })[1]
+    assert.same(rep, f.rep)
+    assert.equal("unverified", f.confidence)
+  end)
+
   it("passes the use item and the loot items of a hidden use step through", function()
     local sig = { signal = "hidden-use-step", gid = "G1", file = "f", line = 1, action = "U", name = "Use", qid = 9,
       use = "5456", loot = { [5455] = 1 } }
@@ -263,6 +272,7 @@ describe("group.findings", function()
       { signal = "manual-completion", gid = "G", file = "f", line = 5, action = "H", name = "h", expected = true },
       { signal = "lua-error", message = "boom", stack = "x.lua:1" },
       { signal = "missing-global", global = "FooBar" },
+      { signal = "rep-faction-unmet", gid = "G", file = "f", line = 6, action = "C", name = "r", qid = 3, faction = 91 },
     }
     local fs = group.findings({ runlog("Dwarf", "WARRIOR", sigs) })
     local sev = {}
@@ -271,8 +281,17 @@ describe("group.findings", function()
     assert.same({
       "below-level:medium-high:nil", "leftover-quests:low:nil", "lua-error:high:nil",
       "manual-completion:medium:nil", "manual-completion:nil:true", "missing-global:low:nil",
-      "stuck:medium:nil",
+      "rep-faction-unmet:medium:nil", "stuck:medium:nil",
     }, sev)
+  end)
+
+  it("carries a rep-faction-unmet signal's faction, name and tag name onto its finding", function()
+    local fs = group.findings({ runlog("Dwarf", "WARRIOR", { { signal = "rep-faction-unmet", gid = "G", file = "f",
+      line = 6, action = "C", name = "r", qid = 3, faction = 91, faction_name = "Faction 91",
+      tag_faction = "Gelkis Clan Centaur" } }) })
+    assert.equal(91, fs[1].faction)
+    assert.equal("Faction 91", fs[1].faction_name)
+    assert.equal("Gelkis Clan Centaur", fs[1].tag_faction)
   end)
 
   it("groups harness lua-errors apart from addon lua-errors", function()

@@ -2,6 +2,7 @@
 -- Pure: no I/O. The findings JSON carries every title, sentence and label from
 -- here, so the wording lives in one place and the HTML page holds none.
 local RACES = require("hwc.world.player").RACES
+local reputation = require("hwc.world.reputation")
 
 local text = {}
 
@@ -58,6 +59,7 @@ text.SIGNALS = {
   ["leftover-quests"] = "Left in log",
   ["lua-error"] = "Lua error",
   ["missing-global"] = "Missing global",
+  ["rep-faction-unmet"] = "REP faction never met",
 }
 
 -- Why a character's run stopped early: every stop reason driver/run.lua passes
@@ -231,6 +233,22 @@ local function label_for(f, ctx, kind)
   return table.concat(list, "/")
 end
 
+local function is_reputation(f)
+  local r = f.reasons or {}
+  return #r == 1 and r[1] == "reputation"
+end
+
+-- A reputation value in words: its band's name (hwc.world.reputation BANDS), with the
+-- points when the value isn't the band's lower bound ("Neutral (2500)").
+local function standing_words(points, always_points)
+  local reaction, lower = reputation.standing(points)
+  local name = reputation.BANDS[reaction].name
+  if always_points or points ~= lower then return name .. " (" .. tostring(points) .. ")" end
+  return name
+end
+
+local REP_UNMODELLED = "Reputation from kills, item turn-ins and encounters isn't modelled, so a real player may have it."
+
 local function article(word)
   return word:match("^[AEIOUaeiou]") and "an " or "a "
 end
@@ -257,7 +275,10 @@ function text.title(f)
     return nm .. " is never shown"
   elseif s == "accept-refused" then
     local kind = kind_of(f)
-    if kind then
+    if is_reputation(f) then
+      local bound = f.rep and f.rep.bound
+      return nm .. " can't be taken: reputation too " .. (bound == "min" and "low" or bound == "max" and "high" or "low/high")
+    elseif kind then
       local label = label_for(f, nil, kind)
       return nm .. " can't be taken by " .. article(label) .. label
     end
@@ -282,6 +303,12 @@ function text.title(f)
     if f.qname and f.qname ~= "" then which = "Quest " .. quoted(f.qname) .. " (" .. tostring(f.qid) .. ")" end
     if (f.reasons or {})[1] == "not-turned-in" then return which .. " is not turned in within scope" end
     return which .. " is left in the log"
+  elseif s == "rep-faction-unmet" then
+    local checks = f.faction_name or ("Faction " .. tostring(f.faction))
+    if f.tag_faction and f.tag_faction ~= "" then
+      return "REP step names " .. f.tag_faction .. " but checks " .. checks .. ", which this character never met"
+    end
+    return "REP step checks " .. checks .. ", which this character never met"
   elseif s == "lua-error" then
     local first = tostring(f.message or f.name or ""):match("^[^\n]*")
     if #first > 80 then first = first:sub(1, 80) .. "…" end
@@ -324,7 +351,15 @@ local function clauses(f, ctx)
       .. tostring(f.use) .. "."
   elseif s == "accept-refused" then
     local kind = kind_of(f)
-    if kind then
+    if is_reputation(f) then
+      local g = f.rep
+      if not (g and g.value and g.points) then
+        return "The quest data needs a reputation standing this character doesn't have. " .. REP_UNMODELLED
+      end
+      local need = (g.bound == "max" and "less than " or "") .. standing_words(g.value)
+      return "The quest data needs " .. need .. " with " .. (g.name or ("Faction " .. tostring(g.faction)))
+        .. "; this character has " .. standing_words(g.points, true) .. ". " .. REP_UNMODELLED
+    elseif kind then
       local label = label_for(f, ctx, kind)
       return "The guide shows this accept, but the quest data says " .. article(label) .. label .. " can't take quest " .. q .. "."
     end
@@ -380,6 +415,10 @@ local function clauses(f, ctx)
     local which = q
     if f.qname and f.qname ~= "" then which = quoted(f.qname) .. " (" .. q .. ")" end
     return "The run passed this turn-in step, but quest " .. which .. " was still in the log when the run ended."
+  elseif s == "rep-faction-unmet" then
+    return "WoWPro asks for reputation with faction " .. tostring(f.faction)
+      .. ", but this character has never met that faction, so the step is skipped.",
+      "Reputation from kills and encounters isn't modelled; if the guide meant another faction, the id is wrong."
   elseif s == "lua-error" then
     return "WoWPro raised an error during the run.", "The message and stack are in the detail below."
   end

@@ -491,6 +491,142 @@ describe("driver.run", function()
     assert.same({ "G1:1", "G1:2", "G1:3", "G1:5" }, E.manual)
   end)
 
+  it("turns a reputation refusal into an unverified accept-refused naming the gate", function()
+    local ReputationState = require("hwc.world.reputation_state")
+    -- The catalog calls the quest verified: the refusal's own confidence wins.
+    local world = fx.fake_world({ [9] = { name = "Honored Only", confidence = "verified",
+      min_rep = { faction = 72, value = 9000 } } })
+    world.reputation = ReputationState.new("Dwarf", "Alliance", { [72] = "Stormwind" })
+    local steps = { { action = "A", name = "Honored Only", qids = { 9 },
+      outcome = { kind = "refused", reason = "reputation" } } }
+    local log, E = drive(one_guide(steps), {}, {}, world)
+    local ar = signals(log, "accept-refused")
+    assert.equal(1, #ar)
+    assert.equal("reputation", ar[1].reason)
+    assert.equal("unverified", ar[1].confidence)
+    assert.same({ faction = 72, name = "Stormwind", bound = "min", value = 9000, points = 3100 }, ar[1].rep)
+    assert.same({}, signals(log, "did-not-advance"))
+    assert.same({ "G1:1", "G1:2" }, E.manual)
+  end)
+
+  it("still records a reputation refusal when the world has no reputation state", function()
+    local steps = { { action = "A", name = "Gated", qids = { 9 }, outcome = { kind = "refused", reason = "reputation" } } }
+    local log = drive(one_guide(steps), {}, {}, fx.fake_world({ [9] = { confidence = "verified" } }))
+    local ar = signals(log, "accept-refused")
+    assert.equal(1, #ar)
+    assert.equal("unverified", ar[1].confidence)
+    assert.is_nil(ar[1].rep)
+    assert.is_nil(log.reputation)
+  end)
+
+  -- Design 2026-11-18-reputation §4.5, §6: REP|Gelkis Clan Centaur;91;hated-neutral (Galak) at
+  -- 30_41_Alliance.lua:544. The stub returned nil for 91 (unmet_lookups) when WoWPro asked.
+  describe("rep-faction-unmet", function()
+    local ReputationState = require("hwc.world.reputation_state")
+    local function rep_run(prepare, rep, steps_override, opts, script)
+      local world = fx.fake_world({ [1382] = { name = "Strange Alliance", confidence = "verified" } })
+      world.reputation = ReputationState.new("Dwarf", "Alliance", {})
+      prepare(world.reputation)
+      local steps = steps_override or {
+        { action = "R", name = "Go" },
+        { action = "C", name = "Strange Alliance", qids = { 1382 }, rep = rep or "Gelkis Clan Centaur;91;hated-neutral", hidden = true },
+      }
+      return drive(one_guide(steps), script or { G1 = completes(1) }, opts or {}, world)
+    end
+
+    it("reports a REP step whose faction the stub returned nil for", function()
+      local log = rep_run(function(r) r.lookups[91] = true; r.unmet_lookups[91] = true end)
+      local u = signals(log, "rep-faction-unmet")
+      assert.equal(1, #u)
+      assert.equal(91, u[1].faction)
+      assert.equal("unverified", u[1].confidence)
+      assert.equal("G1", u[1].gid)
+      assert.equal("g1.lua", u[1].file)
+      assert.equal(102, u[1].line)
+      assert.equal("C", u[1].action)
+      assert.equal("Strange Alliance", u[1].name)
+      assert.equal(1382, u[1].qid)
+      assert.equal("Faction 91", u[1].faction_name)
+      assert.equal("Gelkis Clan Centaur", u[1].tag_faction)
+    end)
+
+    it("reports nothing when the stub only ever found the faction", function()
+      local log = rep_run(function(r) r.lookups[91] = true; r:gain(91, 0) end)
+      assert.same({}, signals(log, "rep-faction-unmet"))
+    end)
+
+    it("still reports a faction looked up while unmet and met later in the same guide", function()
+      local log = rep_run(function(r) r.lookups[91] = true; r.unmet_lookups[91] = true; r:gain(91, 0) end)
+      assert.equal(1, #signals(log, "rep-faction-unmet"))
+    end)
+
+    it("reports nothing when the stub was never asked for the faction", function()
+      local log = rep_run(function() end)
+      assert.same({}, signals(log, "rep-faction-unmet"))
+    end)
+
+    -- Driver:close's limit: a run that stops early never reached steps at or past the
+    -- furthest one it acted on.
+    it("reports nothing for a REP step at or after where an early stop left the run", function()
+      local steps = {
+        { action = "C", name = "loop", qids = { 1 } },
+        { action = "C", name = "Strange Alliance", qids = { 1382 }, rep = "Gelkis Clan Centaur;91;hated-neutral", hidden = true },
+      }
+      local log = rep_run(function(r) r.unmet_lookups[91] = true end, nil, steps,
+        { max_iterations = 3, stuck_limit = 100 }, { G1 = { { on_manual = { uncomplete = { 1 } } } } })
+      assert.equal("iterations", log.stop.reason)
+      assert.same({}, signals(log, "rep-faction-unmet"))
+    end)
+
+    it("gives no signal and no error for a tag with no id or a non-numeric id", function()
+      for _, tag in ipairs({ "Gelkis Clan Centaur", "Gelkis Clan Centaur;", "Gelkis Clan Centaur;abc;neutral", ";;" }) do
+        local log = rep_run(function(r) r.unmet_lookups[91] = true end, tag)
+        assert.same({}, signals(log, "rep-faction-unmet"), tag)
+      end
+    end)
+
+    it("gives no signal and no error for a spaced tag whose id was never looked up", function()
+      local log = rep_run(function() end, " Gelkis Clan Centaur ; 91 ; hated-neutral ")
+      assert.same({}, signals(log, "rep-faction-unmet"))
+    end)
+
+    -- WoWPro_Broker.lua:2807/:2816 split on ";" and tonumber the id, which accepts spaces.
+    it("trims the tag's faction name and reads a spaced id as WoWPro does", function()
+      local log = rep_run(function(r) r.unmet_lookups[91] = true end, " Gelkis Clan Centaur ; 91 ; hated-neutral ")
+      local u = signals(log, "rep-faction-unmet")
+      assert.equal(1, #u)
+      assert.equal("Gelkis Clan Centaur", u[1].tag_faction)
+    end)
+
+    it("leaves the tag name out when the tag's first field is empty", function()
+      local log = rep_run(function(r) r.unmet_lookups[91] = true end, " ;91;neutral")
+      local u = signals(log, "rep-faction-unmet")
+      assert.equal(1, #u)
+      assert.is_nil(u[1].tag_faction)
+    end)
+  end)
+
+  -- Review Focus 5: changes in turn-in order, assumptions sorted; identical JSON twice.
+  it("carries the world's reputation changes and assumptions into the log, deterministically", function()
+    local ReputationState = require("hwc.world.reputation_state")
+    local function world()
+      local w = fx.fake_world()
+      local r = ReputationState.new("Gnome", "Alliance", { [500] = "Zeta", [600] = "Alpha", [92] = "Gelkis Clan Centaur" })
+      for _, g in ipairs({ { 7, 600, 10 }, { 7, 500, 20 }, { 8, 92, 100 } }) do r:reward(g[1], g[2], g[3]) end
+      w.reputation = r
+      return w
+    end
+    local json = require("hwc.json")
+    local a = drive(one_guide({ { action = "R", name = "Go" } }), { G1 = completes(1) }, {}, world())
+    local b = drive(one_guide({ { action = "R", name = "Go" } }), { G1 = completes(1) }, {}, world())
+    assert.same({ 7, 7, 8 }, { a.reputation.changes[1].qid, a.reputation.changes[2].qid, a.reputation.changes[3].qid })
+    assert.same({ "starting reputation for Gnome is inferred, not captured",
+      "factions first met at an assumed Neutral 0: Alpha, Zeta",
+      "reward scaling by level is unverified for Forever" }, a.reputation.assumptions)
+    assert.equal(json.encode(a.reputation), json.encode(b.reputation))
+    assert.equal(json.encode(a), json.encode(b))
+  end)
+
   it("flags a shown step whose quest the catalog keeps from this race or class, once", function()
     local world = fx.fake_world({ [8] = { races = { "Human" }, confidence = "unverified" } })
     local steps = { { action = "C", name = "Human only", qids = { 8 } } }
@@ -806,9 +942,16 @@ describe("driver.run", function()
       assert.equal(3, log.jumps[1].level_after)
     end)
 
-    it("stops the raise at the XP cap", function()
+    it("raises the level past 25 to a later guide's start level", function()
       local guides = chain()
       guides.G3.startlevel = 40
+      local log = drive(guides, SCRIPT, { included = set("G3") })
+      assert.equal(40, log.jumps[1].level_after)
+    end)
+
+    it("stops the raise at the XP cap", function()
+      local guides = chain()
+      guides.G3.startlevel = 70
       local log = drive(guides, SCRIPT, { included = set("G3") })
       assert.equal(require("hwc.world.xp").CAP_LEVEL, log.jumps[1].level_after)
     end)

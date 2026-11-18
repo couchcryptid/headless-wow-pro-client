@@ -1,6 +1,7 @@
 -- The simulated world behind the WoW client stubs (design spec §5).
 local Player = require("hwc.world.player")
 local QuestLog = require("hwc.world.questlog")
+local ReputationState = require("hwc.world.reputation_state")
 
 local World = {}
 World.__index = World
@@ -19,6 +20,10 @@ function World.new(cfg, catalog, clock)
   for _, p in ipairs(cfg.professions or {}) do self.player:learn_skill(p.name, p.rank, p.max) end
   self.events = {}
   self.log = QuestLog.new(self)
+  -- Faction names come from the catalog's QuestieDB (Catalog:faction_name); a catalog
+  -- without them (spec stubs, no QuestieDB) leaves ids shown as "Faction <id>".
+  local names = catalog and catalog.faction_name and function(id) return catalog:faction_name(id) end
+  self.reputation = ReputationState.new(self.player.race_key, self.player.faction, names)
   return self
 end
 

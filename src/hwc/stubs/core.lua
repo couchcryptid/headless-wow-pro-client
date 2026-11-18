@@ -340,6 +340,7 @@ function M.install(sb, cfg)
   env.UISpecialFrames = {}
 
   require("hwc.stubs.questlog").install(sb)
+  require("hwc.stubs.reputation").install(sb, trap)
 end
 
 return M

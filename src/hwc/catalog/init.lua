@@ -30,6 +30,7 @@ local ANY_RACES = { [0] = true, [2047] = true }
 local SUPPLEMENT_FIELDS = {
   "name", "level", "required_level", "xp", "races", "classes", "pre_single", "pre_group",
   "objectives", "starter", "ender", "requires_skill", "completed_by_training", "source_item",
+  "reputation_reward", "min_rep", "max_rep",
 }
 
 -- Python's `a or b` treats 0 as missing; the old simulator's data relies on it.
@@ -174,6 +175,19 @@ end
 
 -- ---------- quests ----------
 
+-- QuestieDB reputationReward { {factionId, value}, ... } -> { {faction, value}, ... }, in order.
+local function rep_rewards(list)
+  local out = {}
+  for _, e in ipairs(type(list) == "table" and list or {}) do out[#out + 1] = { faction = e[1], value = e[2] } end
+  return out
+end
+
+-- QuestieDB requiredMinRep/requiredMaxRep {factionId, value} -> { faction, value } or nil.
+local function rep_gate(pair)
+  if type(pair) ~= "table" or type(pair[1]) ~= "number" or type(pair[2]) ~= "number" then return nil end
+  return { faction = pair[1], value = pair[2] }
+end
+
 local function starter_of(list)
   -- startedBy/finishedBy = {creatures, objects, items}; the first creature wins.
   if type(list) ~= "table" then return nil end
@@ -219,6 +233,11 @@ local function build_quest(self, id)
   quest.ender, quest.ender_kind = starter_of(q.finishedBy)
   -- QuestieDB sourceItemId: "item provided by quest starter" (the client puts it in the bags on accept).
   quest.source_item = nz(q.sourceItemId)
+  -- Reputation (design 2026-11-18-reputation §4.3): the rewards a turn-in gives and the
+  -- standing an accept needs, on QuestieDB's cumulative scale.
+  quest.reputation_reward = rep_rewards(q.reputationReward)
+  quest.min_rep = rep_gate(q.requiredMinRep)
+  quest.max_rep = rep_gate(q.requiredMaxRep)
 
   -- Camping 101 profession quests (design spec §3, the user in game 2026-11-11): "Camping 101: <Prof>" ends at the trainer and gates
   -- on knowing <Prof>, except Cooking, whose turn-in is completed by training
@@ -286,6 +305,45 @@ function Catalog:placeholder(id, qo_count)
     pre_single = {}, pre_group = {}, confidence = "unverified",
     notes = { "unverified quest data: placeholder shaped from the guide step's QO count" },
   }
+end
+
+-- ---------- factions ----------
+
+-- Words kept lower case inside a name ("The League of Arathor").
+local MINOR_WORDS = { OF = true, THE = true, AND = true }
+
+-- QuestieDB constant -> display name: GELKIS_CLAN_CENTAUR -> "Gelkis Clan Centaur".
+local function display_name(constant)
+  local words = {}
+  for w in constant:gmatch("[^_]+") do
+    if #words > 0 and MINOR_WORDS[w] then
+      words[#words + 1] = w:lower()
+    else
+      words[#words + 1] = w:sub(1, 1):upper() .. w:sub(2):lower()
+    end
+  end
+  return table.concat(words, " ")
+end
+
+-- A faction's display name from the installed QuestieDB's faction constants
+-- (src/corrections/enum/factions.lua, Enum.factionIDs), read at run time; no names
+-- are kept in this repo. An id with no constant (or no QuestieDB) is "Faction <id>".
+function Catalog:faction_name(id)
+  if not self._faction_names then
+    local by_id = {}
+    local src = self.questie
+    local constants = src and src.factions and src:factions() or {}
+    local keys = {}
+    for k in pairs(constants) do keys[#keys + 1] = k end
+    -- Sorted, so a shared id names the same constant on every run.
+    table.sort(keys)
+    for _, k in ipairs(keys) do
+      local v = constants[k]
+      if type(v) == "number" and by_id[v] == nil then by_id[v] = display_name(k) end
+    end
+    self._faction_names = by_id
+  end
+  return self._faction_names[tonumber(id)] or ("Faction " .. tostring(id))
 end
 
 -- ---------- npcs and items ----------

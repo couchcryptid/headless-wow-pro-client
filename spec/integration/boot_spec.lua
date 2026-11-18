@@ -28,6 +28,47 @@ describe("boot.is_harness_error", function()
     assert.is_false(boot.is_harness_error({ msg = ".../WoWPro/WoWPro.lua:606: boom",
       stack = "stack traceback:\n\t.../WoWPro/WoWPro.lua:606: in f\n\t.../src/hwc/boot.lua:1: in run" }))
   end)
+
+  -- Design 2026-11-18-reputation §4.7: indexing or calling a global the sandbox
+  -- recorded as missing is a harness gap, not an addon bug.
+  it("counts indexing or calling a missing global as a harness error", function()
+    local idx = { msg = ".../WoWPro/WoWPro_CompatUtil.lua:243: attempt to index field 'C_Reputation' (a nil value)" }
+    assert.is_true(boot.is_harness_error(idx, { C_Reputation = true }))
+    assert.is_false(boot.is_harness_error(idx, {}))
+    assert.is_false(boot.is_harness_error(idx))
+    local field = { msg = ".../WoWPro/A.lua:9: attempt to call field 'GetFactionDataByID' (a nil value)" }
+    assert.is_true(boot.is_harness_error(field, { ["C_Reputation.GetFactionDataByID"] = true }))
+  end)
+
+  -- The sandbox records every nil global read, so `missing` alone over-counts: a global
+  -- the addon owns or one absent in the Forever client is the addon's error, not a gap.
+  it("does not count a global absent in Forever as a harness error", function()
+    local call = { msg = ".../WoWPro/A.lua:9: attempt to call global 'GetFactionInfoByID' (a nil value)" }
+    assert.is_false(boot.is_harness_error(call, { GetFactionInfoByID = true }))
+    local grail = { msg = ".../WoWPro/A.lua:9: attempt to index global 'Grail' (a nil value)" }
+    assert.is_false(boot.is_harness_error(grail, { Grail = true }))
+  end)
+
+  it("does not count an addon-owned WoWPro global as a harness error", function()
+    local db = { msg = ".../WoWPro/A.lua:9: attempt to index global 'WoWProDB' (a nil value)" }
+    assert.is_false(boot.is_harness_error(db, { WoWProDB = true }))
+  end)
+
+  it("counts C_Reputation and TomTom gaps as harness errors", function()
+    local rep = { msg = ".../WoWPro/A.lua:9: attempt to index field 'C_Reputation' (a nil value)" }
+    assert.is_true(boot.is_harness_error(rep, { C_Reputation = true }))
+    local tomtom = { msg = ".../WoWPro/A.lua:9: attempt to index global 'TomTom' (a nil value)" }
+    assert.is_true(boot.is_harness_error(tomtom, { TomTom = true }))
+  end)
+
+  it("keeps every expected-absent group's members out of harness errors", function()
+    for name in pairs(boot.EXPECTED_ABSENT) do
+      local e = { msg = ".../WoWPro/A.lua:9: attempt to call global '" .. name .. "' (a nil value)" }
+      assert.is_false(boot.is_harness_error(e, { [name] = true }), name)
+    end
+    assert.is_nil(boot.EXPECTED_ABSENT.TomTom)
+    assert.is_true(boot.EXPECTED_ABSENT.LibStub)
+  end)
 end)
 
 local function boot(race, class)
