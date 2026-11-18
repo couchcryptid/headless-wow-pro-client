@@ -446,8 +446,8 @@ describe("hwc diff", function()
     local other = put(dir, "other.json", doc({}, { matrix = { combos = { "Human PRIEST none" } } }))
     code, _, err = run({ "diff", a, other })
     assert.equal(2, code)
-    assert.matches("^hwc: ", err)
-    assert.matches("no shared characters", err)
+    assert.equal("hwc: not comparable: OLD has Dwarf Warrior and Gnome Mage, NEW has Human Priest\n"
+      .. "see hwc diff --help\n", err)
   end)
 
   it("exits 2 with fewer or more than two paths", function()

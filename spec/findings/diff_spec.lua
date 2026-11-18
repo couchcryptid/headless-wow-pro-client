@@ -118,7 +118,26 @@ describe("diff.compare", function()
   it("returns nil and a message when no characters are shared", function()
     local r, err = diff.compare(doc({ combos = { DWARF } }), doc({ combos = { GNOME } }))
     assert.is_nil(r)
-    assert.matches("no shared characters", err)
+    assert.equal("not comparable: OLD has Dwarf Warrior, NEW has Gnome Mage", err)
+  end)
+
+  it("names at most three characters a side", function()
+    local many = { "Dwarf WARRIOR none", "Dwarf PRIEST none", "Dwarf HUNTER none", "Dwarf ROGUE none" }
+    local _, err = diff.compare(doc({ combos = many }), doc({ combos = {} }))
+    assert.equal("not comparable: OLD has Dwarf Hunter, Dwarf Priest, Dwarf Rogue and 1 more, NEW has no characters",
+      err)
+  end)
+
+  it("says a side written before --professions must be re-run", function()
+    local _, err = diff.compare(doc({ combos = { "Dwarf WARRIOR baseline" } }), doc({ combos = { DWARF } }))
+    assert.equal("not comparable: OLD has Dwarf Warrior (Baseline), NEW has Dwarf Warrior; "
+      .. "OLD was written before --professions, so re-run it with this hwc", err)
+    for _, v in ipairs({ "secondary", "alch-herb", "bs-mining", "lw-skin", "eng-ench" }) do
+      _, err = diff.compare(doc({ combos = { DWARF } }), doc({ combos = { "Gnome MAGE " .. v } }))
+      assert.matches("; NEW was written before %-%-professions, so re%-run it with this hwc$", err)
+    end
+    _, err = diff.compare(doc({ combos = { "Dwarf WARRIOR baseline" } }), doc({ combos = { "Gnome MAGE lw-skin" } }))
+    assert.matches("; OLD and NEW were written before %-%-professions, so re%-run them with this hwc$", err)
   end)
 
   it("rejects a format other than 2", function()
