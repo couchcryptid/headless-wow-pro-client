@@ -2,6 +2,8 @@
 -- Sources:
 --   XP to next level, levels 1-59: https://warcraft.wiki.gg/wiki/Experience_to_level (Vanilla / Classic table);
 --     levels 1-23 also match the old simulator's TNL (wow-pro-leveling/sim/sim.py:31).
+--     Forever, in game: level 29 UnitXPMax = 44300 (Human Warlock, 2026-11-18), matching the table.
+--     The other rows are Classic values not yet checked against Forever.
 --   Mob XP (base, grey level, zero difference, elite x2, party modifier):
 --     https://warcraft.wiki.gg/wiki/Mob_experience (Azeroth formula, pre-4.03a, as used in Vanilla;
 --     zero difference and gray level bands to 60, the pre-TBC gray level 47 at 60);
