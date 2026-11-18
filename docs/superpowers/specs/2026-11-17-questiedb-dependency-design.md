@@ -99,11 +99,6 @@ the data before corrections.
 - Findings record the QuestieDB tag and build commit in use.
 
 **Non-goals**
-- **Wowhead.** `init`, `sync` and `doctor` don't touch the Wowhead extract
-  (`wh.json`, `objs.json`, `rate_overrides.json`). Decided by the user: browser
-  scraping isn't a viable long-term way to sync it, so a proper sync is a
-  separate future feature. The catalog keeps reading the extract when it is on
-  disk at its configured paths, unchanged.
 - Moving or syncing the supplement (`local/catalog/supplement.json`). It stays
   where it is; `doctor` only reports it.
 - Flavors other than Forever, and the `Camelot` TOC.
@@ -207,7 +202,6 @@ the exit code.
   unauthenticated, with a short timeout. A network failure is a **warn**, and the rest of the report still
   prints.
 - `--json` prints the same report as JSON, matching other commands' `--json`.
-- Wowhead is not checked (§3 non-goals).
 
 ### 4.5 Loading QuestieDB (the catalog's new QuestieDB source)
 

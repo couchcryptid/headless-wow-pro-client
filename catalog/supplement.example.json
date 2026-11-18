@@ -1,7 +1,7 @@
 {
   "quests": {
     "12345": {
-      "source": "how this was hand-checked (e.g. Wowhead page, date)",
+      "source": "how this was hand-checked (e.g. in-game check, date)",
       "name": "Example Quest Name",
       "level": 20,
       "required_level": 18,

@@ -24,7 +24,7 @@
 - **World facts come from the catalog, never from guide lines.** Two exceptions:
   - the placeholder path (`catalog:placeholder`, `QO` count only, flagged "unverified quest data");
   - a step's own `Z`/`M` and item tags, which say where the player *goes* and what they *buy or loot* (spec §5.2), never what a quest *is*.
-- **Data storage:** no QuestieDB, Wowhead or other third-party data is committed. Findings markdown may be committed by the user. Run logs (JSON) and worktrees are git-ignored.
+- **Data storage:** no QuestieDB or other third-party data is committed. Findings markdown may be committed by the user. Run logs (JSON) and worktrees are git-ignored.
 - **No GPL code copied. No LICENSE file.**
 - **Determinism:**
   - identical inputs (addon commit, catalog hashes, config, seed, `--date`) give byte-identical findings markdown;
@@ -164,7 +164,7 @@
   - `actions.perform(ctx, step) -> Outcome`, where `ctx = { engine = E, world = W, cfg = cfg }`. Outcome is `{ kind = "acted"|"refused"|"noop", reason = string|nil, qid = int|nil, events = {names...}, levels = int, grind = {kills, to}|nil, elite = bool }`.
   - `refused` reasons: `log-full`, `race`, `class`, `prerequisite`, `already-completed`, `unknown-quest`, `not-in-log`, `incomplete`, `requires-skill`.
   - After any outcome with `levels > 0`, `perform` has called `E:update_guide()`.
-  - Catalog: a quest named `Camping 101: <Prof>` gets `requires_skill = "<Prof>"`, except Cooking, which gets `completed_by_training = "Cooking"`. The supplement may override both. The citation is spec §3 (user, in game 2026-11-11; Wowhead progress text).
+  - Catalog: a quest named `Camping 101: <Prof>` gets `requires_skill = "<Prof>"`, except Cooking, which gets `completed_by_training = "Cooking"`. The supplement may override both. The citation is spec §3 (user, in game 2026-11-11).
 - **Action rules** (spec §5.2; event order as in Plan 2 Task 6's helper, cited there):
   - **`A`:**
     - Accept the step's first QID (opts `placeholder_qo = #QO` when the catalog lacks it). While the accept runs, `world.dialog = {qid, "detail"}`.
