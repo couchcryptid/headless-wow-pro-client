@@ -811,6 +811,61 @@ describe("driver.run", function()
     assert.same({ "G1:1", "G1:2", "G1:3", "G1:5" }, E.manual)
   end)
 
+  describe("quest colour", function()
+    local function accept(level, quest, grind)
+      local steps = { { action = "A", name = "Q", qids = { 5 }, outcome = { kind = "acted", grind = grind } } }
+      local world = fx.fake_world({ [5] = quest })
+      world.player.level = level
+      return drive(one_guide(steps), { G1 = { { complete = { 1 } } } }, {}, world)
+    end
+    local function colours(log)
+      local out = {}
+      for _, s in ipairs(log.signals) do
+        if s.signal:match("^quest%-") then out[#out + 1] = s end
+      end
+      return out
+    end
+
+    it("emits quest-red with the levels and no exempt for a combat quest", function()
+      local c = colours(accept(30, { name = "Hard", level = 36 }))
+      assert.equal(1, #c)
+      assert.equal("quest-red", c[1].signal)
+      assert.same({ 36, 30, "red" }, { c[1].quest_level, c[1].char_level, c[1].color })
+      assert.is_nil(c[1].exempt)
+      assert.equal(5, c[1].qid)
+    end)
+    it("emits quest-orange at 3 to 4 levels above", function()
+      assert.equal("quest-orange", colours(accept(30, { level = 33 }))[1].signal)
+    end)
+    it("emits quest-grey for any quest, a non-combat one too", function()
+      assert.equal("quest-grey", colours(accept(30, { level = 10 }))[1].signal)
+      local c = colours(accept(30, { level = 10, noncombat = "commerce" }))
+      assert.equal("quest-grey", c[1].signal)
+    end)
+    it("emits nothing for yellow or green", function()
+      assert.same({}, colours(accept(30, { level = 30 })))
+      assert.same({}, colours(accept(30, { level = 25 })))
+    end)
+    it("exempts a non-combat quest from red and orange", function()
+      assert.same({}, colours(accept(1, { level = 60, noncombat = "commerce" })))
+      assert.same({}, colours(accept(30, { level = 33, noncombat = "no-combat-objective" })))
+    end)
+    it("emits nothing for a refused accept", function()
+      local steps = { { action = "A", name = "Q", qids = { 5 }, outcome = { kind = "refused", reason = "class" } } }
+      local log = drive(one_guide(steps), {}, {}, fx.fake_world({ [5] = { level = 60 } }))
+      assert.same({}, colours(log))
+    end)
+  end)
+
+  it("records levels_short from the grind on a below-level signal", function()
+    local steps = { { action = "A", name = "Low", qids = { 5 },
+      outcome = { kind = "acted", grind = { kills = 228, to = 32, short = 0.9 } } } }
+    local log = drive(one_guide(steps), {}, {}, fx.fake_world({ [5] = { name = "Low Quest" } }))
+    local b = signals(log, "below-level")
+    assert.equal(0.9, b[1].levels_short)
+    assert.same({ kills = 228, to = 32 }, b[1].grind)
+  end)
+
   it("carries the missing prerequisites and their names on a prerequisite accept-refused", function()
     local steps = {
       { action = "A", name = "The Reports", qids = { 291 },

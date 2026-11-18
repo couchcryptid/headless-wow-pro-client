@@ -26,6 +26,9 @@ describe("text constants", function()
       ["orphan-turnin"] = "Turn-in without the quest",
       ["wrong-race-class"] = "Wrong race or class",
       ["below-level"] = "Offered below level",
+      ["quest-red"] = "Quest too hard (red)",
+      ["quest-orange"] = "Quest too hard (orange)",
+      ["quest-grey"] = "Quest grey",
       ["did-not-advance"] = "Doesn't advance",
       ["manual-completion"] = "Manual click",
       ["stuck"] = "Stuck",
@@ -419,6 +422,34 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     assert.equal('"Low" is offered below its level', t)
     assert.equal("The guide reaches this accept below level 6, the level the quest requires; "
       .. "the client ground 12 kills to get there.", s)
+  end)
+  it("below-level words the levels short, and explains a gap under 2", function()
+    local f = { signal = "below-level", name = "The Haunted Isle", qid = 7, level = 32, levels_short = 0.9,
+      grind = { kills = 228, to = 32 } }
+    local t, s = both(F(f))
+    assert.equal('"The Haunted Isle" is offered 0.9 levels below its level', t)
+    assert.equal("The guide reaches this accept 0.9 levels below level 32, the level the quest requires "
+      .. "(the client ground 228 kills to get there). Gaps under 2 levels are within what the simulation's "
+      .. "missing XP explains (no incidental kills or rested XP).", s)
+    f.levels_short = 2.5
+    t, s = both(F(f))
+    assert.equal('"The Haunted Isle" is offered 2.5 levels below its level', t)
+    assert.equal("The guide reaches this accept 2.5 levels below level 32, the level the quest requires "
+      .. "(the client ground 228 kills to get there).", s)
+  end)
+  it("words a red, orange and grey quest", function()
+    local f = { signal = "quest-red", name = "Hard", qid = 7, quest_level = 40, char_level = 30, color = "red" }
+    local t, s = both(F(f))
+    assert.equal('"Hard" is red for this character (quest level 40, character level 30)', t)
+    assert.equal("The guide sends a level 30 character to a level 40 quest with combat objectives.", s)
+    f.signal, f.color, f.quest_level = "quest-orange", "orange", 33
+    t, s = both(F(f))
+    assert.equal('"Hard" is orange for this character (quest level 33, character level 30)', t)
+    assert.equal("The guide sends a level 30 character to a level 33 quest with combat objectives.", s)
+    f.signal, f.color, f.quest_level = "quest-grey", "grey", 10
+    t, s = both(F(f))
+    assert.equal('"Hard" is grey for this character (quest level 10, character level 30)', t)
+    assert.equal("The quest is grey at level 30, so it gives little or no XP.", s)
   end)
   it("below-level without a grind stays neutral", function()
     local _, s = both(F({ signal = "below-level", name = "Low", qid = 7, level = 4 }))

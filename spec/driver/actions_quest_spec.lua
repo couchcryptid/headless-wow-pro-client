@@ -113,6 +113,14 @@ describe("actions.perform: A", function()
     assert.is_truthy(has_event(w, "grind"))
   end)
 
+  it("records the levels short from the real XP before the grind", function()
+    local ctx, _, w = setup()
+    local xp = require("hwc.world.xp")
+    w.player.xp = xp.to_next(1) / 2 -- halfway through level 1: required 3 - 1.5
+    local o = actions.perform(ctx, step("A", { 92002 }))
+    assert.are.equal(1.5, o.grind.short)
+  end)
+
   it("does not grind for an under-levelled quest the character can't take anyway", function()
     local ctx, E, w = setup("Dwarf")
     local o = actions.perform(ctx, step("A", { 92009 }))

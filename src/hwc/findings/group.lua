@@ -35,6 +35,7 @@ local SEVERITY = {
   ["lua-error"] = "high", ["below-level"] = "medium-high",
   ["did-not-advance"] = "medium", stuck = "medium", ["manual-completion"] = "medium",
   ["rep-faction-unmet"] = "medium",
+  ["quest-red"] = "high", ["quest-orange"] = "medium", ["quest-grey"] = "low",
   ["leftover-quests"] = "low", ["missing-global"] = "low",
 }
 local SEVERITY_ORDER = { "high", "medium-high", "medium", "low" }
@@ -80,7 +81,9 @@ local function new_finding(s, key)
     missing = s.missing, missing_names = s.missing_names, missing_any = s.missing_any,
     -- Like missing: new_finding copies the first combo's signal, so a group spanning characters
     -- reports that combo's outcomes.
-    missing_outcome = s.missing_outcome, combos = {}, causes = {}, reasons = {},
+    missing_outcome = s.missing_outcome,
+    levels_short = s.levels_short, quest_level = s.quest_level, char_level = s.char_level, color = s.color,
+    combos = {}, causes = {}, reasons = {},
   }
   if s.signal == "lua-error" then
     f.name, f.message, f.stack = s.message, s.message, s.stack
@@ -92,6 +95,11 @@ local function new_finding(s, key)
   end
   if not f.expected then
     f.severity = SEVERITY[s.signal] or error("findings: unknown signal " .. tostring(s.signal))
+    -- below-level is graded by how far short: under 2 levels is within what the simulation's
+    -- missing XP explains. A run log without levels_short keeps the fixed severity.
+    if s.signal == "below-level" and s.levels_short then
+      f.severity = s.levels_short < 2 and "low" or "medium"
+    end
   end
   return f
 end

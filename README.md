@@ -277,6 +277,26 @@ Blizzard's Forever race/class table
 guide tags: the guide is what's under test, and a guide edit must not change
 which characters are played.
 
+## Level findings
+
+Three signals grade a quest by the character's level when the run accepts it
+(Classic `GetQuestDifficultyColor`; **unverified for Forever**, the bands are
+Classic's and not checked in game):
+
+| Colour | Quest level minus character level | Finding |
+|---|---|---|
+| red | 5 or more | `quest-red`, high |
+| orange | 3 to 4 | `quest-orange`, medium |
+| yellow, green | -2 to 2, then below | none |
+| grey | at or below the grey line (`xp.gray_level`) | `quest-grey`, low |
+
+Red and orange skip quests with no combat objective and the Azeroth Commerce
+Authority and Darkmoon Faire quests. Grey applies to every quest.
+
+`below-level` says how many levels short the character was before the harness
+ground to the required level: low under 2 levels (within what the missing
+incidental XP explains), medium from 2.
+
 ## Comparing runs
 
 `hwc diff` compares two findings files by finding id and tells you what a guide

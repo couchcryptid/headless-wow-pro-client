@@ -53,6 +53,9 @@ text.SIGNALS = {
   ["orphan-turnin"] = "Turn-in without the quest",
   ["wrong-race-class"] = "Wrong race or class",
   ["below-level"] = "Offered below level",
+  ["quest-red"] = "Quest too hard (red)",
+  ["quest-orange"] = "Quest too hard (orange)",
+  ["quest-grey"] = "Quest grey",
   ["did-not-advance"] = "Doesn't advance",
   ["manual-completion"] = "Manual click",
   ["stuck"] = "Stuck",
@@ -314,7 +317,11 @@ function text.title(f)
   elseif s == "wrong-race-class" then
     return nm .. " is shown to the wrong " .. (kind_of(f) or "race/class")
   elseif s == "below-level" then
+    if f.levels_short then return nm .. " is offered " .. string.format("%.1f", f.levels_short) .. " levels below its level" end
     return nm .. " is offered below its level"
+  elseif s == "quest-red" or s == "quest-orange" or s == "quest-grey" then
+    return nm .. " is " .. tostring(f.color) .. " for this character (quest level " .. tostring(f.quest_level)
+      .. ", character level " .. tostring(f.char_level) .. ")"
   elseif s == "did-not-advance" then
     return nm .. " doesn't advance"
   elseif s == "manual-completion" then
@@ -445,11 +452,25 @@ local function clauses(f, ctx)
     -- The signal fires after the grind, so f.level is the level the client
     -- ground up to, not the level the guide reached the accept at.
     local g = f.grind
-    if g and g.to and g.kills then
+    if f.levels_short and g and g.to and g.kills then
+      local out = "The guide reaches this accept " .. string.format("%.1f", f.levels_short) .. " levels below level "
+        .. tostring(g.to) .. ", the level the quest requires (the client ground " .. tostring(g.kills)
+        .. " kills to get there)."
+      if f.levels_short < 2 then
+        out = out .. " Gaps under 2 levels are within what the simulation's missing XP explains "
+          .. "(no incidental kills or rested XP)."
+      end
+      return out
+    elseif g and g.to and g.kills then
       return "The guide reaches this accept below level " .. tostring(g.to) .. ", the level the quest requires; "
         .. "the client ground " .. tostring(g.kills) .. " kills to get there."
     end
     return "The guide reaches this accept below the level the quest requires."
+  elseif s == "quest-red" or s == "quest-orange" then
+    return "The guide sends a level " .. tostring(f.char_level) .. " character to a level " .. tostring(f.quest_level)
+      .. " quest with combat objectives."
+  elseif s == "quest-grey" then
+    return "The quest is grey at level " .. tostring(f.char_level) .. ", so it gives little or no XP."
   elseif s == "did-not-advance" then
     -- The reason is the refusal of the client's action (driver.actions); none means it acted.
     local r = (f.reasons or {})[1]

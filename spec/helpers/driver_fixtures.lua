@@ -167,6 +167,12 @@ local function fake_world(quests, log_qids)
     history = {},
   }
   w.catalog = { quest = function(_, q) return (quests or {})[q] end,
+    -- A quest table's `noncombat = "reason"` stands in for Catalog:noncombat.
+    noncombat = function(_, q)
+      local x = (quests or {})[q]
+      if x and x.noncombat then return true, x.noncombat end
+      return false
+    end,
     -- A quest table's `chain = { part, total }` stands in for the catalog's chain_part.
     chain_part = function(_, q)
       local x = (quests or {})[q]

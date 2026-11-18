@@ -257,8 +257,12 @@ local function perform_accept(ctx, step, out)
     -- Under-levelled only (spec §5.2): grind generic mobs to the required level,
     -- fire nothing until the ding, force the update, then accept.
     local target = w.catalog:quest(qid).required_level
+    -- Levels short of the target, from the real XP before the grind, to one decimal.
+    local p = w.player
+    local progress = p.level + (p:xp_max() > 0 and p.xp / p:xp_max() or 0)
+    local short = math.floor((target - progress) * 10 + 0.5) / 10
     local n, _, levels = kills.grind_to(w.player, target)
-    out.grind = { kills = n, to = target }
+    out.grind = { kills = n, to = target, short = short }
     out.levels = out.levels + levels
     after_levels(ctx, levels)
   end

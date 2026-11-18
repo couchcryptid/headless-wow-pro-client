@@ -330,6 +330,23 @@ describe("group.findings", function()
     }, sev)
   end)
 
+  it("grades below-level by levels_short and quest colours by their own severity", function()
+    local function sev(sig)
+      sig.gid, sig.file, sig.line, sig.action, sig.name, sig.qid = "G", "f", 1, "A", "q", 9
+      return group.findings({ runlog("Dwarf", "WARRIOR", { sig }) })[1]
+    end
+    assert.equal("low", sev({ signal = "below-level", levels_short = 0.9 }).severity)
+    assert.equal("low", sev({ signal = "below-level", levels_short = 1.9 }).severity)
+    assert.equal("medium", sev({ signal = "below-level", levels_short = 2.0 }).severity)
+    assert.equal("medium", sev({ signal = "below-level", levels_short = 2.5 }).severity)
+    assert.equal(2.5, sev({ signal = "below-level", levels_short = 2.5 }).levels_short)
+    assert.equal("high", sev({ signal = "quest-red" }).severity)
+    assert.equal("medium", sev({ signal = "quest-orange" }).severity)
+    assert.equal("low", sev({ signal = "quest-grey" }).severity)
+    local f = sev({ signal = "quest-red", quest_level = 40, char_level = 30, color = "red", exempt = nil })
+    assert.same({ 40, 30, "red" }, { f.quest_level, f.char_level, f.color })
+  end)
+
   it("carries a rep-faction-unmet signal's faction, name and tag name onto its finding", function()
     local fs = group.findings({ runlog("Dwarf", "WARRIOR", { { signal = "rep-faction-unmet", gid = "G", file = "f",
       line = 6, action = "C", name = "r", qid = 3, faction = 91, faction_name = "Faction 91",

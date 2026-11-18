@@ -12,6 +12,7 @@
 -- walked 1..n); nothing in it is built from pairs.
 local actions = require("hwc.driver.actions")
 local xp = require("hwc.world.xp")
+local quest_color = require("hwc.world.quest_color")
 local findings_text = require("hwc.findings.text")
 
 local run = {}
@@ -551,8 +552,27 @@ function Driver:refusals(cur, out)
     end
   elseif out.kind == "acted" and out.grind and cur.action == "A" then
     self:signal("below-level", cur, { qid = out.qid, reason = "below-level", outcome = out.kind,
-      grind = { kills = out.grind.kills, to = out.grind.to } })
+      grind = { kills = out.grind.kills, to = out.grind.to }, levels_short = out.grind.short })
   end
+  if out.kind == "acted" and cur.action == "A" then self:quest_color(cur, out) end
+end
+
+-- One colour signal per accept the run plays, at the character's level now (after any
+-- grind to the required level). Red and orange only for a quest with combat objectives
+-- (Catalog:noncombat); grey for any quest. Yellow and green are not findings.
+function Driver:quest_color(cur, out)
+  local catalog = self.W.catalog
+  local quest = out.qid and catalog and catalog:quest(out.qid)
+  if not (quest and quest.level) then return end
+  local level = self.W.player.level
+  local color = quest_color.of(level, quest.level)
+  local fields = { qid = out.qid, quest_level = quest.level, char_level = level, color = color }
+  if color == "red" or color == "orange" then
+    if catalog:noncombat(out.qid) then return end
+  elseif color ~= "grey" then
+    return
+  end
+  self:signal("quest-" .. color, cur, fields)
 end
 
 function Driver:snapshot(cur, why, rows, out)

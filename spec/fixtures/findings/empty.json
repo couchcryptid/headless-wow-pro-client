@@ -87,6 +87,9 @@
       "missing-global":"Missing global",
       "never-shown-accept":"Never offered",
       "orphan-turnin":"Turn-in without the quest",
+      "quest-grey":"Quest grey",
+      "quest-orange":"Quest too hard (orange)",
+      "quest-red":"Quest too hard (red)",
       "rep-faction-unmet":"REP faction never met",
       "stuck":"Stuck",
       "wrong-race-class":"Wrong race or class"
