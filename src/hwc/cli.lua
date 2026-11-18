@@ -246,7 +246,24 @@ local function played_gids(logs)
   return #out > 0 and out or nil
 end
 
--- Plays every combo, then writes DIR/<date>-<scope>.md and .json and one run
+-- Each played character's guide levels, labelled, for report.guides.
+local function guide_entries(logs, labels)
+  local entries = {}
+  for i, l in ipairs(logs) do entries[i] = { combo = labels[i], guide_levels = l.guide_levels or {} } end
+  return entries
+end
+
+-- Each character whose run stopped before the end of the chain; nil when none did.
+local function early_stops(logs, labels)
+  local out = {}
+  for i, l in ipairs(logs) do
+    local reason = l.stop and l.stop.reason
+    if reason and reason ~= "no-next-guide" then out[#out + 1] = { combo = labels[i], reason = reason } end
+  end
+  return #out > 0 and out or nil
+end
+
+-- Plays every combo, then writes DIR/<date>-<scope>.json and one run
 -- log per character under DIR/<date>-<scope>/. Every path in the output is
 -- rewritten relative to --relative-to (default: the logical start folder, so a
 -- symlinked $PWD such as Interface/AddOns stays the base its paths are named from).
@@ -258,7 +275,6 @@ local function play(combos, scope, opts, out, err)
   local runner = require("hwc.driver.run")
   local matrix = require("hwc.driver.matrix")
   local group = require("hwc.findings.group")
-  local render = require("hwc.findings.render")
   local json = require("hwc.json")
   local addon_info = require("hwc.addon_info")
   local date = opts.date or os.date("%Y-%m-%d")
@@ -349,13 +365,13 @@ local function play(combos, scope, opts, out, err)
     jumped = jumped_gids(logs),
     unreached = opts.included and unreached_gids(opts, logs) or nil,
     skipped_races = #skipped_races > 0 and skipped_races or nil,
+    guides = report.guides(guide_entries(logs, labels)),
+    stop = early_stops(logs, labels),
   }
   header = paths.rewrite(header, roots, base, cwd)
   header.paths_relative_to = base:match("([^/]+)$") or "/"
   local findings = group.findings(logs)
   local stem = outdir .. "/" .. date .. "-" .. scope
-  local md = render.markdown(findings, header)
-  write_file(stem .. ".md", md)
   write_file(stem .. ".json", json.encode(report_json(report.build(findings, header)), { indent = true }) .. "\n")
   out:write(M.wrote_line(stem, #logs))
   return 0

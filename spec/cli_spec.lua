@@ -42,6 +42,10 @@ local function with_runner(fn, played, jumps)
     return { character = { race = cfg.race, class = cfg.class, professions = {} }, rank = 2, steps = {},
       signals = {}, guides = played and played(cfg) or { "GB" },
       jumps = jumps or { { from = "GA", passed = { "GA" }, to = "GB", level_before = 1, level_after = 1 } },
+      guide_levels = { { gid = "GB", file = cfg.addon_path .. "/WoWPro_Leveling/b.lua", start_level = 5,
+        end_level = 10, enter = 1, leave = 4, finished = false, last_line = 12 } },
+      stop = cfg.race == "Gnome" and { reason = "iterations", level = 4, gid = "GB" }
+        or { reason = "no-next-guide", level = 4, gid = "GB" },
       addon = { path = cfg.addon_path, git = false, version = "1.0" } }
   end
   local ok, res = pcall(fn, calls)
@@ -461,7 +465,44 @@ describe("cli", function()
       assert.equal(0, cli.main({ "run", "--class", "WARRIOR", "--date", "2026-11-17" }, out, nil,
         env_at(fixture(), home)))
     end)
-    assert.equal("file", lfs.attributes(home .. "/.hwc/findings/2026-11-17-Dwarf-WARRIOR-baseline.md", "mode"))
+    assert.equal("file", lfs.attributes(home .. "/.hwc/findings/2026-11-17-Dwarf-WARRIOR-baseline.json", "mode"))
+  end)
+
+  it("writes format 2 JSON with guide levels and no markdown report", function()
+    local outdir = tmpdir()
+    with_runner(function()
+      local out, _ = capture()
+      assert.equal(0, cli.main({ "run", "--class", "WARRIOR", "--date", "2026-11-17", "--out", outdir }, out, nil,
+        env_at(fixture())))
+    end)
+    assert.is_nil(lfs.attributes(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline.md"))
+    local doc = read_json(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline.json")
+    assert.equal(2, doc.format)
+    assert.equal(1, #doc.header.guides)
+    local g = doc.header.guides[1]
+    assert.equal("GB", g.gid)
+    assert.equal("WoWPro_Leveling/b.lua", g.file)
+    assert.same({ enter = 1, leave = 4, finished = false }, g.levels["Dwarf WARRIOR baseline"])
+    assert.same({ { combo = "Dwarf WARRIOR baseline", rule = "enter-under" } }, g.flags)
+    assert.is_nil(doc.header.stop)
+    assert.equal("Dwarf Warrior", doc.labels.combos["Dwarf WARRIOR baseline"])
+    -- The client checkout's own state may add a line first: the level flag is the last.
+    assert.equal("1 guide entered under-levelled", doc.header.warnings[#doc.header.warnings])
+  end)
+
+  it("names each character whose run stopped early in header.stop", function()
+    local outdir = tmpdir()
+    with_combos({ { race = "Dwarf", class = "WARRIOR", variant = "baseline" },
+      { race = "Gnome", class = "MAGE", variant = "baseline" } }, function()
+      with_runner(function()
+        local out, _ = capture()
+        assert.equal(0, cli.main({ "matrix", "--races", "Dwarf,Gnome", "--date", "2026-11-17", "--out", outdir },
+          out, nil, env_at(fixture())))
+      end)
+    end)
+    local doc = read_json(outdir .. "/2026-11-17-forever-alliance-dwarf-gnome.json")
+    assert.same({ { combo = "Gnome MAGE baseline", reason = "iterations" } }, doc.header.stop)
+    assert.same({ enter = 1, leave = 4, finished = false }, doc.header.guides[1].levels["Gnome MAGE baseline"])
   end)
 
   it("a filtered run's scope ends in -filtered and drops -1-25", function()

@@ -1,6 +1,6 @@
 -- Every human-facing word in the findings report (design spec §4.7, §4.8).
--- Pure: no I/O. render, JSON and markdown all take their titles, sentences and
--- labels from here so the wording lives in one place.
+-- Pure: no I/O. The findings JSON carries every title, sentence and label from
+-- here, so the wording lives in one place and the HTML page holds none.
 local RACES = require("hwc.world.player").RACES
 
 local text = {}
@@ -43,43 +43,31 @@ text.VERBS = {
   ["*"] = "Trash",         -- WoWPro_Parser.lua:96  ("Trash")
 }
 
-function text.anchor(id)
-  local hex = tostring(id):gsub("^[Ff]%-", "")
-  return "f-" .. hex:lower()
-end
+-- A short plain label per signal slug: filter chips and legends.
+text.SIGNALS = {
+  ["never-shown-accept"] = "Never offered",
+  ["hidden-use-step"] = "Use step never shown",
+  ["accept-refused"] = "Can't be taken",
+  ["log-full"] = "Quest log full",
+  ["orphan-turnin"] = "Turn-in without the quest",
+  ["wrong-race-class"] = "Wrong race or class",
+  ["below-level"] = "Offered below level",
+  ["did-not-advance"] = "Doesn't advance",
+  ["manual-completion"] = "Manual click",
+  ["stuck"] = "Stuck",
+  ["leftover-quests"] = "Left in log",
+  ["lua-error"] = "Lua error",
+  ["missing-global"] = "Missing global",
+}
 
--- Escapes text placed in a markdown heading or link text, so a title such as
--- "Lua error: '<eof>' expected near ']'" can't open a link, emphasis or HTML
--- tag. JSON titles stay plain; only the markdown forms go through this.
-function text.md_text(s)
-  s = tostring(s):gsub("[\\%[%]%*_]", "\\%0")
-  return (s:gsub("<", "&lt;"):gsub(">", "&gt;"))
-end
-
-local function link(title, id) return "[" .. text.md_text(title) .. "](#" .. text.anchor(id) .. ")" end
-
--- Markdown links to several findings shown together (one list or sentence).
--- Links whose titles collide get " (quest N, line L)" so they can be told
--- apart; a missing part is left out. Returns the links in input order.
-function text.links(findings)
-  local seen = {}
-  for _, f in ipairs(findings) do
-    local t = text.title(f)
-    seen[t] = (seen[t] or 0) + 1
-  end
-  local out = {}
-  for i, f in ipairs(findings) do
-    local t = text.title(f)
-    if seen[t] > 1 then
-      local parts = {}
-      if f.qid then parts[#parts + 1] = "quest " .. tostring(f.qid) end
-      if f.line then parts[#parts + 1] = "line " .. tostring(f.line) end
-      if #parts > 0 then t = t .. " (" .. table.concat(parts, ", ") .. ")" end
-    end
-    out[i] = link(t, f.id)
-  end
-  return out
-end
+-- Why a character's run stopped early (driver/run.lua stop reasons). The normal
+-- end, no-next-guide, has no entry; stuck has its own finding.
+text.STOPS = {
+  iterations = "Hit its step limit",
+  errors = "Too many addon errors",
+  ["no-step"] = "No step to show",
+  ["max-guides"] = "Reached --max-guides",
+}
 
 local function lower_first(s) return (s:gsub("^%u", string.lower)) end
 
@@ -282,30 +270,16 @@ function text.title(f)
   return tostring(s) .. ": " .. (text.step(f.action, f.name) or f.name or "")
 end
 
--- Returns the sentence as (first sentence, remainder or nil).
--- prereq_of: the finding the never-shown sentence links as its prerequisite.
--- A follow-on already links its parent in "Follows from"; don't link it twice.
-local function prereq_of(f, ctx)
-  if f.signal ~= "never-shown-accept" then return nil end
-  local pre = f.why and f.why:match("not met: (%d+)")
-  local hit = pre and ctx and ctx.by_qid and ctx.by_qid[tonumber(pre)]
-  if hit and hit.id ~= f.caused_by then return hit end
-  return nil
-end
-
--- linked: id -> markdown link for findings this sentence links (text.links).
-local function clauses(f, ctx, linked)
+-- Returns the sentence as (first sentence, remainder or nil). Plain text: the
+-- page links a follow-on to its parent from caused_by, not from the sentence.
+local function clauses(f, ctx)
   local s, q = f.signal, tostring(f.qid)
   ctx = ctx or {}
-  linked = linked or {}
   if s == "never-shown-accept" then
     local pre = f.why and f.why:match("not met: (%d+)")
     if pre then
-      local ref = "quest " .. pre
-      local hit = prereq_of(f, ctx)
-      if hit then ref = "quest " .. (linked[hit.id] or link(text.title(hit), hit.id)) end
       return "The guide tells you to accept this quest, but WoWPro hides the step because its prerequisite, "
-        .. ref .. ", is never completed."
+        .. "quest " .. pre .. ", is never completed."
     end
     -- The engine's own whys for a hidden step (WoWPro_Broker.lua), said in words.
     local why = f.why and f.why:gsub("^NextStep%(%):%s*", "")
@@ -392,19 +366,11 @@ local function clauses(f, ctx, linked)
   return ""
 end
 
+-- A follow-on keeps only its first clause: its parent's card carries the rest.
 function text.sentence(f, ctx)
+  local first, rest = clauses(f, ctx)
   local parent = f.caused_by and ctx and ctx.by_id and ctx.by_id[f.caused_by]
-  local related = {}
-  if parent then related[#related + 1] = parent end
-  local pre = prereq_of(f, ctx)
-  if pre then related[#related + 1] = pre end
-  local linked = {}
-  for i, l in ipairs(text.links(related)) do linked[related[i].id] = l end
-  local first, rest = clauses(f, ctx, linked)
-  if parent then
-    return "Follows from " .. linked[parent.id] .. ". " .. first
-  end
-  if rest then return first .. " " .. rest end
+  if rest and not parent then return first .. " " .. rest end
   return first
 end
 
