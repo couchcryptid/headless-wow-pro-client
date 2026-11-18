@@ -185,6 +185,11 @@ function M.wrote_line(stem, n)
   return "hwc: wrote " .. stem .. ".html and " .. stem .. ".json (" .. n .. (n == 1 and " character" or " characters") .. ")\n"
 end
 
+-- A findings file's stem: date, scope, then the hash of the findings JSON text.
+function M.stem_name(date, scope, doc)
+  return date .. "-" .. scope .. "-" .. require("hwc.findings.group").fnv1a32(doc)
+end
+
 local function write_file(path, text)
   local f = assert(io.open(path, "wb"))
   f:write(text)
@@ -282,7 +287,6 @@ local function play(combos, scope, opts, out, err)
   local addon_info = require("hwc.addon_info")
   local date = opts.date or os.date("%Y-%m-%d")
   local outdir = opts.out or (opts.home .. "/.hwc/findings")
-  local logdir = outdir .. "/" .. date .. "-" .. scope
   local paths = require("hwc.paths")
   local report = require("hwc.findings.report")
   local html = require("hwc.findings.html")
@@ -320,7 +324,6 @@ local function play(combos, scope, opts, out, err)
     err:write("hwc: ", skipped_races[1], " reaches no included guide\n")
     return 2
   end
-  mkdirs(logdir)
   local first = raw[1] or {}
   -- Roots come from the first log: every combo shares one config.
   local roots = { base }
@@ -333,11 +336,7 @@ local function play(combos, scope, opts, out, err)
     if sources[name].path then roots[#roots + 1] = sources[name].path end
   end
   local logs = {}
-  for i, c in ipairs(played) do
-    logs[i] = paths.rewrite(raw[i], roots, base, cwd)
-    write_file(string.format("%s/%s-%s-%s.json", logdir, c.race, c.class, c.variant),
-      json.encode(logs[i], { indent = true }) .. "\n")
-  end
+  for i = 1, #played do logs[i] = paths.rewrite(raw[i], roots, base, cwd) end
   -- The header reads the raw first log: it is rewritten once, below.
   -- Skip Dungeon Quests is per character; a matrix runs every combo with WoWPro's
   -- defaults, so the first RunLog's value stands for the run. skipped counts distinct
@@ -378,8 +377,15 @@ local function play(combos, scope, opts, out, err)
   header = paths.rewrite(header, roots, base, cwd)
   header.paths_relative_to = base:match("([^/]+)$") or "/"
   local findings = group.findings(logs)
-  local stem = outdir .. "/" .. date .. "-" .. scope
   local doc = json.encode(report_json(report.build(findings, header)), { indent = true }) .. "\n"
+  -- The hash is of the findings, so it names the run logs too: two runs whose
+  -- findings differ never overwrite each other.
+  local stem = outdir .. "/" .. M.stem_name(date, scope, doc)
+  mkdirs(stem)
+  for i, c in ipairs(played) do
+    write_file(string.format("%s/%s-%s-%s.json", stem, c.race, c.class, c.variant),
+      json.encode(logs[i], { indent = true }) .. "\n")
+  end
   write_file(stem .. ".json", doc)
   write_file(stem .. ".html", html.render(doc, template))
   out:write(M.wrote_line(stem, #logs))

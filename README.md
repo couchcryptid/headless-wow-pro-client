@@ -176,17 +176,20 @@ race can't play in Forever).
 
 Output, under `--out DIR` (default `~/.hwc/findings`, created if missing, so runs never write into the WoW-Pro folder):
 
-- `DIR/<date>-<scope>.html`: the findings report, one self-contained page
+- `DIR/<date>-<scope>-<hash>.html`: the findings report, one self-contained page
   with the findings JSON embedded in it (it opens from disk and loads nothing
   from the network). The scope is
   `forever-<faction>-<races lower, joined by '-'>` for `matrix` (`forever-<races>`
   when the races span both factions) and
   `<race>-<class>-<variant>` for `run`. With any filter given, the scope gains
   `-filtered`.
-- `DIR/<date>-<scope>.json`: the same findings as a machine-readable document
+- `DIR/<date>-<scope>-<hash>.json`: the same findings as a machine-readable document
   (format 2, the JSON the page embeds), which `/triage` reads.
-- `DIR/<date>-<scope>/<race>-<class>-<variant>.json`: one run log per character
+- `DIR/<date>-<scope>-<hash>/<race>-<class>-<variant>.json`: one run log per character
   (git-ignored).
+
+`<hash>` is 8 hex digits of the findings JSON: two runs with different results
+never overwrite each other, and identical results share a name.
 
 `--relative-to DIR` (default: the current directory) sets the base for every
 path in the output: the HTML page, the findings JSON and the run logs write paths
