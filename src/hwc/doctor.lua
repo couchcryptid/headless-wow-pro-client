@@ -97,6 +97,8 @@ local function check_addon(env, deps)
   local boot = require("hwc.boot")
   local boot_run = deps.boot_run or function(root)
     local cfg = require("hwc.config").load({ addon_path = root, race = "Dwarf", class = "WARRIOR" })
+    -- The questie row already reports a missing QuestieDB.
+    cfg.warn = function() end
     return boot.run(cfg)
   end
   local ok, r = pcall(boot_run, dir)

@@ -30,6 +30,14 @@ local function valid_date(v)
   return nil, "--date needs YYYY-MM-DD"
 end
 
+-- --out "" or --relative-to "" would quietly mean the current directory.
+local function non_empty(name)
+  return function(v)
+    if v == "" then return nil, "--" .. name .. " needs a value" end
+    return v
+  end
+end
+
 local decl = {
   name = "run",
   summary = "Play one character along the guide chain; write findings and its run log",
@@ -37,6 +45,8 @@ local decl = {
   description = "Play one character along the guide chain; write findings and its run log.\n"
     .. "Run it from a WoW-Pro folder (the one holding WoWPro/WoWPro.toc) or below it.",
   needs_folder = true,
+  -- Options an older hwc took: an unknown-option error names the replacement.
+  renamed = { variant = "--professions", races = "--race" },
   options = {
     { name = "race", metavar = "RACE", required = true, choices = races, help = "Player race.",
       see = "hwc list races" },
@@ -47,8 +57,8 @@ local decl = {
     { name = "include", metavar = "PATTERN", filter = true, help = "Glob on guide paths; repeatable, last match wins." },
     { name = "exclude", metavar = "PATTERN", filter = true, help = "Glob on guide paths; repeatable, last match wins." },
     { name = "date", metavar = "D", validate = valid_date, default_text = "today", help = "Findings date, YYYY-MM-DD." },
-    { name = "out", metavar = "DIR", default_text = "~/.hwc/findings", help = "Findings directory." },
-    { name = "relative-to", metavar = "DIR", default_text = "current directory",
+    { name = "out", metavar = "DIR", validate = non_empty("out"), default_text = "~/.hwc/findings", help = "Findings directory." },
+    { name = "relative-to", metavar = "DIR", validate = non_empty("relative-to"), default_text = "current directory",
       help = "Every path in the output is written relative to DIR." },
   },
   notes = {
@@ -109,14 +119,18 @@ end
 local function guide_name(file) return (tostring(file):match("([^/]+)$") or ""):gsub("%.lua$", "") end
 
 -- Turns driver progress events into ui:progress lines and jump details, and
--- keeps each guide's start time for the verbose timings.
+-- keeps each guide's start time for the verbose timings. Off a terminal the
+-- line leaves out level and time, so it changes (and prints) once per guide.
 local function new_progress(ui, label, clock)
   local p = { started = clock(), level = Player.START_LEVEL, guides = {} }
   local function line(now)
     local g = p.guides[#p.guides]
     if not g then return end
-    ui:progress(string.format("%s · %s (guide %d) · level %d · %s", label, g.name, g.index, p.level,
-      clock_text(now - p.started)))
+    local text = string.format("%s · %s (guide %d)", label, g.name, g.index)
+    if ui.tty then
+      text = text .. string.format(" · level %d · %s", p.level, clock_text(now - p.started))
+    end
+    ui:progress(text)
   end
   function p.event(e)
     local now = clock()
@@ -162,6 +176,8 @@ local function play(ctx)
     -- Resolved once, so the run reads one QuestieDB version throughout.
     catalog = { questie_dir = config.default_questie_dir() },
   })
+  -- boot.run's "no QuestieDB installed" goes through ui, so -q silences it.
+  cfg.warn = function(msg) ui:warn(msg) end
   ui:detail("catalog questie: " .. tostring(cfg.catalog.questie_dir or "none"))
   ui:detail("catalog supplement: " .. tostring(cfg.catalog.supplement))
   local label = text.character(string.format("%s %s %s", opts.race, opts.class, professions.token(list)))

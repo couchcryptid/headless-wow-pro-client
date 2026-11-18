@@ -117,11 +117,27 @@ describe("hwc run: usage errors", function()
     assert.matches("^hwc: %-%-race Goblin is not a race; races: ", err)
   end)
 
-  it("rejects --variant as an unknown option", function()
+  it("rejects --variant as an unknown option, naming --professions", function()
     local code, _, err = usage(dw("--variant", "alch-herb"))
     assert.equal(2, code)
-    assert.equal("hwc: unknown option --variant for hwc run\nsee hwc run --help\n", err)
+    assert.equal("hwc: unknown option --variant for hwc run; use --professions\nsee hwc run --help\n", err)
   end)
+
+  it("rejects an unknown single-dash option", function()
+    local code, _, err = usage(dw("-c"))
+    assert.equal(2, code)
+    assert.equal("hwc: unknown option -c for hwc run\nsee hwc run --help\n", err)
+  end)
+
+  for _, opt in ipairs({ "--out", "--relative-to" }) do
+    it("rejects an empty " .. opt, function()
+      for _, args in ipairs({ dw(opt, ""), dw(opt .. "=") }) do
+        local code, _, err = usage(args)
+        assert.equal(2, code)
+        assert.equal("hwc: " .. opt .. " needs a value\nsee hwc run --help\n", err)
+      end
+    end)
+  end
 
   for _, opt in ipairs({ "--addon", "--stop-level" }) do
     it(opt .. " is rejected as unknown", function()
@@ -177,13 +193,23 @@ describe("hwc run: progress and output", function()
   it("reports progress on stderr off a terminal and keeps it off stdout", function()
     local code, out, err = play(dw(), { played = function() return { "GA" } end, jumps = {} })
     assert.equal(0, code, err)
-    assert.truthy(err:find("Dwarf Warrior · a (guide 1) · level 5 · 0:0", 1, true), err)
+    assert.truthy(err:find("Dwarf Warrior · a (guide 1)\n", 1, true), err)
     assert.is_nil(out:find("guide 1", 1, true))
+  end)
+
+  it("off a terminal prints one progress line per guide, without level or time", function()
+    local env = env_at(fixture())
+    env.tty = false
+    local code, _, err = play(dw(), { env = env, played = function() return { "GA", "GB" } end, jumps = {} })
+    assert.equal(0, code, err)
+    assert.truthy(err:find("^Dwarf Warrior · a %(guide 1%)\nDwarf Warrior · b %(guide 2%)\n"), err)
+    assert.is_nil(err:find("level 5", 1, true), err)
   end)
 
   it("on a terminal redraws the progress line and clears it before the warnings", function()
     local env = env_at(fixture())
     env.tty = true
+    env.width = 200
     local code, out, err = play(dw(), { env = env })
     assert.equal(0, code, err)
     assert.truthy(err:find("Dwarf Warrior · b %(guide 1%) · level 5 · 0:0%d\r\27%[Kwarning: "), err)
@@ -192,20 +218,22 @@ describe("hwc run: progress and output", function()
     assert.is_nil(out:find("\27", 1, true))
   end)
 
-  it("shows elapsed time from env.clock as M:SS", function()
+  it("shows elapsed time from env.clock as M:SS on a terminal", function()
     local t = 0
     local env = env_at(fixture())
+    env.tty = true
+    env.width = 200
     -- 75 seconds pass between the start and every later read.
     env.clock = function() local now = t; t = 75; return now end
     local code, _, err = play(dw(), { env = env, played = function() return { "GA" } end, jumps = {} })
     assert.equal(0, code, err)
-    assert.truthy(err:find("Dwarf Warrior · a (guide 1) · level 5 · 1:15\n", 1, true), err)
+    assert.truthy(err:find("Dwarf Warrior · a (guide 1) · level 5 · 1:15\r", 1, true), err)
   end)
 
   it("labels progress with the professions", function()
     local code, _, err = play(dw("--professions", "herbalism,skinning"))
     assert.equal(0, code, err)
-    assert.truthy(err:find("Dwarf Warrior (Herbalism, Skinning) · b (guide 1) · level 5", 1, true), err)
+    assert.truthy(err:find("Dwarf Warrior (Herbalism, Skinning) · b (guide 1)\n", 1, true), err)
   end)
 
   it("-q prints only the wrote line on stdout and nothing on stderr", function()
@@ -222,6 +250,19 @@ describe("hwc run: progress and output", function()
     local doc = read_json(stem .. ".json")
     local lines = require("hwc.cli.summary").lines(doc)
     assert.equal(table.concat(lines, "\n") .. "\nhwc: wrote " .. stem .. ".html and " .. stem .. ".json\n", out)
+  end)
+
+  it("routes the catalog's warnings through ui, so -q silences them", function()
+    local function played(cfg)
+      cfg.warn("no QuestieDB installed (absent); run hwc init")
+      return { "GB" }
+    end
+    local code, _, err = play(dw(), { played = played })
+    assert.equal(0, code, err)
+    assert.truthy(err:find("warning: no QuestieDB installed (absent); run hwc init\n", 1, true), err)
+    code, _, err = play(dw("-q"), { played = played })
+    assert.equal(0, code)
+    assert.equal("", err)
   end)
 
   it("prints the report's warnings on stderr", function()

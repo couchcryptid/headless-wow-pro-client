@@ -64,6 +64,40 @@ describe("args.parse", function()
     assert.equal("unknown option --colour for hwc run", msg)
   end)
 
+  it("rejects an unknown single-dash option", function()
+    local o, msg = args.parse(decl(), { "--race", "Dwarf", "--class", "X", "-c" })
+    assert.is_nil(o)
+    assert.equal("unknown option -c for hwc run", msg)
+    o, msg = args.parse(decl(), { "-5" })
+    assert.is_nil(o)
+    assert.equal("unknown option -5 for hwc run", msg)
+  end)
+
+  it("keeps a lone - and words after -- as positionals", function()
+    local d = { name = "q", options = {}, positionals = { min = 2, max = 2, noun = "words" } }
+    local o = args.parse(d, { "-", "--", "-c" })
+    assert.same({ "-", "-c" }, o.positionals)
+  end)
+
+  it("rejects an empty inline value", function()
+    for _, a in ipairs({ "--race=", "--class=", "--n=" }) do
+      local o, msg = args.parse(decl(), { a })
+      assert.is_nil(o)
+      assert.equal(a:sub(1, -2) .. " needs a value", msg)
+    end
+  end)
+
+  it("names the replacement for a renamed option", function()
+    local d = decl()
+    d.renamed = { variant = "--professions" }
+    local o, msg = args.parse(d, { "--variant", "x" })
+    assert.is_nil(o)
+    assert.equal("unknown option --variant for hwc run; use --professions", msg)
+    o, msg = args.parse(d, { "--variant=x" })
+    assert.is_nil(o)
+    assert.equal("unknown option --variant for hwc run; use --professions", msg)
+  end)
+
   it("reports a missing required option", function()
     local o, msg = args.parse(decl(), { "--race", "Dwarf" })
     assert.is_nil(o)
@@ -111,10 +145,10 @@ describe("args.parse", function()
     d.positionals = { min = 2, max = 2, noun = "files" }
     local o, msg = args.parse(d, { "a", "b", "c" })
     assert.is_nil(o)
-    assert.equal("hwc diff needs 2 files, got 3", msg)
+    assert.equal("diff needs 2 files, got 3", msg)
     o, msg = args.parse(d, { "a" })
     assert.is_nil(o)
-    assert.equal("hwc diff needs 2 files, got 1", msg)
+    assert.equal("diff needs 2 files, got 1", msg)
     o = args.parse(d, { "a", "b" })
     assert.same({ "a", "b" }, o.positionals)
   end)
@@ -122,7 +156,7 @@ describe("args.parse", function()
   it("words a range of positionals", function()
     local d = { name = "list", options = {}, positionals = { min = 0, max = 2, noun = "arguments" } }
     local _, msg = args.parse(d, { "a", "b", "c" })
-    assert.equal("hwc list needs 0-2 arguments, got 3", msg)
+    assert.equal("list needs 0-2 arguments, got 3", msg)
   end)
 
   it("treats words after -- as positional", function()

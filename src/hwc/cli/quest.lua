@@ -7,7 +7,7 @@ return {
   description = "Print a quest from the catalog (QuestieDB and the supplement), with its sources, as JSON.",
   positionals = { min = 1, max = 1, noun = "id" },
   check = function(opts)
-    if not tonumber(opts.positionals[1]) then return "hwc quest needs a numeric id" end
+    if not tonumber(opts.positionals[1]) then return "quest needs a numeric id" end
   end,
   run = function(ctx)
     local id = tonumber(ctx.opts.positionals[1])

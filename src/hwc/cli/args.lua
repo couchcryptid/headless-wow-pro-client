@@ -108,7 +108,22 @@ local function count_error(decl, n)
     return nil
   end
   local want = p.min == p.max and tostring(p.min) or (p.min .. "-" .. p.max)
-  return string.format("hwc %s needs %s %s, got %d", decl.name, want, p.noun or "arguments", n)
+  -- The dispatcher prefixes "hwc: ", so the command is named once, bare.
+  return string.format("%s needs %s %s, got %d", decl.name, want, p.noun or "arguments", n)
+end
+
+-- "unknown option --variant for hwc run", plus "; use --professions" when the
+-- declaration's renamed map names the option that replaced it.
+local function unknown(decl, spelled, name)
+  local msg = string.format("unknown option %s for hwc %s", spelled, decl.name)
+  local now = name and decl.renamed and decl.renamed[name]
+  if now then msg = msg .. "; use " .. now end
+  return msg
+end
+
+-- A lone "-" stays a positional (it often means stdin); "-c" or "-5" is an option.
+local function short_option(a)
+  return a:sub(1, 1) == "-" and #a > 1 and a:sub(2, 2) ~= "-"
 end
 
 function args.parse(decl, rest)
@@ -117,7 +132,10 @@ function args.parse(decl, rest)
   local only_positional = false
   while i <= n do
     local a = rest[i]
-    if only_positional or a:sub(1, 2) ~= "--" then
+    if not only_positional and short_option(a) then
+      -- -h, -q and -v were taken out by args.globals; any other is unknown.
+      return nil, unknown(decl, a)
+    elseif only_positional or a:sub(1, 2) ~= "--" then
       opts.positionals[#opts.positionals + 1] = a
     elseif a == "--" then
       only_positional = true
@@ -126,7 +144,7 @@ function args.parse(decl, rest)
       name = name or a:sub(3)
       local opt = find_option(decl, name)
       if not opt then
-        return nil, string.format("unknown option --%s for hwc %s", name, decl.name)
+        return nil, unknown(decl, "--" .. name, name)
       end
       if opt.flag then
         if inline then
@@ -135,7 +153,9 @@ function args.parse(decl, rest)
         opts[name] = true
       else
         local value = inline
-        if value == nil then
+        if value == "" then
+          return nil, string.format("--%s needs a value", name)
+        elseif value == nil then
           value = rest[i + 1]
           if value == nil or value:sub(1, 2) == "--" then
             return nil, string.format("--%s needs a value", name)
