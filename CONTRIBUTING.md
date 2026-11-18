@@ -98,10 +98,13 @@ The anchors also need the pinned addon worktrees; see
 
   | Title type | Release |
   |---|---|
-  | `fix:`, `perf:` | patch (`v1.2.3` → `v1.2.4`) |
+  | `fix:` | patch (`v1.2.3` → `v1.2.4`) |
   | `feat:` | minor (`v1.2.3` → `v1.3.0`) |
   | `feat!:`, `fix!:`, or a `BREAKING CHANGE:` footer | major (`v1.2.3` → `v2.0.0`) |
-  | `docs:`, `test:`, `refactor:`, `chore:`, `ci:`, `build:`, `style:` | none |
+  | `perf:`, `docs:`, `test:`, `refactor:`, `chore:`, `ci:`, `build:`, `style:` | none |
+
+  Only `fix` and `feat` release. Title anything a user of `hwc` should get
+  as `fix:` or `feat:`.
 
   A release is a `v`-prefixed git tag plus a GitHub release with generated
   notes. Config: `.releaserc.json`. Tooling is pinned in `.github/release/`.
