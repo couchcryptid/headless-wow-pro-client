@@ -68,10 +68,33 @@ body). In game, reaching him credits the objective; anyone on the quest finds hi
 (291) refused for its `pre_group` {287, 98323}.
 
 **Rule:** when an `R` step has a `QO` tag and names a quest in the log (`ACTIVE|<qid>` or
-`QID|<qid>`), arriving credits the named objectives' progress. It records progress only and
-gives **no kill XP**, because an NPC objective here is a body or person to find, and the
-generic objective code would otherwise credit kills. Without a `QO`, or for a quest not in
-the log, the run-to step is unchanged.
+`QID|<qid>`), arriving credits a named objective's progress only when both hold:
+
+- **(a)** the objective is not an `item` objective. Arriving never loots an item.
+- **(b)** no other step in the guide loaded now works on that objective. That means no `C`,
+  `K`, `U`, `l` or `B` step with that QID (whatever its `QO`), and no other step with
+  `ACTIVE|<qid>` whose `QO` names the same index or that has no `QO`.
+
+In WoWPro, `R …|QO|n` usually means "head there; this step stays up until objective n is
+done", and later steps do the kills or the loot. Examples are `:209 R Shimmer Ridge|ACTIVE|315|QO|1|`
+before the `C` step that loots Shimmerweed (2676), and `:214 R Frostmane Hold|ACTIVE|287|QO|1;2|`
+before the `C` steps at :215-218. Crediting those on arrival would let a step pass that a
+player can't do by following the guide. Cornelius (`:158`, quest 98319, no other step
+covering it) still meets both conditions.
+
+An arrival records progress only and gives **no kill XP**, because an objective credited
+here is a body or person to find, and the generic objective code would otherwise credit
+kills. Without a `QO`, for a quest not in the log, or for an objective that (a) or (b)
+excludes, the run-to step only moves the player. The action reads the loaded guide's steps
+through the engine (`engine:num_steps()` / `engine:step(j)`, as the Camping 101 turn-in
+check does).
+
+Each credit is recorded in the run log, and the list is `[]` when there are none:
+`log.arrivals = { { gid, file, line, qid, objective = <index> } … }`.
+
+*Considered and not adopted:* crediting only when the objective's NPC is unique (one spawn).
+That needs spawn data the catalog doesn't carry, and (a)+(b) already gives the right answer
+on every Forever case checked (`:158` credited; `:209` and `:214` not).
 
 **Prerequisite refusals name what's missing.** `QuestLog:refusal` also returns the
 prerequisite ids that aren't done. The `accept-refused` signal carries them as `missing`. Its
