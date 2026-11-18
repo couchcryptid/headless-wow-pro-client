@@ -534,6 +534,46 @@ describe("driver.run", function()
     assert.equal(1, #signals(log, "stuck"))
   end)
 
+  it("records the level the run passed a hidden accept at, not the level at close", function()
+    local guides = one_guide({
+      { action = "R", name = "a" },
+      { action = "A", name = "Hidden", qids = { 55 }, why = "PRE not met", hidden = true },
+      { action = "R", name = "b" },
+      { action = "R", name = "c" },
+    })
+    local script = { G1 = { { complete = { 1 }, level = 4 }, nil, { complete = { 3 } }, { complete = { 4 }, level = 7 } } }
+    local log = drive(guides, script)
+    assert.equal(4, signals(log, "never-shown-accept")[1].level)
+    assert.equal(1, log.guide_levels[1].enter)
+    assert.equal(7, log.guide_levels[1].leave)
+  end)
+
+  it("records each guide's entry and exit levels", function()
+    local guides = {
+      G1 = { startlevel = 1, next_gid = "G2", file = "g1.lua", steps = { { action = "R", name = "a" } } },
+      G2 = { startlevel = 5, next_gid = "G3", file = "g2.lua", steps = { { action = "R", name = "b" } } },
+      G3 = { startlevel = 10, file = "g3.lua", steps = { { action = "R", name = "c" }, { action = "D", name = "Done" } } },
+    }
+    local script = {
+      G1 = { { complete = { 1 }, done = true, switch = "G2", level = 5 } },
+      G2 = { { complete = { 1 }, done = true, switch = "G3" } },
+      G3 = completes(1),
+    }
+    local log = drive(guides, script)
+    assert.same({ gid = "G1", file = "g1.lua", start_level = 1, enter = 1, leave = 5, finished = true, last_line = 101 },
+      log.guide_levels[1])
+    assert.equal("G2", log.guide_levels[2].gid)
+    assert.equal(5, log.guide_levels[2].enter)
+  end)
+
+  it("marks a guide cut short as not finished", function()
+    local steps = { { action = "C", name = "loop", qids = { 1 } } }
+    local log = drive(one_guide(steps), { G1 = { { on_manual = { uncomplete = { 1 } } } } },
+      { max_iterations = 3, stuck_limit = 100 })
+    assert.equal(1, #log.guide_levels)
+    assert.is_false(log.guide_levels[1].finished)
+  end)
+
   it("stops with no-step when nothing is current and the guide is not done", function()
     local steps = { { action = "R", name = "a" }, { action = "R", name = "s", sticky = true } }
     local guides = { G1 = { startlevel = 1, steps = steps } }

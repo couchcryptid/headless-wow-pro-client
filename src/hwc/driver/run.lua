@@ -163,7 +163,7 @@ function Driver:open(gid)
   if included and not included[gid] then return self:jump(gid) end
   self.gid = gid
   local g = E:guide(gid)
-  local info = { file = g.file, steps = {}, accepts = {}, seen = {}, why = {}, sticky_done = {}, max_acted = 0 }
+  local info = { file = g.file, steps = {}, accepts = {}, seen = {}, why = {}, sticky_done = {}, max_acted = 0, passes = {} }
   self.info[gid] = info
   for i = 1, E:num_steps() do
     local s = E:step(i)
@@ -213,6 +213,15 @@ function Driver:jump(from)
   return self:open(to)
 end
 
+-- The level the run was at when it first acted on a step after index i in this
+-- guide (the level it passed index i at); the current level when none was.
+function Driver:level_passing(info, i)
+  for _, p in ipairs(info.passes) do
+    if p.index > i then return p.level end
+  end
+  return self.W.player.level
+end
+
 -- Closes a guide: unshown accepts and the quests left in the log. A guide the
 -- run left part-way (end of run, not done) only reports accepts below the
 -- furthest index acted on: the unreached rest was never due to be shown.
@@ -221,6 +230,17 @@ function Driver:close(gid, full)
   if not info or info.closed then return end
   info.closed = true
   if info.max_acted == 0 then return end -- loaded, never played (stopped on load)
+  local g = self.E:guide(gid)
+  local last_line
+  for _, s in pairs(info.steps) do
+    if s.line and (not last_line or s.line > last_line) then last_line = s.line end
+  end
+  if info.passes[1] then
+    self.log.guide_levels[#self.log.guide_levels + 1] = {
+      gid = gid, file = info.file, start_level = g.startlevel, end_level = g.endlevel,
+      enter = info.passes[1].level, leave = self.W.player.level, finished = full == true, last_line = last_line,
+    }
+  end
   local limit = full and math.huge or info.max_acted
   for _, i in ipairs(info.accepts) do
     local s = info.steps[i]
@@ -234,7 +254,7 @@ function Driver:close(gid, full)
         local prev, nxt = info.steps[i - 1], info.steps[i + 1]
         local sig = {
           signal = "never-shown-accept", gid = gid, file = info.file, line = s.line, ordinal = s.ordinal,
-          action = s.action, name = s.name, qid = s.qids[1], why = info.why[i], level = self.W.player.level,
+          action = s.action, name = s.name, qid = s.qids[1], why = info.why[i], level = self:level_passing(info, i),
           log = self:log_qids(),
           before = prev and { name = prev.name, action = prev.action } or nil,
           after = nxt and { name = nxt.name, action = nxt.action } or nil,
@@ -493,6 +513,7 @@ function Driver:iterate()
     return self:stop("stuck")
   end
 
+  info.passes[#info.passes + 1] = { index = cur.index, level = self.W.player.level }
   local out = self:act(cur, rows, info)
 
   -- Advanced (Review Focus 2): the acted-on index is complete, the guide changed,
@@ -608,7 +629,7 @@ function run.drive(ctx, opts)
     skip_dungeons = ctx.engine:skip_dungeons(),
     dungeon_skips = {},
     carried = {},
-    steps = {}, signals = {}, guides = {},
+    steps = {}, signals = {}, guides = {}, guide_levels = {},
     jumps = {}, -- { from, passed = {gid...}, to (nil: end of chain), level_before, level_after }
   }
   local d = setmetatable({
