@@ -44,6 +44,8 @@ export interface Finding {
   /** Count of counted descendants (primary findings only). */
   explains?: number;
   expected?: boolean;
+  /** Set on a lua-error raised in harness code rather than the addon. */
+  harness?: boolean;
 }
 
 export interface GuideLevels {
