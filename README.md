@@ -237,8 +237,10 @@ Usage errors (exit 2): filters that leave no guide included, or an `--include`
 that matches no guide file. An `--exclude` that matches nothing is allowed.
 
 When the chain reaches an excluded guide, the run walks forward to the next
-included guide, raises the character's level to its `startlevel` through the
-simulated XP path, and loads it the way a click in the guide list does. The
+included guide and loads it the way a click in the guide list does. The level
+is set only when no guide has been played yet: then it is raised to that
+guide's `startlevel` through the simulated XP path. A mid-chain jump keeps the
+level earned so far. The
 run log records each jump. The run ends at the last line of the last included
 guide on the chain. Included guides the run never reaches are listed in the
 report header (only when an `--include` was given). With filters, the header

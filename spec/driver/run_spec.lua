@@ -648,7 +648,7 @@ describe("driver.run", function()
       assert.same({ "G2" }, j.passed)
       assert.equal("G3", j.to)
       assert.equal(1, j.level_before)
-      assert.equal(10, j.level_after)
+      assert.equal(1, j.level_after)
       for _, s in ipairs(log.steps) do assert.not_equal("G2", s.gid) end
       assert.same({ "G1:1", "G3:1", "G3:2" }, E.acted)
       assert.equal("no-next-guide", log.stop.reason)
@@ -692,23 +692,31 @@ describe("driver.run", function()
       assert.equal(12, log.jumps[1].level_after)
     end)
 
-    it("raises the level with the XP table, recording it as XP", function()
+    it("raises the level with the XP table when the start guide is excluded", function()
       local world = fx.fake_world()
-      local log = drive(chain(), SCRIPT, { included = set("G1", "G3") }, world)
-      assert.equal(10, world.player.level)
+      local log = drive(chain(), SCRIPT, { included = set("G2", "G3") }, world)
+      assert.equal(5, world.player.level)
       local xp = require("hwc.world.xp")
       local total = 0
-      for l = 1, 9 do total = total + xp.to_next(l) end
+      for l = 1, 4 do total = total + xp.to_next(l) end
       local recorded = 0
       for _, r in ipairs(world.xp_records) do recorded = recorded + r.n end
       assert.equal(total, recorded)
-      assert.equal(10, log.jumps[1].level_after)
+      assert.equal(5, log.jumps[1].level_after)
+    end)
+
+    it("a mid-chain jump keeps the level earned so far", function()
+      local world = fx.fake_world()
+      world.player.level = 3
+      local log = drive(chain(), SCRIPT, { included = set("G1", "G3") }, world)
+      assert.equal(3, log.jumps[1].level_before)
+      assert.equal(3, log.jumps[1].level_after)
     end)
 
     it("stops the raise at the XP cap", function()
       local guides = chain()
       guides.G3.startlevel = 40
-      local log = drive(guides, SCRIPT, { included = set("G1", "G3") })
+      local log = drive(guides, SCRIPT, { included = set("G3") })
       assert.equal(require("hwc.world.xp").CAP_LEVEL, log.jumps[1].level_after)
     end)
 

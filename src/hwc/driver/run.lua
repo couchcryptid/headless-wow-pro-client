@@ -179,10 +179,12 @@ function Driver:open(gid)
 end
 
 -- Jumps over the excluded guide `from` (and any excluded guides after it) to the
--- next included guide on the chain, as a player skipping them would: raise the
--- level to that guide's startlevel (never lowering it, at most xp.CAP_LEVEL) and
--- click it in the guide list (E:load_guide). A chain that ends, or cycles back,
--- before an included guide is the end of the run (no-next-guide).
+-- next included guide on the chain and click it in the guide list
+-- (E:load_guide). The level is set only at the start of a run: when no guide
+-- has been played yet (#log.guides == 0) it is raised to the target guide's
+-- startlevel (never lowering it, at most xp.CAP_LEVEL). A mid-chain jump keeps
+-- the level earned so far. A chain that ends, or cycles back, before an
+-- included guide is the end of the run (no-next-guide).
 function Driver:jump(from)
   local E, p, included = self.E, self.W.player, self.opts.included
   local passed, seen, to = {}, {}, nil
@@ -200,7 +202,7 @@ function Driver:jump(from)
     jump.level_after = p.level
     return self:stop("no-next-guide")
   end
-  local start = E:guide(to).startlevel or 0
+  local start = #self.log.guides == 0 and E:guide(to).startlevel or 0
   while p.level < start and p.level < xp.CAP_LEVEL do p:add_xp(xp.to_next(p.level)) end
   jump.level_after = p.level
   local _, err = E:load_guide(to)
