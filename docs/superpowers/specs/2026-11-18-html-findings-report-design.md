@@ -92,13 +92,51 @@ files.
 **How the page gets its data (decided):**
 - A browser blocks a page opened from `file://` from fetching a JSON file
   next to it. So the page carries its data inside itself.
-- The HTML is a static template kept in the repo (markup, CSS and JS). At
-  write time Lua drops the exact JSON document it writes to `<run>.json` into
-  a `<script type="application/json" id="report">` element.
+- The HTML is a static template committed to the repo. At write time Lua
+  drops the exact JSON document it writes to `<run>.json` into a
+  `<script type="application/json" id="report">` element.
 - `</` in the embedded JSON is escaped (`<\/`) so a title can't close the
   script element.
 - Lua does no layout. All layout lives in the template's JS, working from that
   JSON.
+
+### 3.1 How the page is built (the user's call: Node only for development)
+
+The page source is a small TypeScript project. Its build output, the
+template, is committed. Running `hwc` needs only Lua. Node is needed only to
+work on the page or run its tests.
+
+- **Stack:** TypeScript, Preact, Vite with a single-file plugin (all JS and
+  CSS inlined, no network references), and Vitest.
+  - Exact versions are pinned with a committed lockfile.
+  - The Node version is pinned in `.nvmrc`.
+  - Lightweight is a requirement: a dependency or feature beyond this spec
+    has to justify itself.
+- **Layout:**
+  - `web/report/`: `package.json`, `package-lock.json`, `.nvmrc`,
+    `tsconfig.json`, `vite.config.ts`, `index.html`, `src/`, `test/`.
+  - `npm run build` writes the bundle to `src/hwc/findings/report.html`.
+    The JSON placeholder lives in `index.html` and comes through the build
+    unchanged.
+- **Split:**
+  - The page logic lives in plain TS modules with no DOM: matching,
+    lifting follow-ons out when their cause is hidden, counting, ordering,
+    map pin grouping, and URL state.
+  - Preact components only render.
+  - The format-2 document has one TS type that both the logic and the
+    components use.
+- **One set of fixtures:** format-2 fixtures in `spec/fixtures/findings/`,
+  produced by a Lua script from synthetic run logs.
+  - A busted test fails when the committed fixtures differ from what
+    `report.build` produces now.
+  - Vitest loads the same files.
+  - So format drift breaks one side or the other.
+- **The bundle stays current:** a Vitest test builds into a temporary
+  directory and fails when the result differs byte for byte from the
+  committed `report.html`. There's no CI, so the README's development
+  section tells contributors to run both suites.
+- **Dev loop:** `npm run dev` serves the page with a fixture filled in
+  (`?fixture=<name>`). Nothing else.
 
 ## 4. The page
 
@@ -450,13 +488,23 @@ built in the shape of those cases.
 - the sidebar links open their folds;
 - keyboard use works.
 
-How (or whether) to automate those checks is the builder's call. The repo
-has no JS toolchain today.
+**Page logic (Vitest, §3.1).** Against the shared fixtures:
+- a follow-on that matches while its cause doesn't is lifted out;
+- quest ids match whole numbers only;
+- "N of M" and per-option counts under the other filters;
+- each finding is counted once, by its own fields;
+- priority and guide order, including findings with no file;
+- the URL state comes back unchanged after a round trip;
+- close pins are grouped;
+- the built bundle matches the committed `report.html`.
+
+**Hand checks** (Chrome, opening from disk) cover layout and interaction
+only: sticky elements, tooltips, keyboard reach, and the look in light and
+dark.
 
 ## 9. Left to the builder
-- Template location and how Lua finds it at runtime (`paths.lua` has the
-  repo-relative helpers).
+- How Lua finds the committed template at runtime (`config.repo_root()`).
 - Visual design within §4.9, and how close pins are grouped on the map.
-- The JS structure inside the template. One file, no build step.
+- The module and component structure inside `web/report/src`, within §3.1.
 - Whether `text.lua` keeps any shared wording helpers after the markdown
   forms are removed.

@@ -14,11 +14,19 @@ causes across signals.
   into format-2 JSON that carries every derived fact and all wording.
 - **Writer** (`html.lua`): a small Lua module that drops that exact JSON into
   a static template, `src/hwc/findings/report.html`.
-- **Page:** all layout is plain JS inside the template. No build step, no
-  network.
+- **Page:** a small TypeScript and Preact project in `web/report/`, built
+  by Vite into that one self-contained template.
+  - The template is committed, so running `hwc` never needs Node.
+  - Pure logic modules (tested with Vitest) do all the filtering, counting
+    and ordering. Components only render.
+  - One set of format-2 fixtures, produced by Lua, is tested from both
+    sides.
 
-**Tech Stack:** Lua 5.1, busted 2.3 (`~/.luarocks/bin/busted`), dkjson behind
-`hwc.json` (canonical key order). Vanilla HTML, CSS and JS in one file.
+**Tech Stack:**
+- **Lua:** Lua 5.1, busted 2.3 (`~/.luarocks/bin/busted`), and dkjson
+  behind `hwc.json` (canonical key order).
+- **Page (development only):** Node 24, TypeScript, Preact, Vite with
+  `vite-plugin-singlefile`, and Vitest.
 
 **Spec:** `docs/superpowers/specs/2026-11-18-html-findings-report-design.md`
 (read it with this plan; section numbers below are the spec's).
@@ -33,9 +41,15 @@ causes across signals.
 - **No absolute paths** in anything written under the output directory
   (2026-11-12 spec §4.10). `paths.rewrite` already covers the header and
   logs; anything new added to the header goes through it.
-- **The page invents nothing:** the template JS may sort, filter, count and
-  lay out. Every fact and every piece of wording comes from the JSON (spec
-  §5).
+- **The page invents nothing:** the page may sort, filter, count and lay
+  out. Every fact and every piece of wording comes from the JSON (spec §5).
+- **Node is for development only** (spec §3.1).
+  - `hwc` reads the committed `src/hwc/findings/report.html`.
+  - Dependencies are pinned to exact versions with a committed lockfile.
+  - No dependency beyond the stack goes in without a written reason.
+- **The bundle stays current:** after any change under `web/report/src`,
+  run `npm run build`, and commit the rebuilt `report.html` with that
+  change.
 - **Ids are stable:** finding ids, grouping keys and severities of existing
   signals don't change.
 - **Format:** the findings JSON says `format: 2`. The page reads format 2
@@ -55,13 +69,13 @@ causes across signals.
    characters. The test is in Task 5.
 3. **A run that stops early, or has zero findings.** The page shows the
    header, warnings, "No findings" and the stop reason, and the map is
-   absent. Stop data is tested in Task 5; the page is checked in Tasks 7
-   and 9.
+   absent. Stop data is tested in Task 5, and the `empty` fixture in
+   Task 6. The page is checked in Task 9.
 4. **A finding with no `file` or `line`,** such as a `lua-error` or `stuck`
    with no step. It can't be pinned on the map. It must still appear: in
    its severity section under Priority, and in an "Addon code" section after
-   the guide files under Guide order. Checked in Task 7 against a fixture
-   JSON with a lua-error.
+   the guide files under Guide order. Tested in Task 8 (`prioritySections`
+   and `guideSections` with the `single` fixture's lua-error).
 5. **A guide with no `startlevel` or `endlevel` in its registration.** It
    gets no level flags and no error, and its label shows only the levels
    entered and left. The test is in Task 5.
@@ -78,11 +92,12 @@ causes across signals.
 | `src/hwc/findings/report.lua` | Task 5: format 2 (`step`, `explains`, `labels`, `header.gaps`, `header.warnings`, `header.stop`, `header.guides`, summary counts). |
 | `src/hwc/findings/render.lua` | Task 5: deleted, with `spec/findings/render_spec.lua`. |
 | `src/hwc/findings/html.lua` | Task 6: new, the template writer. |
-| `src/hwc/findings/report.html` | Task 6: placeholder template. Tasks 7–8: the page. |
+| `src/hwc/findings/report.html` | Task 6: placeholder. Task 7 on: the committed build output of `web/report`. |
 | `src/hwc/cli.lua` | Task 5: no `.md`, header facts. Task 6: write `.html`, wrote line. |
-| `README.md` | Task 1: jump wording. Task 6: outputs list. |
-| `spec/driver/run_spec.lua`, `spec/findings/{group,text,report,html}_spec.lua`, `spec/cli_spec.lua` | Tests per task. |
-| `spec/fixtures/findings/` | Task 7: format-2 fixture JSON files for checking the page by hand. |
+| `tools/report-fixtures.lua`, `spec/fixtures/findings/*.json` | Task 6: the shared format-2 fixtures and the script that makes them. |
+| `web/report/` | Task 7: project, build and bundle check. Task 8: `src/logic`. Tasks 9–10: `src/components`. |
+| `README.md`, `CONTRIBUTING.md`, `.gitignore` | Task 1: jump wording. Task 6: outputs list. Task 7: page development and both suites. |
+| `spec/driver/run_spec.lua`, `spec/findings/{group,text,report,html,fixtures}_spec.lua`, `spec/cli_spec.lua` | Lua tests per task. |
 
 ---
 
@@ -424,229 +439,426 @@ causes across signals.
 
 ---
 
-### Task 6: The HTML writer
+### Task 6: The HTML writer and the shared fixtures
 
 **Files:**
 - Create: `src/hwc/findings/html.lua`
-- Create: `src/hwc/findings/report.html`. For now, a minimal valid page:
+- Create: `src/hwc/findings/report.html`. For now, a placeholder page:
   `<!doctype html>`, a `<title>`, and
   `<script type="application/json" id="report">__HWC_REPORT_JSON__</script>`.
-  Tasks 7–8 fill it in.
-- Modify: `src/hwc/cli.lua` (`play` and `M.wrote_line`), `README.md` (the
+  Task 7 replaces it with the built bundle.
+- Create: `tools/report-fixtures.lua`, and its output
+  `spec/fixtures/findings/{single,matrix,empty}.json`
+- Modify: `src/hwc/cli.lua` (`play`, `M.wrote_line`), `README.md` (the
   outputs list around line 149)
-- Test: create `spec/findings/html_spec.lua`, modify `spec/cli_spec.lua`
+- Test: create `spec/findings/html_spec.lua` and
+  `spec/findings/fixtures_spec.lua`, and modify `spec/cli_spec.lua`
 
 **Interfaces:**
-- Produces:
+- Produces, in `html.lua`:
   - `html.PLACEHOLDER = "__HWC_REPORT_JSON__"`
   - `html.template() -> string`: reads
     `require("hwc.config").repo_root() .. "/src/hwc/findings/report.html"`.
     Errors naming the path when the file is missing.
   - `html.render(json_text, template) -> string`:
-    - Replaces `html.PLACEHOLDER` with `json_text`, after replacing every
-      `<` in `json_text` with `<`. That's valid JSON, and stricter
-      than the spec's `<\/`, because it also defuses `<!--`.
-    - Use a function replacement in `gsub` so `%` in the data is literal.
+    - Replaces the placeholder with `json_text`, after replacing every `<`
+      in `json_text` with `<`. That's valid JSON, and stricter than the
+      spec's `<\/` because it also defuses `<!--`.
+    - Use a function replacement so `%` in the data stays literal.
     - Errors unless the placeholder occurs exactly once.
-  - `cli.wrote_line(stem, n)`, which returns
-    `"hwc: wrote <stem>.html and <stem>.json (N character[s])\n"`.
+- Produces: `cli.wrote_line(stem, n)`, which returns
+  `"hwc: wrote <stem>.html and <stem>.json (N character[s])\n"`.
+- Produces, in `tools/report-fixtures.lua`:
+  - `fixtures.build() -> { [name] = json_text }`, a pure function. It runs
+    synthetic run logs through `group.findings`, `report.guides` and
+    `report.build`.
+    - It uses a fixed header (date `2026-01-01`, a git addon with a fixed
+      commit) and `paths_relative_to = "headless-wow-pro-client"`.
+    - It has no I/O, so the busted test can call it.
+  - Run as a script (`luajit tools/report-fixtures.lua`), it writes each
+    document to `spec/fixtures/findings/<name>.json`.
+  - The three fixtures:
+    - `single`: one combo, about 25 findings. It includes:
+      - a follow-on in a different severity from its cause;
+      - a two-level chain;
+      - quest ids 93 and 96393;
+      - a `lua-error` with no file;
+      - one harness `missing-global`;
+      - one expected `manual-completion`;
+      - a `hidden-use-step`;
+      - three guides, one of them with pins closer than 1% of its length;
+      - one `enter-under` flag.
+    - `matrix`: three combos (two races). It includes a guide played by
+      only two of them, combos entering one guide at different levels, and
+      an `enter-over` flag.
+    - `empty`: zero findings, with `header.stop` set to
+      `{ { combo = "Dwarf WARRIOR baseline", reason = "iterations" } }`.
 
-- [ ] **Step 1: Write the failing tests** in `spec/findings/html_spec.lua`:
-  - `"embeds the JSON in place of the placeholder"`.
-  - `"escapes < so a name can't close the script"`: the data
-    `{"name":"</script><!--x"}` gives output containing no `</script><!--`.
-    Decoding the embedded JSON returns the original string.
-  - `"keeps % in the data literal"`.
-  - `"errors when the placeholder is missing or repeated"`.
-  - `"is byte-identical across two renders"`.
-  - `"the shipped template has the placeholder once and no http(s) URL"`.
-    Read the real file through `html.template()`. Assert the placeholder
-    occurs once, and that `not tpl:find("https?://")`.
-
-  In `cli_spec.lua`:
-  - update the `wrote_line` case;
-  - the run cases assert `<stem>.html` exists, and that its embedded JSON
-    decodes equal to `<stem>.json`.
+- [ ] **Step 1: Write the failing tests.**
+  - `html_spec.lua`:
+    - `"embeds the JSON in place of the placeholder"`.
+    - `"escapes < so a name can't close the script"`: the data
+      `{"name":"</script><!--x"}` gives output containing no
+      `</script><!--`. Decoding the embedded JSON returns the original
+      string.
+    - `"keeps % in the data literal"`.
+    - `"errors when the placeholder is missing or repeated"`.
+    - `"is byte-identical across two renders"`.
+    - `"the committed template has the placeholder once and no http(s) URL"`.
+  - `fixtures_spec.lua`:
+    `"committed fixtures match what report.build produces now"`. For each
+    name, compare `fixtures.build()[name]` with the file's bytes. On
+    failure, the message says to run `luajit tools/report-fixtures.lua`.
+  - `cli_spec.lua`:
+    - update the `wrote_line` case;
+    - the run cases assert `<stem>.html` exists and its embedded JSON
+      decodes equal to `<stem>.json`.
 - [ ] **Step 2: Run them and confirm they fail.**
-  Run: `~/.luarocks/bin/busted spec/findings/html_spec.lua spec/cli_spec.lua`
-  Expected: FAIL, with `hwc.findings.html` not found.
-- [ ] **Step 3: Implement** `html.lua` and the placeholder template. In
-  `play`, encode the JSON once:
-  `local doc = json.encode(report_json(report.build(findings, header)), { indent = true }) .. "\n"`.
-  Write `doc` to `.json` and `html.render(doc, html.template())` to
-  `.html`. Update the README outputs list: the `.html` report, the `.json`
-  findings, and the per-character logs.
+  Run: `~/.luarocks/bin/busted spec/findings spec/cli_spec.lua`
+  Expected: FAIL, with `hwc.findings.html` and the fixtures not found.
+- [ ] **Step 3: Implement** `html.lua`, the placeholder template and the
+  fixture script, then write the fixtures.
+  - In `play`, encode the JSON once:
+    `local doc = json.encode(report_json(report.build(findings, header)), { indent = true }) .. "\n"`.
+    Write `doc` to `.json` and `html.render(doc, html.template())` to
+    `.html`.
+  - Update the README outputs list.
 - [ ] **Step 4: Run the full suite.**
   Run: `~/.luarocks/bin/busted`
   Expected: all pass.
 - [ ] **Step 5: Commit.**
-  `git add -A src/hwc/findings spec/findings/html_spec.lua && git commit -am "Write the findings report as a self-contained HTML page"`
+  `git add src/hwc/findings/html.lua src/hwc/findings/report.html tools/report-fixtures.lua spec/fixtures/findings spec/findings/html_spec.lua spec/findings/fixtures_spec.lua && git commit -am "Write the findings report as HTML; shared format-2 fixtures"`
 
 ---
 
-### Task 7: The page: header, sidebar, cards, order and folds
-
-**Before writing markup, invoke the `frontend-design:frontend-design`
-skill.** The mockups in `.superpowers/brainstorm/mockups/layout.tpl.html`
-(tab D) are the structure the user approved. They are not the finished
-visual design.
+### Task 7: The `web/report` project, build and bundle check
 
 **Files:**
-- Modify: `src/hwc/findings/report.html`
-- Create: the format-2 fixtures in `spec/fixtures/findings/`, made by
-  running the Task 6 CLI against the existing driver fixtures, or written by
-  hand to the format-2 shape. They are only for opening by hand:
-  - `single.json` and `single.html`: one character, about 25 findings,
-    including follow-ons across severities and one lua-error with no file.
-  - `matrix.json` and `matrix.html`: three combos, plus a guide only some
-    combos played.
-  - `empty.json` and `empty.html`: zero findings, `header.stop` set.
-
-**Interfaces (inside the template):**
-- Data: `JSON.parse(document.getElementById("report").textContent)`.
-- State: `{ q, sev:Set, file:Set, kind:Set, combo:Set, order:"prio"|"guide" }`,
-  serialised to and from `location.hash` as
-  `q=…&sev=a,b&file=…&kind=…&char=…&order=guide`. Values are
-  URI-encoded. An empty hash means every option on and order `prio`.
-- `matches(f, state) -> bool`:
-  - text search is case-insensitive over `title`, `qname`, `file:line` and
-    `id`;
-  - a query of digits only matches `f.qid === Number(q)`, or a digit-only
-    token inside `title`, `file:line` or `id`. A substring of a longer
-    number is not a match.
-- `visible(findings, state) -> { roots, lifted }`. `roots` are primary
-  findings that match. `lifted` are follow-ons that match while some
-  ancestor doesn't (spec §4.5).
-- Counting (spec §4.5): every finding is counted once, by its own fields.
-  The sidebar option counts are computed under all the *other* active
-  filters.
-
-**What to build (spec §4.2, 4.3, 4.5, 4.6, 4.7, 4.8, 4.9):**
-- Header: title, run line, warnings from `header.warnings`, and "N of M"
-  while a filter is on.
-- Sidebar:
-  - Search.
-  - Checkbox groups for Severity, Character (hidden when there's one combo),
-    Guide file, and Kind, labelled from `labels.signals`.
-  - "Also in this run" links that open and scroll to the folds.
-  - The sidebar stays fixed (sticky).
-  - Below 900px it becomes a collapsible panel.
-- Order switch:
-  - Priority: severity sections. Within each section, sort by `explains`
-    descending, then `confidence === "verified"` first, then the
-    `header.guides` index of `file`, then `line`. Findings without a file go
-    last.
-  - Guide order: file sections in `header.guides` order. Each file heading
-    stays at the top of the screen while you scroll its cards. Then an
-    "Addon code" section for findings with no file, or a file not in
-    `header.guides`.
-- Card (spec §4.6):
-  - follow-ons nested inside their cause;
-  - lifted cards show "Follows from <title> (hidden by filters)", which
-    clears the filters and jumps to the cause;
-  - the step trio `before → step → after`, using verbs from
-    `labels.actions`, with a key one hover away;
-  - the footer is `F-… · signal`, and opens the `why` and `reasons`.
-- Folds:
-  - Harness notices: `report.is_harness` rule, `signal == "missing-global"`,
-    or `lua-error` with `harness`.
-  - Expected manual clicks: `expected`.
-  - About this run: header provenance, catalog, rank, dungeons, carried,
-    `paths_relative_to` and `gaps`.
-- Empty and stopped runs: "No findings". Name each `header.stop` entry with
-  `labels.combos` and `labels.stops`.
-- Light and dark via `prefers-color-scheme`. Every control is a `<button>`,
-  `<input>` or `<a>`.
-
-- [ ] **Step 1: Generate the fixtures** and confirm each `.html` opens from
-  disk with no console errors. Use Chrome with the `claude-in-chrome`
-  tools, opening the `file://` URL, and `read_console_messages` with
-  pattern `.`.
-- [ ] **Step 2: Build the page** as above.
-- [ ] **Step 3: Check it against each fixture** by opening it from disk.
-  Confirm:
-  - (a) a search matching only a follow-on shows it, lifted, with its
-    "hidden by filters" line;
-  - (b) searching `93` doesn't match 96393;
-  - (c) counts read "N of M", and the sidebar counts change with the other
-    filters;
-  - (d) the file heading stays put in Guide order;
-  - (e) the "this step" chip names its action and name;
-  - (f) the sidebar links open their folds;
-  - (g) Tab reaches every control, and Enter or Space works each one;
-  - (h) a reload keeps the filters and order;
-  - (i) `empty.html` shows "No findings" and the stop reason;
-  - (j) `single.html` shows the lua-error under "Addon code" in Guide
-    order;
-  - (k) `matrix.html` shows the Character filter.
-
-  Save one screenshot of each fixture (`save_to_disk`) for the review.
-- [ ] **Step 4: Run the writer tests again** (the template still has
-  exactly one placeholder and no URLs).
-  Run: `~/.luarocks/bin/busted spec/findings/html_spec.lua`
-  Expected: PASS.
-- [ ] **Step 5: Commit.**
-  `git add src/hwc/findings/report.html spec/fixtures/findings && git commit -m "Findings page: header, sidebar filters, cards, priority and guide order, folds"`
-
----
-
-### Task 8: The guide map and level flags
-
-**Files:**
-- Modify: `src/hwc/findings/report.html`
+- Create in `web/report/`:
+  - `package.json`, `package-lock.json`, `.nvmrc` (`24`), `tsconfig.json`,
+    `vite.config.ts`, `index.html`;
+  - `scripts/install-template.mjs`;
+  - `src/main.tsx`, `src/types.ts`, `src/App.tsx`;
+  - `test/fixtures.test.ts`, `test/bundle.test.ts`.
+- Modify: `src/hwc/findings/report.html` (now the build output),
+  `.gitignore` (`web/report/node_modules/`, `web/report/dist/`),
+  `README.md` (a "Working on the report page" section), `CONTRIBUTING.md`
+  (the setup section runs both suites).
 
 **Interfaces:**
-- Consumes: `header.guides` (`file`, `last_line`, `start_level`,
-  `end_level`, `levels`, `flags`) and the Task 7 functions `state`,
-  `matches` and `visible`.
+- **Dependencies:** `preact`; and as dev dependencies `vite`,
+  `@preact/preset-vite`, `vite-plugin-singlefile`, `typescript`, `vitest`.
+  - Use exact versions (no `^` or `~`), the current ones at install time,
+    recorded in the lockfile.
+  - Nothing else without a reason written in the commit message.
+- **Scripts:**
+  - `build`: `vite build && node scripts/install-template.mjs`. The second
+    step copies `dist/index.html` to `../../src/hwc/findings/report.html`.
+  - `dev`: `vite`.
+  - `test`: `vitest run`.
+  - `typecheck`: `tsc --noEmit`.
+- **`index.html`:** contains
+  `<script type="application/json" id="report">__HWC_REPORT_JSON__</script>`
+  exactly once.
+- **`vite.config.ts`:** a small inline plugin that applies only in `serve`
+  mode. It replaces the placeholder with
+  `spec/fixtures/findings/<name>.json`, where `name` comes from
+  `?fixture=` and defaults to `single`.
+- **`src/types.ts`:** `ReportDoc`, the format-2 document: `format: 2`,
+  `header`, `summary`, `labels` and `findings: Finding[]`, with every field
+  from spec §5 and plan Task 5. Optional fields are optional in the type.
+  Other modules import it, and nothing else defines the shape.
+- **`src/main.tsx`:**
+  - reads `document.getElementById("report")!.textContent`;
+  - `JSON.parse`s it as a `ReportDoc`;
+  - renders `<App doc>`.
 
-**What to build (spec §4.4):**
-- **Tracks and pins:**
-  - One track per `header.guides` entry, in order.
-  - Each track has a line scale from 1 to `last_line`.
-  - Pins for the findings that match, at `line / last_line`. Follow-ons
-    are drawn smaller.
-  - Pins closer together than their diameter are grouped into one marker
-    showing the count. Hover lists the group, and clicking expands it.
-- **Labels and flags:**
-  - The label is the short file name, the finding count, and the declared
-    range plus levels entered and left.
-  - A single combo reads "19–25 · entered 19, left 23". A matrix shows the
-    range across combos, and hover lists each combo.
-  - Flags appear on the label in the severity colour, with a hover naming
-    the rule and the combos.
-- **Interaction:**
-  - Hover shows an immediate tooltip, not the `title` attribute.
-  - A click scrolls to the card and highlights it.
-  - A compact copy of the map stays pinned to the top of the main column
-    once the full map scrolls away. This is the "way back".
-  - Clicking a track name switches to Guide order and jumps to that file.
-- The map is hidden when there are no findings (spec §4.8).
+  For now `App` renders only the title and finding count. Task 9 builds it
+  out.
 
-- [ ] **Step 1: Build it.**
-- [ ] **Step 2: Check it against each fixture.** Confirm:
-  - (a) the tooltip appears on hover with no delay;
-  - (b) close pins in `single.html` group, and expand on click;
-  - (c) clicking a pin highlights its card, and the pinned map is
-    reachable from there;
-  - (d) the map follows the filters;
-  - (e) `matrix.html` shows per-combo levels on hover and at least one
-    flag, so make the fixture include one;
-  - (f) pins and groups are buttons reachable by Tab.
+- [ ] **Step 1: Write the failing tests.**
+  - `test/fixtures.test.ts`, `"every shared fixture parses as a format-2 ReportDoc"`:
+    - load each `spec/fixtures/findings/*.json`;
+    - assert `format === 2`;
+    - assert every finding has `id`, `signal` and `title`;
+    - assert every `caused_by` names an id in the document.
 
-  Save screenshots.
-- [ ] **Step 3: Run the writer tests.**
-  Run: `~/.luarocks/bin/busted spec/findings/html_spec.lua`
-  Expected: PASS.
-- [ ] **Step 4: Commit.**
-  `git commit -am "Findings page: guide map with pins, grouping and level flags"`
+    `npm run typecheck` covers the static shape.
+  - `test/bundle.test.ts`, `"the committed report.html matches a fresh build"`:
+    - run Vite's `build()` API with the project config and `outDir` set to
+      a temporary directory;
+    - compare the output's bytes with `../../src/hwc/findings/report.html`;
+    - on failure, the message says to run `npm run build`.
+  - `test/bundle.test.ts`, `"the bundle is self-contained"`: no `https?://`,
+    no `<script src`, no `<link rel="stylesheet"`, and the placeholder
+    occurs exactly once.
+- [ ] **Step 2: Run them and confirm they fail.**
+  Run: `cd web/report && npm ci && npm test`
+  Expected: the bundle tests FAIL, because the committed `report.html` is
+  still the Task 6 placeholder.
+- [ ] **Step 3: Implement** the scaffold and `App`. Then run
+  `npm run build`.
+- [ ] **Step 4: Run every suite.**
+  Run:
+  - `cd web/report && npm run typecheck && npm test` (expected: all pass);
+  - `cd ../.. && ~/.luarocks/bin/busted spec/findings/html_spec.lua`
+    (expected: PASS against the built template);
+  - building twice in a row leaves `git status` clean.
+- [ ] **Step 5: Commit.**
+  `git add web/report src/hwc/findings/report.html .gitignore README.md CONTRIBUTING.md && git commit -m "Build the report page from web/report with Vite and Preact"`
 
 ---
 
-### Task 9: Check against a real run
+### Task 8: The page logic
 
-**Files:** none changed, unless a defect turns up. Fix any defect in the
-task that owns it, with a regression test where the code is Lua.
+**Files:**
+- Create in `web/report/src/logic/`: `state.ts`, `filter.ts`, `order.ts`,
+  `hash.ts`
+- Test: create the matching `web/report/test/logic/*.test.ts`, run against
+  the shared fixtures
+
+**Interfaces (all pure, with no DOM):**
+- `state.ts`:
+  - `type FilterState = { q: string; sev: Set<string>; file: Set<string>; kind: Set<string>; combo: Set<string>; order: "prio" | "guide" }`
+  - `defaultState(doc: ReportDoc): FilterState`: every option on, `q`
+    empty, order `"prio"`.
+  - `counted(f: Finding): boolean`: true when `f.severity` is set,
+    `!f.expected`, and the finding isn't harness (`missing-global`, or
+    `lua-error` with `harness`).
+- `filter.ts`:
+  - `matches(f: Finding, s: FilterState): boolean`:
+    - Text search is case-insensitive over `title`, `qname`, `` `${file}:${line}` ``
+      and `id`.
+    - A query of digits only matches `f.qid === Number(q)`, or a whole
+      digit token in `title`, `file:line` or `id`.
+    - A combo matches when `f.combos` intersects `s.combo`.
+  - `visible(doc, s): { roots: Finding[]; lifted: Finding[] }`:
+    - `roots`: counted primary findings that match;
+    - `lifted`: counted follow-ons that match while some ancestor doesn't
+      (spec §4.5).
+  - `childrenShown(f, doc, s): Finding[]`: the causes to nest under `f`.
+    That's those that match, or have a matching descendant.
+  - `counts(doc, s): { shown: number; total: number; options: Record<"sev"|"file"|"kind"|"combo", Record<string, number>> }`:
+    - `shown` and `total` count counted findings once each, by their own
+      fields.
+    - The count for each option is computed under all the other active
+      filters, with that group's own filter ignored.
+- `order.ts`:
+  - `prioritySections(doc, s): { severity: string; primary: number; follow: number; cards: Finding[] }[]`.
+    - `cards` are roots and lifted findings of that severity, sorted by:
+      1. `explains` descending (0 when absent);
+      2. `confidence === "verified"` first;
+      3. the index of `file` in `header.guides`, with no file or an
+         unknown file last;
+      4. `line`;
+      5. `id`.
+    - `primary` and `follow` count the counted findings of that severity
+      that match.
+  - `guideSections(doc, s): { file: string | null; cards: Finding[] }[]`:
+    files in `header.guides` order, each in `line` order, then one
+    `file: null` section ("Addon code") for findings with no file or an
+    unknown file.
+- `hash.ts`:
+  - `toHash(s): string` and `fromHash(h, doc): FilterState`.
+  - The format is `q=…&sev=a,b&file=…&kind=…&char=…&order=guide`, with
+    values URI-encoded.
+  - Only parts that differ from `defaultState` are written. An empty hash
+    gives `defaultState`.
+
+- [ ] **Step 1: Write the failing tests** (Vitest, against
+  `single.json` and `matrix.json`):
+  - `matches`:
+    - `"93"` matches quest 93 and not 96393;
+    - case-insensitive title match;
+    - `file:line` match;
+    - id match.
+  - `visible`:
+    - a search that matches only a follow-on whose cause doesn't match
+      puts it in `lifted`;
+    - a matching cause keeps its matching follow-on nested, not lifted;
+    - harness and expected findings never appear.
+  - `counts`:
+    - with only `High` on, `shown` equals the number of High counted
+      findings, and `total` is unchanged;
+    - the `sev` option counts ignore the severity filter but respect the
+      text query;
+    - a follow-on nested under a cause of another severity is counted
+      under its own severity.
+  - `prioritySections`:
+    - follow-ons don't appear as top-level cards unless lifted;
+    - the order follows the four keys (assert the exact id order for one
+      fixture section);
+    - the `lua-error` with no file sorts last in its severity.
+  - `guideSections`: the file order matches `header.guides`, and the last
+    section is `file: null` holding the `lua-error`.
+  - `hash`: `fromHash(toHash(s))` deep-equals `s` for a state with every
+    field set, and `fromHash("")` equals `defaultState`.
+  - Matrix: filtering to one combo hides findings only other combos hit.
+- [ ] **Step 2: Run them and confirm they fail.**
+  Run: `cd web/report && npm test`
+  Expected: FAIL, with the modules missing.
+- [ ] **Step 3: Implement** the four modules.
+- [ ] **Step 4: Run the tests and the type check.**
+  Run: `npm run typecheck && npm test`
+  Expected: all pass. The bundle test still passes, because the logic isn't
+  imported by `App` yet.
+- [ ] **Step 5: Commit.**
+  `git add web/report/src/logic web/report/test/logic && git commit -m "Report page logic: matching, lifting, counts, ordering, URL state"`
+
+---
+
+### Task 9: The page: header, sidebar, cards, order and folds
+
+**Before writing components, invoke the `frontend-design:frontend-design`
+skill.** The mockups in `.superpowers/brainstorm/mockups/layout.tpl.html`
+(tab D) are the structure the user approved. They are not the finished
+visual design. Keep the bundle lean: no component library, no icon font,
+no CSS framework.
+
+**Files:**
+- Create in `web/report/src/components/`: `Header.tsx`, `Sidebar.tsx`,
+  `Sections.tsx`, `Card.tsx`, `Folds.tsx`, `StepKey.tsx`
+- Create: `web/report/src/styles.css`
+- Modify: `web/report/src/App.tsx`, `src/hwc/findings/report.html` (rebuilt)
+
+**Interfaces:**
+- Consumes: the Task 8 functions only. Components never filter, count or
+  sort on their own.
+- `App` holds `FilterState`. It initialises from `fromHash(location.hash, doc)`
+  and writes `toHash` with `history.replaceState` whenever the state
+  changes.
+
+**What to build (spec §4.2, 4.3, 4.5–4.9):**
+- **Header:**
+  - title from `labels.combos` and counts, reading "N of M findings" while
+    a filter is on;
+  - the run line;
+  - `header.warnings`.
+- **Sidebar:**
+  - search, plus checkbox groups using `counts().options`;
+  - the Character group is hidden when there's one combo;
+  - Kind labels come from `labels.signals`;
+  - "Also in this run" links set the fold open and then scroll to it;
+  - sticky, and a collapsible panel below 900px.
+- **Order switch:** Priority (`prioritySections`) or Guide order
+  (`guideSections`), where each file heading stays at the top of the screen
+  while you scroll that file's cards.
+- **Card (spec §4.6):**
+  - follow-ons nested through `childrenShown`;
+  - a lifted card shows "Follows from <title> (hidden by filters)", a
+    button that resets to `defaultState`, then scrolls to the cause;
+  - the step trio, with verbs from `labels.actions` and a `StepKey`
+    popover;
+  - the footer is `F-… · signal` as a `<button>` that toggles the `why`
+    and `reasons`.
+- **Folds:**
+  - harness notices;
+  - expected manual clicks;
+  - About this run: provenance, catalog, rank, dungeons, carried,
+    `paths_relative_to` and `gaps`.
+- **Empty and stopped runs:** "No findings", plus each `header.stop` entry
+  named through `labels.combos` and `labels.stops`.
+- **Look and behaviour:**
+  - light and dark via `prefers-color-scheme`;
+  - every control is a `<button>`, `<input>` or `<a>`.
+
+- [ ] **Step 1: Build the components.** Then run `npm run build`.
+- [ ] **Step 2: Run every suite.**
+  Run: `cd web/report && npm run typecheck && npm test && cd ../.. && ~/.luarocks/bin/busted`
+  Expected: all pass.
+- [ ] **Step 3: Check it by hand.** Open each fixture with `npm run dev`
+  (`?fixture=single|matrix|empty`). Then open a page written by `bin/hwc`
+  from disk, to confirm `file://` works. Use Chrome with the
+  `claude-in-chrome` tools and `read_console_messages` with pattern `.`,
+  expecting no errors. Confirm:
+  - (a) the sidebar and the file headings in Guide order stay in place
+    while scrolling;
+  - (b) the sidebar links open their folds;
+  - (c) Tab reaches every control, and Enter or Space works each one;
+  - (d) a reload keeps the filters and order;
+  - (e) `empty` shows "No findings" and "Dwarf Warrior: Hit its step
+    limit";
+  - (f) the look holds in both light and dark;
+  - (g) the narrow-window panel works at 800px wide.
+
+  Save a screenshot of each fixture (`save_to_disk`).
+- [ ] **Step 4: Commit.**
+  `git add web/report src/hwc/findings/report.html && git commit -m "Report page: header, sidebar, cards, both orders, folds"`
+
+---
+
+### Task 10: The guide map and level flags
+
+**Files:**
+- Create: `web/report/src/logic/map.ts`,
+  `web/report/test/logic/map.test.ts`,
+  `web/report/src/components/GuideMap.tsx`
+- Modify: `web/report/src/App.tsx`, `web/report/src/styles.css`,
+  `src/hwc/findings/report.html` (rebuilt)
+
+**Interfaces:**
+- `map.ts`:
+  - `tracks(doc, s): Track[]`
+  - `type Track = { file; label; levelText; flags: { rule; combos: string[] }[]; perCombo: { combo; enter; leave }[]; groups: PinGroup[] }`
+  - `type PinGroup = { at: number /* 0..1 */; findings: Finding[] }`
+  - Pins are the findings that match `matches(f, s)` and have this `file`,
+    at `line / last_line`.
+  - Group, in line order, any pin closer than `minGap` (default `0.012`)
+    to the previous pin in the current group.
+  - `levelText` for one combo is `"19–25 · entered 19, left 23"`. When the
+    declared range is missing, it's only `"entered 19, left 23"`. For
+    several combos it's the min–max of `enter` and of `leave`, with the
+    exact form `"19–25 · entered 18–19, left 23–24"`.
+  - `flags` are grouped by rule, with the combos named through
+    `labels.combos`.
+
+- [ ] **Step 1: Write the failing tests** in `map.test.ts`:
+  - the close pins in `single.json` form one group with the right count,
+    and the others stay alone;
+  - `minGap = 0` gives one pin per group;
+  - a filter that excludes a finding removes its pin;
+  - `levelText` for single, for matrix, and for a guide with no declared
+    range;
+  - `flags` for `matrix.json` group the `enter-over` combos under one rule;
+  - the track order follows `header.guides`.
+- [ ] **Step 2: Run them and confirm they fail.**
+  Run: `cd web/report && npm test`
+  Expected: FAIL.
+- [ ] **Step 3: Implement** `map.ts`, then `GuideMap`:
+  - each track has a line scale;
+  - a pin or group is a `<button>`, with follow-ons drawn smaller;
+  - hover or focus shows a custom tooltip right away (no `title`);
+  - clicking a single pin scrolls to its card and highlights it;
+  - clicking a group expands it in place;
+  - the track name switches to Guide order and jumps to that file;
+  - flags sit on the label in the severity colour, with a tooltip naming
+    the rule and the combos;
+  - a compact copy of the map stays pinned to the top of the main column
+    once the full map scrolls away;
+  - there's no map when there are no findings.
+
+  Then run `npm run build`.
+- [ ] **Step 4: Run every suite and check by hand.**
+  Run: `npm run typecheck && npm test && cd ../.. && ~/.luarocks/bin/busted`
+  (expected: all pass).
+  In Chrome, confirm:
+  - (a) the tooltip appears with no delay;
+  - (b) the group in `single` expands;
+  - (c) a pin click highlights its card, and the pinned map is reachable;
+  - (d) the map follows the filters;
+  - (e) `matrix` shows the levels per combo and the flag tooltip;
+  - (f) Tab reaches the pins.
+
+  Save screenshots.
+- [ ] **Step 5: Commit.**
+  `git add web/report src/hwc/findings/report.html && git commit -m "Report page: guide map with pin grouping and level flags"`
+
+---
+
+### Task 11: Check against a real run
+
+**Files:** none changed, unless a defect turns up. Fix a defect in the task
+that owns it, with a regression test in that task's suite.
 
 - [ ] **Step 1: Run the client for real.**
   Run: `bin/hwc run --class WARRIOR --race Dwarf --out findings`, against
@@ -654,14 +866,14 @@ task that owns it, with a regression test where the code is Lua.
   Expected: `hwc: wrote findings/<today>-Dwarf-WARRIOR-baseline.html and …json (1 character)`.
 - [ ] **Step 2: Check the engine changes in the JSON.**
   `jq '.findings[] | select(.signal=="hidden-use-step") | {line,file,use,loot}'`
-  shows `19_25_Alliance.lua` line 449 with `use "5456"` and loot `5455`.
-  - The "Elemental Bracers" `did-not-advance` has `caused_by` pointing at it.
+  shows `19_25_Alliance.lua` line 449, `use "5456"` and loot `5455`.
+  - The "Elemental Bracers" `did-not-advance` has `caused_by` pointing at
+    it.
   - The "Mage Summoner" `never-shown-accept` is linked through that chain.
   - `.header.guides` lists the played guides with `levels`.
-- [ ] **Step 3: Open the `.html` from disk** and walk the Task 7 and Task 8
-  checklists against it. Save screenshots.
-- [ ] **Step 4: Run the full suite.**
-  Run: `~/.luarocks/bin/busted`
-  Expected: all pass. Then `git status` shows no stray files. The run's
-  output goes to `findings/`, which is untracked today, so leave it
-  uncommitted.
+- [ ] **Step 3: Open the `.html` from disk** and walk the Task 9 and
+  Task 10 hand checks against it. Save screenshots.
+- [ ] **Step 4: Run every suite.**
+  Run: `~/.luarocks/bin/busted && (cd web/report && npm run typecheck && npm test)`
+  Expected: all pass. Then `git status` shows only the untracked
+  `findings/` output, which stays uncommitted.
