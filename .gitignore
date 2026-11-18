@@ -1,11 +1,11 @@
 .superpowers/
 local/
 out/
-findings/*.json
-findings/**/*.json
+/findings/
 evidence/
 /local
 .claude/worktrees/
 web/report/node_modules/
 web/report/dist/
 .github/release/node_modules/
+.DS_Store
