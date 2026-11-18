@@ -462,7 +462,7 @@ What is known about Forever, and how:
 | Bands: Neutral 0-3000, Friendly 3000-9000, Honored 9000-21000 | Verified in Forever |
 | Bands: Hated -42000 to -6000, Hostile -6000 to -3000, Unfriendly -3000 to 0, Revered 21000-42000, Exalted 42000-42999, and their reaction numbers 1-3, 7 and 8 | Unverified for Forever (Classic values) |
 | Alliance (469) and Horde (67) are headers (`isHeader` true, `isHeaderWithRep` false) | Verified in Forever |
-| Starting tables for Dwarf, Orc and Undead (below) | Verified (fresh level-1 characters, 2026-11-18) |
+| Starting tables for Dwarf, Orc, Undead and Tauren (below) | Verified (fresh level-1 characters, 2026-11-18) |
 | Starting tables for every other race (below) | Inferred, unverified for Forever; each run names it in its gaps |
 | Gelkis (92) and Magram (93) are at 2000 when first listed | Observed in Forever (level-29 Human, no centaur quests) |
 | A faction becomes known on its first quest reward | Inferred |
@@ -479,8 +479,9 @@ Darkspear Trolls 530, Undercity 68, Horde 67):
 | `Dwarf` | 47 = 4000, 54/69/72 = 3100, 469 = 3300 | Verified |
 | `Orc` | 76 = 4000, 81/530 = 3100, 68 = 500, 67 = 3500 | Verified |
 | `Undead` | 68 = 4000, 76/530 = 2000, 81 = 500, 67 = 3500 | Verified |
+| `Tauren` | 81 = 4000, 76/530 = 3100, 68 = 500, 67 = 3500 | Verified |
 | `Human`, `Gnome`, `NightElf` | The Dwarf table with the race's home (72, 54, 69) at 4000 and Ironforge at 3100 | Inferred, unverified for Forever |
-| `Troll`, `Tauren` | The Orc table with the race's home (530, 81) at 4000 and Orgrimmar at 3100 | Inferred, unverified for Forever |
+| `Troll` | The Orc table with Darkspear Trolls (530) at 4000 and Orgrimmar at 3100 | Inferred, unverified for Forever |
 | `SkyborneAlliance` | 72/47/54/69 = 3100, 469 = 3300 | Inferred, unverified for Forever |
 | `SkyborneHorde` | 76/81/530 = 3100, 68 = 500, 67 = 3500 | Inferred, unverified for Forever |
 

@@ -66,15 +66,16 @@ local START = {
   Orc = { points = { [76] = 4000, [81] = 3100, [530] = 3100, [68] = 500, [67] = 3500 }, inferred = false },
   -- Forever, in game, fresh level-1 Undead, 2026-11-18 (verified).
   Undead = { points = { [68] = 4000, [76] = 2000, [530] = 2000, [81] = 500, [67] = 3500 }, inferred = false },
+  -- Forever, in game, fresh level-1 Tauren, 2026-11-18 (verified).
+  Tauren = { points = { [81] = 4000, [76] = 3100, [530] = 3100, [68] = 500, [67] = 3500 }, inferred = false },
   -- Inferred, unverified for Forever: the Dwarf table with the race's own home at 4000
   -- and Ironforge at 3100.
   Human = { points = { [72] = 4000, [47] = 3100, [54] = 3100, [69] = 3100, [469] = 3300 }, inferred = true },
   Gnome = { points = { [54] = 4000, [47] = 3100, [69] = 3100, [72] = 3100, [469] = 3300 }, inferred = true },
   NightElf = { points = { [69] = 4000, [47] = 3100, [54] = 3100, [72] = 3100, [469] = 3300 }, inferred = true },
-  -- Inferred, unverified for Forever: the Orc table with the race's own home at 4000
-  -- and Orgrimmar at 3100.
+  -- Inferred, unverified for Forever: the Orc table with Darkspear Trolls at 4000 and
+  -- Orgrimmar at 3100 (the same pattern the Tauren capture shows).
   Troll = { points = { [530] = 4000, [76] = 3100, [81] = 3100, [68] = 500, [67] = 3500 }, inferred = true },
-  Tauren = { points = { [81] = 4000, [76] = 3100, [530] = 3100, [68] = 500, [67] = 3500 }, inferred = true },
   -- Inferred, unverified for Forever: Skyborne has no known home faction. Alliance: the
   -- four Alliance capitals at 3100 plus the header; Horde: the Orc table's Undercity and
   -- header rows with Orgrimmar, Thunder Bluff and Darkspear at 3100.

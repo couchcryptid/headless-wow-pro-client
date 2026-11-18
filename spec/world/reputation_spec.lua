@@ -63,14 +63,16 @@ describe("reputation.start", function()
     end
   end)
 
-  it("infers Troll and Tauren from the Orc table", function()
-    for race, home in pairs({ Troll = 530, Tauren = 81 }) do
-      local pts, inferred = reputation.start(race)
-      local want = { [76] = 3100, [81] = 3100, [530] = 3100, [68] = 500, [67] = 3500 }
-      want[home] = 4000
-      assert.same(want, pts, race)
-      assert.is_true(inferred, race)
-    end
+  it("is the captured Tauren table, not inferred", function()
+    local pts, inferred = reputation.start("Tauren")
+    assert.same({ [81] = 4000, [76] = 3100, [530] = 3100, [68] = 500, [67] = 3500 }, pts)
+    assert.is_false(inferred)
+  end)
+
+  it("infers Troll from the Orc table", function()
+    local pts, inferred = reputation.start("Troll")
+    assert.same({ [530] = 4000, [76] = 3100, [81] = 3100, [68] = 500, [67] = 3500 }, pts)
+    assert.is_true(inferred)
   end)
 
   it("infers Skyborne from its side's capitals with no home", function()

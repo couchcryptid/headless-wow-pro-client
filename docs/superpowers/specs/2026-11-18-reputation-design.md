@@ -37,6 +37,7 @@ Forever** in code and README (memory: Forever is not Classic).
 | Dwarf start | Ironforge (47) 4000, Gnomeregan Exiles (54) 3100, Darnassus (69) 3100, Stormwind (72) 3100, Alliance (469) 3300 | Forever: fresh level-1 Dwarf, 2026-11-18 |
 | Orc start | Orgrimmar (76) 4000, Thunder Bluff (81) 3100, Darkspear Trolls (530) 3100, Undercity (68) 500, Horde (67) 3500 | Forever: fresh level-1 Orc, 2026-11-18 |
 | Undead start | Undercity (68) 4000, Orgrimmar (76) 2000, Darkspear Trolls (530) 2000, Thunder Bluff (81) 500, Horde (67) 3500 | Forever: fresh level-1 Undead, 2026-11-18 |
+| Tauren start | Thunder Bluff (81) 4000, Orgrimmar (76) 3100, Darkspear Trolls (530) 3100, Undercity (68) 500, Horde (67) 3500 | Forever: fresh level-1 Tauren, 2026-11-18 |
 | Headers | Alliance (469) and Horde (67) report `isHeader` true, `isHeaderWithRep` false | Forever, 2026-11-18 |
 | Met at | Gelkis Clan Centaur (92) 2000, Magram Clan Centaur (93) 2000 | Observed in Forever (level-29 Human, no centaur quests) |
 | Known on first reward | A faction becomes known on its first quest reward | **Inferred** |
@@ -78,7 +79,7 @@ Forever** in code and README (memory: Forever is not Classic).
   to that band, so 3000 is Friendly.
 - `reputation.clamp(points)`: between −42000 and 42999.
 - `reputation.START[race]`: `{ [factionID] = points }` for the factions a fresh character
-  of that race has. `Dwarf`, `Orc` and `Undead` are captured. Other races use the inferred
+  of that race has. `Dwarf`, `Orc`, `Undead` and `Tauren` are captured. Other races use the inferred
   tables in §4.6.
 - `reputation.MET_AT[factionID]`: the value a faction starts at when first met. Gelkis and
   Magram are 2000 (observed in Forever on a level-29 Human with no centaur quests; that a
@@ -160,11 +161,11 @@ missing global, not a crash.
 
 ### 4.6 Other races (inferred, unverified for Forever)
 
-Dwarf, Orc and Undead are captured (§2). Until fresh-character captures exist for the
+Dwarf, Orc, Undead and Tauren are captured (§2). Until fresh-character captures exist for the
 others, they use a captured table on their own side:
 - Human, Gnome, Night Elf: the Dwarf table with the race's home city at 4000 and Ironforge
   at 3100 (Alliance 469 stays 3300).
-- Troll, Tauren: the Orc table with the race's home city at 4000 and Orgrimmar at 3100
+- Troll: the Orc table with Darkspear Trolls at 4000 and Orgrimmar at 3100
   (Undercity 500 and Horde 67 3500 stay).
 - Skyborne has no known home faction. SkyborneAlliance: all four Alliance capitals
   (Stormwind 72, Ironforge 47, Gnomeregan Exiles 54, Darnassus 69) at 3100 plus Alliance
@@ -172,7 +173,7 @@ others, they use a captured table on their own side:
   3100, Undercity 68 at 500, Horde 67 at 3500.
 
 Home cities: Human → Stormwind, Gnome → Gnomeregan Exiles, Night Elf → Darnassus,
-Troll → Darkspear Trolls, Tauren → Thunder Bluff.
+Troll → Darkspear Trolls.
 
 Each inferred table is labelled in the run's Gaps (§4.5). A captured dump replaces it row
 for row.
