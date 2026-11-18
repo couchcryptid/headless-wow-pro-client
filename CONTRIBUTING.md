@@ -104,7 +104,13 @@ The anchors also need the pinned addon worktrees; see
   | `perf:`, `docs:`, `test:`, `refactor:`, `chore:`, `ci:`, `build:`, `style:` | none |
 
   Only `fix` and `feat` release. Title anything a user of `hwc` should get
-  as `fix:` or `feat:`.
+  as `fix:` or `feat:`. Two exceptions follow from how semantic-release
+  reads commits:
+  - A breaking change on **any** type (`refactor!:`, or a
+    `BREAKING CHANGE:` footer in the squash body) releases a major.
+  - A plain `git revert` commit (`Revert "..."` plus "This reverts commit
+    <sha>.") releases a patch. A squash-merged GitHub revert PR doesn't match
+    that pattern and releases nothing; retitle it `fix:` if it should ship.
 
   A release is a `v`-prefixed git tag plus a GitHub release with generated
   notes. Config: `.releaserc.json`. Tooling is pinned in `.github/release/`.

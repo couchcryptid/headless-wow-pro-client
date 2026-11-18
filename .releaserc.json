@@ -6,7 +6,10 @@
       "@semantic-release/commit-analyzer",
       {
         "preset": "conventionalcommits",
-        "releaseRules": [{ "type": "perf", "release": false }]
+        "releaseRules": [
+          { "breaking": true, "release": "major" },
+          { "type": "perf", "release": false }
+        ]
       }
     ],
     ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits" }],
