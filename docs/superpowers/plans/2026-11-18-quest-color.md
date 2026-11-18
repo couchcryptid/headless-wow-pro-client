@@ -123,3 +123,65 @@ Cause of today's `did-not-advance` on `L Level 3/4/6/10` (`01_12_Dun_Morogh.lua:
 - [ ] **Step 3: Implement.** For a negative offset the target is `xp >= xp_max(level) + offset`.
 - [ ] **Step 4: GREEN.** Full and slow suites plus luacheck. Real Dwarf run (same command as Task 2): the four Dun Morogh `L` `did-not-advance` findings are gone. Paste the new per-signal counts, including quest-red, quest-orange and below-level.
 - [ ] **Step 5: Commit** `fix: Grind level checks to the XP point the guide checks`.
+
+### Task 4: One gap scale at every level check
+
+User request (2026-11-18): every point where the harness compares the character's level with what the guide or quest expects reports the size of the gap, in levels, on one scale.
+
+**The scale.** The gap is fractional levels from real XP: `level + xp / xp.to_next(level)`, rounded to one decimal, using the existing "less than 0.1" wording below 0.05.
+- `< 2`: **low**. Add the sentence ` Gaps under 2 levels are within what the simulation's missing XP explains (no incidental kills or rested XP).`
+- `2 to < 4`: **medium**
+- `>= 4`: **high**
+
+**The checks:**
+
+| Check | Signal | When | Gap |
+|---|---|---|---|
+| Guide level check (`L` step, or the `LVL` tag on any step) | new `level-check` | the character arrived below the check point (a grind happened) | check point − level before the grind |
+| Accept below the required level | `below-level` (existing) | as today | levels short (existing); the scale adds **high** at ≥ 4 |
+| Quest above the character | `quest-red` / `quest-orange` (existing names) | judged at the **do step**: the first `C` or `K` step for the qid after its accept, or the `T` step if there is none. The colour band (Task 1, integer levels) decides whether a finding exists | `quest level − fractional character level` at the do step; severity comes from the scale, not the band |
+
+- **Not changed:** the non-combat exemption, grey (low, judged at the accept as today), and one colour finding per guide line, now keyed on the do-step line.
+- **Older logs** without the new data keep today's severities and wording.
+
+**Files:**
+- Create: `src/hwc/findings/gap.lua` with `gap.severity(g)`, `gap.text(g)` ("N.N" or "less than 0.1") and `gap.MARGIN_SENTENCE`. `below-level` uses it too, replacing its private rounding and wording helpers.
+- Modify:
+  - `src/hwc/driver/actions.lua`: record `out.grind.short` for level-check grinds as well (the point minus the fractional level before)
+  - `src/hwc/driver/run.lua`: emit `level-check`; move the colour judgement to the do step and carry `gap`, `do_action` and `accept_gap`
+  - `src/hwc/findings/group.lua`
+  - `src/hwc/findings/text.lua`
+  - `README.md` ("Level findings": the scale and the three checks)
+  - the report label fixtures if they change
+- Test: `spec/findings/gap_spec.lua`, `spec/driver/run_spec.lua`, `spec/driver/actions_other_spec.lua`, `spec/findings/group_spec.lua`, `spec/findings/text_spec.lua`
+
+**Wording:**
+- **level-check title:** `The guide's level check "<step name>" is reached N.N levels short`
+- **level-check sentence:** `The client ground K kills to reach the point the guide checks (level L<point>).` `<point>` is one of:
+  - `, within X XP of level L+1` (negative offset)
+  - `, with at least X XP` (positive offset)
+  - nothing (no offset)
+
+  Then the margin sentence when the gap is under 2.
+- **quest-red / quest-orange title:** `"<name>" is N.N levels above the character when the guide has you do it (<colour>)`
+- **quest-red / quest-orange sentence:** `The guide has a level C.C character do a level Q quest with combat objectives at this step; it was A.A levels above at the accept.` (The second clause appears only when `accept_gap` is known.)
+
+**Review Focus:**
+1. A quest accepted but never done (no C, K or T step played) gives no colour finding.
+2. A do step whose qid list holds several quests judges each quest.
+3. A level check that needs no grind gives no `level-check`.
+4. An older log without `gap` keeps the old severity.
+
+- [ ] **Step 1: Failing specs:**
+  - `gap.severity(1.9)=='low'`, `(2)=='medium'`, `(3.9)=='medium'`, `(4)=='high'`; `gap.text(0.04)=='less than 0.1'`.
+  - `level-check` emitted with gap 1.0 for a `LVL|2;-650` grind from level 1.81.
+  - Colour judged at the C step, not the accept: accepted at char 20 (quest 26 is red there), done at 23.7, so the gap is 2.3, severity medium, signal `quest-orange`.
+  - `below-level` gap 4.5 is high.
+  - Review Focus 1-4.
+- [ ] **Step 2: RED.**
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: GREEN.**
+  - Run the full suite, the slow suite and luacheck, plus `web/report` `npm test` if the fixtures change.
+  - Do the real Dwarf run.
+  - Paste the counts per signal and severity, and the high findings with their gaps.
+- [ ] **Step 5: Commit** `feat: Report the level gap at every check on one scale`.
