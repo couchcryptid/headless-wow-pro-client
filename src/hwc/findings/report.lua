@@ -195,6 +195,65 @@ function report.warnings(header, findings)
 end
 
 ---------------------------------------------------------------------------
+-- Notes: the run facts "About this run" explains, as finished plain sentences
+---------------------------------------------------------------------------
+
+local function ids(list) return table.concat(list, ", ") end
+
+-- Quests from jumped guides were never done, so findings next to a jump can be its noise.
+function report.jumped_note(jumped)
+  if not jumped or #jumped == 0 then return nil end
+  return "Jumped guides: " .. #jumped .. " (" .. ids(jumped) .. "). Their quests were never done, so "
+    .. "prerequisite, turn-in and leftover-quest findings after a jump may come from it."
+end
+
+-- WoWPro's Skip Dungeon Quests option. This client doesn't run dungeons, so the DUNGEON
+-- accepts it completes unshown are expected and stated here instead of as findings.
+function report.dungeons_note(d)
+  if not d or d.skip == nil then return nil end
+  local s = "Skip dungeon quests: " .. (d.skip and "on" or "off") .. " (WoWPro's EnableDungeons)"
+  local n = d.skipped or 0
+  if n > 0 then
+    s = s .. ". This client doesn't run dungeons, so the " .. plural(n, "dungeon accept") .. " WoWPro skipped "
+      .. (n == 1 and "isn't listed as a finding" or "aren't listed as findings")
+  end
+  return s .. "."
+end
+
+-- Quests taken in the guide the run stopped in and still in the log with no turn-in
+-- step reached (RunLog.carried): the run ended before it could tell whether they're defects.
+function report.carried_note(carried)
+  if not carried or #carried == 0 then return nil end
+  local quests = {}
+  for i, c in ipairs(carried) do
+    quests[i] = (c.qname and c.qname ~= "") and ('"' .. c.qname .. '" (' .. tostring(c.qid) .. ")")
+      or ("quest " .. tostring(c.qid))
+  end
+  return "Taken in the guide the run stopped in and still in the log, which that guide or the next may turn in "
+    .. "after the run's end, so not findings: " .. plural(#carried, "quest") .. ": " .. ids(quests) .. "."
+end
+
+function report.rank_note(rank)
+  if rank == nil then return nil end
+  return "Guide rank: " .. tostring(rank) .. " (WoWPro's setting for which optional steps are shown)."
+end
+
+function report.notes(header)
+  return setmetatable({
+    jumped = report.jumped_note(header.jumped),
+    dungeons = report.dungeons_note(header.dungeons),
+    carried = report.carried_note(header.carried),
+    rank = report.rank_note(header.rank),
+  }, OBJECT)
+end
+
+-- The folded sections' descriptions; the page puts the count in front.
+report.FOLDS = {
+  harness = "gaps in this client's WoW API stubs, not guide bugs",
+  expected = "the client clicked off by design (notes, repair-or-restock stops, guide ends)",
+}
+
+---------------------------------------------------------------------------
 -- The document
 ---------------------------------------------------------------------------
 
@@ -244,7 +303,10 @@ end
 local function labels(header)
   local combos = setmetatable({}, OBJECT)
   for _, c in ipairs(((header or {}).matrix or {}).combos or {}) do combos[c] = text.character(c) end
-  return { signals = text.SIGNALS, actions = text.VERBS, combos = combos, stops = text.STOPS }
+  local severities = {}
+  for sev, s in pairs(text.SEVERITY) do severities[sev] = s.word end
+  return { signals = text.SIGNALS, actions = text.VERBS, combos = combos, stops = text.STOPS,
+    severities = severities, folds = report.FOLDS }
 end
 
 local function finding_json(f, ctx)
@@ -270,6 +332,7 @@ function report.build(findings, header)
   for k, v in pairs(header) do h[k] = v end
   h.gaps = report.GAPS
   h.warnings = report.warnings(header, findings)
+  h.notes = report.notes(header)
   return { format = report.FORMAT, header = h, labels = labels(header), summary = summarize(findings), findings = out }
 end
 

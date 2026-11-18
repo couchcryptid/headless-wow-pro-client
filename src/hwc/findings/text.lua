@@ -60,13 +60,16 @@ text.SIGNALS = {
   ["missing-global"] = "Missing global",
 }
 
--- Why a character's run stopped early (driver/run.lua stop reasons). The normal
--- end, no-next-guide, has no entry; stuck has its own finding.
+-- Why a character's run stopped early: every stop reason driver/run.lua passes
+-- to Driver:stop except the normal end, no-next-guide, which has no entry.
+-- spec/findings/text_spec.lua scans run.lua so a new reason can't go unlabelled.
 text.STOPS = {
   iterations = "Hit its step limit",
   errors = "Too many addon errors",
   ["no-step"] = "No step to show",
   ["max-guides"] = "Reached --max-guides",
+  stuck = "Stuck on a step",
+  ["guide-cycle"] = "Guide loops back on itself",
 }
 
 local function lower_first(s) return (s:gsub("^%u", string.lower)) end

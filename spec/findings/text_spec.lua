@@ -40,8 +40,21 @@ describe("text constants", function()
       errors = "Too many addon errors",
       ["no-step"] = "No step to show",
       ["max-guides"] = "Reached --max-guides",
+      stuck = "Stuck on a step",
+      ["guide-cycle"] = "Guide loops back on itself",
     }, text.STOPS)
     assert.is_nil(text.STOPS["no-next-guide"])
+  end)
+  it("labels every stop reason driver/run.lua emits except no-next-guide", function()
+    local f = assert(io.open("src/hwc/driver/run.lua", "r"))
+    local src = f:read("*a")
+    f:close()
+    local n = 0
+    for reason in src:gmatch('self:stop%("([^"]+)"%)') do
+      n = n + 1
+      if reason ~= "no-next-guide" then assert.is_string(text.STOPS[reason], "no STOPS entry for " .. reason) end
+    end
+    assert.is_true(n > 0, "found no self:stop calls in run.lua")
   end)
   it("has no markdown helpers", function()
     assert.is_nil(text.anchor)

@@ -69,7 +69,8 @@ describe("report.build", function()
   it("marks empty lists as arrays without mutating inputs", function()
     local fs = findings()
     local doc = report.build(fs, header())
-    local s = json.encode(doc)
+    -- header.notes is a map, and this header gives it nothing to say: {} is right there.
+    local s = json.encode(doc):gsub('"notes":{}', "")
     assert.falsy(s:find("{}", 1, true))
     for _, f in ipairs(fs) do assert.is_nil(f.title); assert.is_nil(getmetatable(f.combos)) end
   end)
@@ -154,6 +155,56 @@ describe("report.build", function()
       ["Dwarf WARRIOR baseline"] = { high = { primary = 1, follow = 1 } },
       ["Gnome MAGE baseline"] = { high = { primary = 1, follow = 0 } },
     }, s.by_combo)
+  end)
+end)
+
+describe("labels and notes for wording the markdown carried", function()
+  it("labels severities and the folds", function()
+    local labels = report.build({}, {}).labels
+    assert.same({ high = "High", ["medium-high"] = "Medium-high", medium = "Medium", low = "Low" }, labels.severities)
+    assert.same({ harness = "gaps in this client's WoW API stubs, not guide bugs",
+      expected = "the client clicked off by design (notes, repair-or-restock stops, guide ends)" }, labels.folds)
+  end)
+
+  it("says what jumped guides mean, or nothing", function()
+    assert.equal("Jumped guides: 2 (GA, GB). Their quests were never done, so prerequisite, turn-in and "
+      .. "leftover-quest findings after a jump may come from it.", report.jumped_note({ "GA", "GB" }))
+    assert.is_nil(report.jumped_note(nil))
+    assert.is_nil(report.jumped_note({}))
+  end)
+
+  it("states the dungeon setting and the accepts it skipped, or nothing", function()
+    assert.equal("Skip dungeon quests: off (WoWPro's EnableDungeons).", report.dungeons_note({ skip = false, skipped = 0 }))
+    assert.equal("Skip dungeon quests: on (WoWPro's EnableDungeons). This client doesn't run dungeons, so the "
+      .. "1 dungeon accept WoWPro skipped isn't listed as a finding.", report.dungeons_note({ skip = true, skipped = 1 }))
+    assert.equal("Skip dungeon quests: on (WoWPro's EnableDungeons). This client doesn't run dungeons, so the "
+      .. "3 dungeon accepts WoWPro skipped aren't listed as findings.", report.dungeons_note({ skip = true, skipped = 3 }))
+    assert.is_nil(report.dungeons_note(nil))
+    assert.is_nil(report.dungeons_note({ skipped = 2 }))
+  end)
+
+  it("lists carried quests by name and id, or nothing", function()
+    assert.equal("Taken in the guide the run stopped in and still in the log, which that guide or the next may "
+      .. "turn in after the run's end, so not findings: 2 quests: \"Frostmane Hold\" (287), quest 313.",
+      report.carried_note({ { qid = 287, qname = "Frostmane Hold" }, { qid = 313 } }))
+    assert.equal("Taken in the guide the run stopped in and still in the log, which that guide or the next may "
+      .. "turn in after the run's end, so not findings: 1 quest: quest 9.", report.carried_note({ { qid = 9, qname = "" } }))
+    assert.is_nil(report.carried_note(nil))
+    assert.is_nil(report.carried_note({}))
+  end)
+
+  it("glosses the guide rank, or nothing", function()
+    assert.equal("Guide rank: 2 (WoWPro's setting for which optional steps are shown).", report.rank_note(2))
+    assert.is_nil(report.rank_note(nil))
+  end)
+
+  it("puts the notes in the header", function()
+    local notes = report.build({}, { rank = 3, jumped = { "GA" } }).header.notes
+    assert.equal(report.rank_note(3), notes.rank)
+    assert.equal(report.jumped_note({ "GA" }), notes.jumped)
+    assert.is_nil(notes.dungeons)
+    assert.is_nil(notes.carried)
+    assert.truthy(json.encode(report.build({}, {})):find('"notes"%s*:%s*{%s*}'))
   end)
 end)
 
