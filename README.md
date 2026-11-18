@@ -232,6 +232,54 @@ doesn't know is by design (spec §3) and is not reported. The variants:
 | `eng-ench` | Engineering, Enchanting |
 | `tailoring` | Tailoring |
 
+## Comparing runs
+
+`hwc diff` compares two findings files by finding id and tells you what a guide
+change fixed and what it broke. The loop: run on `main`, switch the addon to
+your branch, run again with the same flags from the same folder (Lua-error
+finding ids depend on the folder, see `--relative-to` above), then diff. The
+file names carry a content hash, so take both paths from each run's
+`hwc: wrote ...` line:
+
+```sh
+cd ~/Projects/WoW-Pro-Guides
+hwc run --race Dwarf --class WARRIOR --out /tmp/findings      # on main
+git switch my-guide-fix
+hwc run --race Dwarf --class WARRIOR --out /tmp/findings      # on the branch
+hwc diff /tmp/findings/2026-11-18-Dwarf-WARRIOR-baseline-1a2b3c4d.json \
+         /tmp/findings/2026-11-18-Dwarf-WARRIOR-baseline-5e6f7a8b.json
+```
+
+Pass the `.json` files; a `.html` path is refused. Add `--json` for the result
+as JSON (before or after the paths). Findings land in one of five categories:
+
+- **fixed**: in OLD, gone from NEW.
+- **new**: in NEW only.
+- **partly fixed**: in both, but NEW hits fewer characters.
+- **spread**: in both, but NEW hits more characters.
+- **unchanged**: in both on the same characters (counted, not listed).
+
+Only findings that count toward the report take part (not harness or expected
+ones), and only on the characters both runs played. A warning line says when
+the comparison may mislead:
+
+- different QuestieDB tag or build
+- different supplement
+- different guide filters
+- characters only in one run (left out)
+- runs started from different folders
+- different hwc versions
+- both runs are the same addon commit
+- uncommitted changes in the OLD or NEW run
+
+| Exit | Meaning |
+|---|---|
+| 0 | nothing new (fixed, partly fixed and unchanged may be present) |
+| 1 | NEW has new or spread findings |
+| 2 | usage error, unreadable file, invalid JSON, or the runs share no characters |
+
+Exit 1 means "new findings" here, as in `diff(1)` it means "files differ".
+
 ## Choosing guides
 
 By default a run plays the race's whole chain. `--include PATTERN` and

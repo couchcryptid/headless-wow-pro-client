@@ -843,3 +843,147 @@ describe("cli init, doctor and sync questie", function()
     assert.equal("QuestieDB none \226\134\146 v1.1.2 (build e1652ce)\nok   luajit: fine\n", r[2])
   end)
 end)
+
+describe("hwc diff", function()
+  local cli = require("hwc.cli")
+  local jsonlib = require("hwc.json")
+  local DWARF, GNOME = "Dwarf WARRIOR baseline", "Gnome MAGE baseline"
+
+  local function doc(findings, header)
+    local h = {
+      addon = { git = true, branch = "main", commit = "aaaaaaa", dirty = false },
+      catalog = { questie = { tag = "v1.1.2", build = "e1652ce" }, supplement = { present = false } },
+      client = { commit = "c1" },
+      matrix = { combos = { DWARF, GNOME } },
+      paths_relative_to = "WoW-Pro-Guides",
+    }
+    for k, v in pairs(header or {}) do h[k] = v end
+    return { format = 2, header = h, findings = findings or {} }
+  end
+
+  local function finding(id)
+    return {
+      id = id, combos = { DWARF }, severity = "high", signal = "never-shown-accept",
+      title = id, file = "WoWPro_Leveling/Forever/Alliance/01_12_Dun_Morogh.lua", line = 10,
+    }
+  end
+
+  local function put(dir, name, d)
+    local path = dir .. "/" .. name
+    write(path, type(d) == "string" and d or jsonlib.encode(d))
+    return path
+  end
+
+  local function run(args, env)
+    local out, text = capture()
+    local err, etext = capture()
+    local code = cli.main(args, out, err, env or env_at(tmpdir()))
+    return code, text(), etext()
+  end
+
+  it("exits 0 and prints the summary when nothing is new", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({ finding("F-1") }))
+    local b = put(dir, "b.json", doc({ finding("F-1") }))
+    local code, out = run({ "diff", a, b })
+    assert.equal(0, code)
+    assert.matches("no changes", out)
+  end)
+
+  it("exits 1 when NEW has a new finding", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({}))
+    local b = put(dir, "b.json", doc({ finding("F-2") }))
+    local code, out = run({ "diff", a, b })
+    assert.equal(1, code)
+    assert.matches("F%-2", out)
+  end)
+
+  it("prints the result as JSON with --json", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({}))
+    local b = put(dir, "b.json", doc({}))
+    local code, out = run({ "diff", a, b, "--json" })
+    assert.equal(0, code)
+    local r = require("dkjson").decode(out)
+    for _, k in ipairs({ "counts", "warnings", "fixed", "new", "partly_fixed", "spread" }) do
+      assert.is_not_nil(r[k], k)
+    end
+    assert.matches('"new":%[%]', out)
+  end)
+
+  it("accepts --json before or after the paths", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({}))
+    local b = put(dir, "b.json", doc({}))
+    local _, after = run({ "diff", a, b, "--json" })
+    local _, before = run({ "diff", "--json", a, b })
+    assert.equal(after, before)
+    assert.matches('"counts"', before)
+  end)
+
+  it("exits 2 naming a missing file", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({}))
+    local code, _, err = run({ "diff", a, dir .. "/nope.json" })
+    assert.equal(2, code)
+    assert.matches("hwc: cannot read .*/nope.json", err)
+    assert.matches("see hwc %-%-help", err)
+    assert.is_nil(err:match("Usage:"))
+  end)
+
+  it("exits 2 for a .html path with a hint", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({}))
+    local h = put(dir, "b.html", "<html></html>")
+    local code, _, err = run({ "diff", a, h })
+    assert.equal(2, code)
+    assert.matches("use the %.json beside it", err)
+  end)
+
+  it("exits 2 for invalid JSON and for no shared characters", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({}))
+    local bad = put(dir, "bad.json", "{not json")
+    local code, _, err = run({ "diff", a, bad })
+    assert.equal(2, code)
+    assert.matches("not valid JSON", err)
+    local scalar = put(dir, "scalar.json", "42")
+    code, _, err = run({ "diff", a, scalar })
+    assert.equal(2, code)
+    assert.matches("not valid JSON", err)
+    local other = put(dir, "other.json", doc({}, { matrix = { combos = { "Human PRIEST baseline" } } }))
+    code, _, err = run({ "diff", a, other })
+    assert.equal(2, code)
+    assert.matches("^hwc: ", err)
+  end)
+
+  it("exits 2 with fewer or more than two paths", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({}))
+    local code, _, err = run({ "diff", a })
+    assert.equal(2, code)
+    assert.matches("hwc: diff needs", err)
+    code = run({ "diff", a, a, a })
+    assert.equal(2, code)
+  end)
+
+  it("needs no WoW-Pro folder", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({}))
+    local code = run({ "diff", a, a }, env_at(tmpdir()))
+    assert.equal(0, code)
+  end)
+
+  it("handles a non-git side and the same file twice", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({ finding("F-1") }))
+    local code, out = run({ "diff", a, a })
+    assert.equal(0, code)
+    assert.matches("no changes", out)
+    assert.matches("same addon commit", out)
+    local nogit = put(dir, "nogit.json", doc({}, { addon = { git = false } }))
+    code = run({ "diff", nogit, nogit })
+    assert.equal(0, code)
+  end)
+end)

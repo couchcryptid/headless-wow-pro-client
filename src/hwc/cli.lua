@@ -10,6 +10,7 @@ Usage: hwc [-h|--help]
        hwc matrix [--race RACE]... [--races LIST]
                   [--include PATTERN]... [--exclude PATTERN]...
                   [--date D] [--out DIR] [--relative-to DIR]
+       hwc diff   OLD.json NEW.json [--json]
        hwc init
        hwc doctor [--json]
        hwc sync questie [--tag TAG]
@@ -23,6 +24,7 @@ Commands:
   quest         Print a quest from the catalog, with its sources, as JSON
   run           Play one character along the guide chain; write findings and a run log
   matrix        Play every race x class (and profession variant); write findings and run logs
+  diff          Compare two findings files: fixed, new, partly fixed (exit 1 if anything is new)
   init          Download QuestieDB (latest Forever release) into ~/.hwc and check the setup
   doctor        Check LuaJIT, rocks, tools, the WoW-Pro folder, QuestieDB and the supplement
   sync questie  Install the newest QuestieDB Forever release (or --tag TAG) and make it active
@@ -34,7 +36,7 @@ Options:
                 Orc, Tauren, Troll, Undead, SkyborneHorde (Horde)
   --class CLASS Player class token, e.g. WARRIOR (default WARRIOR); must be one the
                 race can play in Forever
-  --json        Print the boot result as JSON
+  --json        Print the boot result or the diff as JSON
   --variant V   Profession variant: baseline, secondary, alch-herb, bs-mining, lw-skin,
                 eng-ench, tailoring (default baseline)
   --races LIST  Comma list of races for matrix, merged with --race (default Dwarf,Gnome)
@@ -443,6 +445,40 @@ local function sync_line(res)
   return "QuestieDB " .. (res.from or "none") .. " \226\134\146 " .. res.to .. " (build " .. tostring(res.build):sub(1, 7) .. ")\n"
 end
 
+-- hwc diff OLD.json NEW.json [--json]: needs no WoW-Pro folder. Exit 0 when
+-- nothing is new, 1 when something is, 2 when the input can't be compared.
+local function run_diff(args, out, err)
+  local function fail(msg)
+    err:write("hwc: ", msg, "\nsee hwc --help\n")
+    return 2
+  end
+  local paths, as_json = {}, false
+  for i = 2, #args do
+    if args[i] == "--json" then as_json = true else paths[#paths + 1] = args[i] end
+  end
+  if #paths ~= 2 then return fail("diff needs two findings files: hwc diff OLD.json NEW.json [--json]") end
+  local docs = {}
+  for i, path in ipairs(paths) do
+    if path:match("%.html$") then return fail(path .. " is the report page; use the .json beside it") end
+    local f = io.open(path, "r")
+    if not f then return fail("cannot read " .. path) end
+    local text = f:read("*a")
+    f:close()
+    local ok, decoded = pcall(require("dkjson").decode, text)
+    if not ok or type(decoded) ~= "table" then return fail(path .. " is not valid JSON") end
+    docs[i] = decoded
+  end
+  local diff = require("hwc.findings.diff")
+  local result, cerr = diff.compare(docs[1], docs[2])
+  if not result then return fail(cerr) end
+  if as_json then
+    out:write(require("hwc.json").encode(result, { indent = true }), "\n")
+  else
+    out:write(diff.render(result))
+  end
+  return diff.exit_code(result)
+end
+
 -- hwc init / doctor / sync questie: they work on ~/.hwc, so they need no WoW-Pro
 -- folder. Returns an exit status.
 local function run_store(cmd, args, out, err, env)
@@ -641,6 +677,7 @@ function M.main(args, out, err, env)
   if args[1] == "init" or args[1] == "doctor" or args[1] == "sync" then
     return run_store(args[1], args, out, err, env)
   end
+  if args[1] == "diff" then return run_diff(args, out, err) end
   if args[1] == "quest" then
     local id = tonumber(args[2] or "")
     if not id or #args > 2 then
