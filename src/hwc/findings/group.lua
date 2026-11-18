@@ -30,7 +30,7 @@ end
 -- of silently defaulting. Dungeon accepts WoWPro's Skip Dungeon Quests completes are
 -- run info (RunLog.dungeon_skips), not signals, so they have no entry here.
 local SEVERITY = {
-  ["never-shown-accept"] = "high", ["orphan-turnin"] = "high", ["accept-refused"] = "high",
+  ["never-shown-accept"] = "high", ["hidden-use-step"] = "high", ["orphan-turnin"] = "high", ["accept-refused"] = "high",
   ["wrong-race-class"] = "high", ["log-full"] = "high",
   ["lua-error"] = "high", ["below-level"] = "medium-high",
   ["did-not-advance"] = "medium", stuck = "medium", ["manual-completion"] = "medium",

@@ -245,6 +245,8 @@ function text.title(f)
   local nm = name_of(f)
   if s == "never-shown-accept" then
     return nm .. " is never offered"
+  elseif s == "hidden-use-step" then
+    return nm .. " is never shown"
   elseif s == "accept-refused" then
     local kind = kind_of(f)
     if kind then
@@ -317,6 +319,15 @@ local function clauses(f, ctx, linked)
         "The engine said: " .. quoted(f.why) .. "."
     end
     return "The guide tells you to accept this quest, but WoWPro never shows the step and gave no reason."
+  elseif s == "hidden-use-step" then
+    local ids = {}
+    for id in pairs(f.loot or {}) do ids[#ids + 1] = tonumber(id) end
+    table.sort(ids)
+    for k, id in ipairs(ids) do ids[k] = tostring(id) end
+    local many = #ids > 1
+    return "WoWPro hides this use step until " .. (many and "items " or "item ") .. table.concat(ids, ", ")
+      .. (many and " are" or " is") .. " in bags, and it wasn't while the run passed here, so the client never used item "
+      .. tostring(f.use) .. "."
   elseif s == "accept-refused" then
     local kind = kind_of(f)
     if kind then

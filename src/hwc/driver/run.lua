@@ -15,6 +15,10 @@ local xp = require("hwc.world.xp")
 
 local run = {}
 
+-- WoWPro hides a non-optional U step that has an L tag until every L item is in
+-- bags, and records this why (WoWPro_Broker.lua:2182).
+run.HIDDEN_USE_WHY = "You don't have the required items for this step."
+
 run.DEFAULTS = {
   max_iterations = 20000, -- loop passes before the iterations watchdog
   stuck_limit = 5,        -- same (gid, index) acted on more than this many times in a row
@@ -152,6 +156,9 @@ function Driver:refresh_why()
   for _, i in ipairs(info.accepts) do
     if not info.seen[i] then info.why[i] = self.E:why(i) end
   end
+  for _, i in ipairs(info.uses) do
+    if not info.seen[i] then info.why[i] = self.E:why(i) end
+  end
 end
 
 -- A guide the engine loaded: capture its steps while its arrays are live, then
@@ -163,14 +170,16 @@ function Driver:open(gid)
   if included and not included[gid] then return self:jump(gid) end
   self.gid = gid
   local g = E:guide(gid)
-  local info = { file = g.file, steps = {}, accepts = {}, seen = {}, why = {}, sticky_done = {}, max_acted = 0, passes = {} }
+  local info = { file = g.file, steps = {}, accepts = {}, uses = {}, seen = {}, why = {}, sticky_done = {}, max_acted = 0, passes = {} }
   self.info[gid] = info
   for i = 1, E:num_steps() do
     local s = E:step(i)
     if s then
       info.steps[i] = { action = s.action, name = s.name, qids = copy_array(s.qids), line = s.line,
-        ordinal = s.ordinal, dungeon = s.tags and s.tags.dungeon ~= nil, prof = s.tags and s.tags.prof }
+        ordinal = s.ordinal, dungeon = s.tags and s.tags.dungeon ~= nil, prof = s.tags and s.tags.prof,
+        use = s.tags and s.tags.use, loot = s.tags and s.tags.lootitem, optional = s.tags and s.tags.optional }
       if s.action == "A" then info.accepts[#info.accepts + 1] = i end
+      if s.action == "U" and s.tags and s.tags.use and s.tags.lootitem then info.uses[#info.uses + 1] = i end
     end
   end
   self.log.guides[#self.log.guides + 1] = gid
@@ -263,6 +272,25 @@ function Driver:close(gid, full)
         sig.confidence = self:confidence(sig.qid)
         self.log.signals[#self.log.signals + 1] = sig
       end
+    end
+  end
+  -- A non-optional U step with an L tag is hidden until the L items are in bags
+  -- (WoWPro_Broker.lua:2182); the same unshown conditions as an accept apply.
+  for _, i in ipairs(info.uses) do
+    local s = info.steps[i]
+    if not info.seen[i] and i < limit and not run.already_done(info.why[i]) and not s.optional
+        and info.why[i] and info.why[i]:find(run.HIDDEN_USE_WHY, 1, true) then
+      local prev, nxt = info.steps[i - 1], info.steps[i + 1]
+      local sig = {
+        signal = "hidden-use-step", gid = gid, file = info.file, line = s.line, ordinal = s.ordinal,
+        action = s.action, name = s.name, qid = s.qids[1], why = info.why[i], level = self:level_passing(info, i),
+        use = s.use, loot = s.loot, log = self:log_qids(),
+        before = prev and { name = prev.name, action = prev.action } or nil,
+        after = nxt and { name = nxt.name, action = nxt.action } or nil,
+      }
+      sig.qname = self:quest_name(sig.qid)
+      sig.confidence = self:confidence(sig.qid)
+      self.log.signals[#self.log.signals + 1] = sig
     end
   end
 end

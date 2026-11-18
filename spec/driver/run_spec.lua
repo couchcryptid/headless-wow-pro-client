@@ -353,6 +353,59 @@ describe("driver.run", function()
     assert.same({ { gid = "G1", file = "g1.lua", line = 102, qid = 3, name = "Deadmines" } }, log.dungeon_skips)
   end)
 
+  -- WoWPro hides a non-optional U step with an L tag until every L item is in bags
+  -- (WoWPro_Broker.lua:2182, why "You don't have the required items for this step.").
+  local HIDDEN_USE = "You don't have the required items for this step."
+  local function use_step(extra)
+    local s = { action = "U", name = "Scroll", qids = { 1016 }, hidden = true, why = HIDDEN_USE,
+      tags = { use = "5456", lootitem = { [5455] = 1 } } }
+    for k, v in pairs(extra or {}) do s[k] = v end
+    return s
+  end
+
+  it("records hidden-use-step for a U step hidden until its L items are in bags", function()
+    local steps = {
+      { action = "A", name = "Q", qids = { 1016 } },
+      { action = "l", name = "Q", qids = { 1016 } },
+      use_step(),
+      { action = "T", name = "Q", qids = { 1016 } },
+      { action = "D", name = "Done" },
+    }
+    local log = drive(one_guide(steps), { G1 = { { complete = { 1, 2, 4, 5 }, done = true } } })
+    local hits = signals(log, "hidden-use-step")
+    assert.equal(1, #hits)
+    assert.equal(103, hits[1].line)
+    assert.equal("5456", hits[1].use)
+    assert.same({ [5455] = 1 }, hits[1].loot)
+    assert.equal(1016, hits[1].qid)
+    assert.equal("l", hits[1].before.action)
+    assert.equal("T", hits[1].after.action)
+  end)
+
+  it("records no hidden-use-step without an L tag, for an optional step, or for another why", function()
+    local steps = {
+      { action = "R", name = "a" },
+      use_step({ tags = { use = "5456" } }),
+      use_step({ tags = { use = "5456", lootitem = { [5455] = 1 }, optional = true } }),
+      use_step({ why = "Some other reason." }),
+      { action = "D", name = "Done" },
+    }
+    local log = drive(one_guide(steps), { G1 = { { complete = { 1, 5 }, done = true } } })
+    assert.same({}, signals(log, "hidden-use-step"))
+  end)
+
+  it("keeps a hidden A step with a use item as never-shown-accept", function()
+    local steps = {
+      { action = "R", name = "a" },
+      { action = "A", name = "Q", qids = { 5 }, hidden = true, why = HIDDEN_USE,
+        tags = { use = "5456", lootitem = { [5455] = 1 } } },
+      { action = "D", name = "Done" },
+    }
+    local log = drive(one_guide(steps), { G1 = { { complete = { 1, 3 }, done = true } } })
+    assert.equal(1, #signals(log, "never-shown-accept"))
+    assert.same({}, signals(log, "hidden-use-step"))
+  end)
+
   it("still flags a hidden DUNGEON accept the engine did not complete", function()
     local steps = {
       { action = "R", name = "a" },

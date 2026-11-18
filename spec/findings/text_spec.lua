@@ -127,6 +127,18 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     assert.equal("The guide tells you to accept this quest, but WoWPro hides the step because its prerequisite, "
       .. "quest 95213, is never completed.", s)
   end)
+  it("hidden-use-step names the item the step needs and the item it uses", function()
+    local f = F({ signal = "hidden-use-step", name = "Divined Scroll", qid = 1016, use = "5456", loot = { [5455] = 1 } })
+    local t, s = both(f)
+    assert.equal('"Divined Scroll" is never shown', t)
+    assert.equal("WoWPro hides this use step until item 5455 is in bags, and it wasn't while the run passed here, "
+      .. "so the client never used item 5456.", s)
+  end)
+  it("hidden-use-step lists several loot items ascending", function()
+    local f = F({ signal = "hidden-use-step", use = "5456", loot = { [9] = 1, [5455] = 2, [12] = 1 } })
+    assert.equal("WoWPro hides this use step until items 9, 12, 5455 are in bags, and it wasn't while the run "
+      .. "passed here, so the client never used item 5456.", text.sentence(f, ONE))
+  end)
   it("never-shown-accept links the prerequisite finding when there is one", function()
     local f = F({ signal = "never-shown-accept", name = "Next", qid = 5,
       why = "NextStep:PRE&(95213): A mandatory prereq was not met: 95213" })
