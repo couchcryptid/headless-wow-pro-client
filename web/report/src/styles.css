@@ -27,6 +27,9 @@
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
   color-scheme: light dark;
+  /* Card side padding and per-level follow-on indent; both shrink in narrow windows. */
+  --card-pad: 14px;
+  --kids-indent: 14px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -279,8 +282,9 @@ a { color: var(--accent); }
   border: 1px solid var(--line);
   border-left: 4px solid var(--sev);
   border-radius: 6px;
-  padding: 12px 14px 8px;
+  padding: 12px var(--card-pad) 8px;
   margin-bottom: 10px;
+  overflow-wrap: anywhere;
   scroll-margin-top: calc(56px + var(--mini-h, 0px));
 }
 .card:focus { outline: none; }
@@ -354,8 +358,21 @@ a { color: var(--accent); }
 .detail pre { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* ---------- nested follow-ons ---------- */
-.kids { margin: 10px 0 4px 2px; padding-left: 14px; border-left: 2px solid var(--line); }
+/* Ruling R14: real chains run about 8 deep, so the indent stops growing after depth 3.
+   Depth 1-3 indent by the rule plus --kids-indent inside the parent's padding. From depth 4
+   on, the container cancels the parent card's padding and borders, so each deeper card is
+   exactly as wide as its parent: still nested (its own severity edge), no narrower. */
+.kids { margin: 10px 0 4px 2px; padding-left: var(--kids-indent); border-left: 2px solid var(--line); }
 .kids .card { margin-bottom: 8px; }
+.kids .kids .kids .kids {
+  margin-left: calc(-1 * (var(--card-pad) + 4px));
+  margin-right: calc(-1 * (var(--card-pad) + 1px));
+  /* and its bottom edge: the last card's border lands on the parent's, not 12px below it */
+  margin-bottom: calc(-8px - 1px);
+  padding-left: 0;
+  border-left: 0;
+}
+.kids .kids .kids .kids > .card:last-child { margin-bottom: 0; }
 
 /* ---------- empty ---------- */
 .empty { margin: 28px 0; font-size: 18px; font-weight: 600; color: var(--muted); }
@@ -385,6 +402,7 @@ a { color: var(--accent); }
 
 /* ---------- narrow windows: the sidebar becomes a panel above the content ---------- */
 @media (max-width: 899px) {
+  :root { --card-pad: 10px; --kids-indent: 6px; }
   .layout { display: block; }
   .side { position: static; height: auto; padding: 0; border-right: 0; border-bottom: 1px solid var(--line); }
   .side-toggle {
