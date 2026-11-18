@@ -31,10 +31,18 @@ function update.report(ui, res)
   for _, tag in ipairs(res.skipped or {}) do ui:result("skipped " .. tag .. ": no Forever build\n") end
 end
 
+-- Show curl's progress bar only when a person is watching and not --quiet.
+function update.download_mode(ui)
+  return (ui.tty and ui.level ~= "quiet") and "terminal" or "capture"
+end
+
 function update.run(ctx)
   local root = update.store_root(ctx)
   if not root then return 2 end
-  local res, err = require("hwc.questie.install").sync(root, { tag = ctx.opts.tag })
+  local res, err = require("hwc.questie.install").sync(root, {
+    tag = ctx.opts.tag,
+    download_mode = update.download_mode(ctx.ui),
+  })
   if not res then
     ctx.ui:error(strip(err))
     return 1

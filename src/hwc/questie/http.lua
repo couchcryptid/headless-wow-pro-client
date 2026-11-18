@@ -10,23 +10,67 @@ function M.quote(s)
   return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
 end
 
--- Runs a shell command, returns its stdout and its exit code. The exit code is
--- echoed by the shell because popen():close() reports it differently across
--- LuaJIT builds.
-local function sh(cmd)
-  local p = io.popen("(" .. cmd .. ") 2>/dev/null; echo \"__hwc_exit=$?\"", "r")
-  if not p then return nil, -1 end
+-- Runs a shell command, returns its stdout, its exit code and (capture mode)
+-- its stderr text. The exit code is echoed by the shell because
+-- popen():close() reports it differently across LuaJIT builds.
+-- stderr_mode: "discard" (default) drops stderr, "capture" returns it as the
+-- third value, "terminal" leaves it attached to the terminal.
+local function sh(cmd, stderr_mode)
+  stderr_mode = stderr_mode or "discard"
+  local redirect, errfile = "", nil
+  if stderr_mode == "discard" then
+    redirect = " 2>/dev/null"
+  elseif stderr_mode == "capture" then
+    errfile = os.tmpname()
+    redirect = " 2>" .. M.quote(errfile)
+  end
+  local p = io.popen("(" .. cmd .. ")" .. redirect .. "; echo \"__hwc_exit=$?\"", "r")
+  local errtext
+  local function finish()
+    if errfile then
+      local f = io.open(errfile, "rb")
+      if f then
+        errtext = f:read("*a") or ""
+        f:close()
+      else
+        errtext = ""
+      end
+      os.remove(errfile)
+    end
+  end
+  if not p then
+    finish()
+    return nil, -1, errtext
+  end
   local out = p:read("*a") or ""
   p:close()
+  finish()
   local body, code = out:match("^(.*)__hwc_exit=(%d+)%s*$")
-  if not body then return out, -1 end
-  return body, tonumber(code)
+  if not body then return out, -1, errtext end
+  return body, tonumber(code), errtext
+end
+M.sh = sh
+
+-- The last non-empty line of curl's stderr, trimmed; nil when there is none.
+local function last_line(errtext)
+  local last
+  for line in tostring(errtext or ""):gmatch("[^\r\n]+") do
+    local t = line:match("^%s*(.-)%s*$")
+    if t ~= "" then last = t end
+  end
+  return last
+end
+
+local function failure(what, url, code, errtext)
+  local line = last_line(errtext)
+  if line then return "hwc: " .. what .. " " .. url .. " failed: " .. line end
+  return "hwc: " .. what .. " " .. url .. " failed (curl exit " .. code .. ")"
 end
 
 function M.get_json(url)
-  local body, code = sh("curl -fsSL --max-time 15 -H " .. M.quote(ACCEPT) .. " " .. M.quote(url))
+  local body, code, errtext = sh("curl -fsSL --max-time 15 -H " .. M.quote(ACCEPT) .. " " .. M.quote(url), "capture")
   if code ~= 0 then
-    return nil, "hwc: GET " .. url .. " failed (curl exit " .. code .. ")"
+    return nil, failure("GET", url, code, errtext)
   end
   local value = dkjson.decode(body)
   if type(value) ~= "table" then
@@ -35,10 +79,18 @@ function M.get_json(url)
   return value
 end
 
-function M.download(url, path)
-  local _, code = sh("curl -fsSL --max-time 300 -o " .. M.quote(path) .. " " .. M.quote(url))
+-- mode "terminal" shows curl's progress bar and error on the terminal;
+-- anything else is silent and reports curl's error text in the message.
+function M.download(url, path, mode)
+  local terminal = mode == "terminal"
+  local flags = terminal and "-fL -#" or "-fsSL"
+  local _, code, errtext = sh("curl " .. flags .. " --max-time 300 -o " .. M.quote(path) .. " " .. M.quote(url),
+    terminal and "terminal" or "capture")
   if code ~= 0 then
-    return nil, "hwc: download " .. url .. " failed (curl exit " .. code .. ")"
+    if terminal then
+      return nil, "hwc: download " .. url .. " failed (curl exit " .. code .. "; see curl's message above)"
+    end
+    return nil, failure("download", url, code, errtext)
   end
   return true
 end

@@ -72,10 +72,10 @@ end
 
 -- Fills `stage` with a verified, checksummed copy of the release. Returns
 -- true or nil, err; the caller removes the stage dir on failure.
-local function fill_stage(sel, stage, deps)
+local function fill_stage(sel, stage, deps, mode)
   local zip = stage .. "/asset.zip"
   mkdirs(stage)
-  local ok, err = deps.download(sel.asset_url, zip)
+  local ok, err = deps.download(sel.asset_url, zip, mode)
   if not ok then return nil, err or ("hwc: download " .. sel.asset_url .. " failed") end
   local size = lfs.attributes(zip, "size")
   if size ~= sel.asset_size then return nil, size_error(size, sel.asset_size) end
@@ -139,7 +139,7 @@ function M.sync(root, opts, deps)
   local existed = exists(target)
   local stage = root .. "/questie/" .. stage_name(sel.tag)
   local ok, installed, ierr = pcall(function()
-    local good, e = fill_stage(sel, stage, deps)
+    local good, e = fill_stage(sel, stage, deps, opts.download_mode)
     if not good then return nil, e end
     return place(stage, target)
   end)
@@ -157,10 +157,10 @@ function M.sync(root, opts, deps)
   return result
 end
 
-function M.init(root, deps)
+function M.init(root, deps, opts)
   local dir = home.active_dir(root)
   if dir and M.verify(dir) then return { already = true } end
-  local res, err = M.sync(root, {}, deps)
+  local res, err = M.sync(root, { download_mode = opts and opts.download_mode }, deps)
   if not res then return nil, err end
   return { already = false, sync_result = res }
 end

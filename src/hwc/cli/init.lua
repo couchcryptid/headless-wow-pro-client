@@ -10,7 +10,7 @@ return {
   run = function(ctx)
     local root = update.store_root(ctx)
     if not root then return 2 end
-    local res, err = require("hwc.questie.install").init(root)
+    local res, err = require("hwc.questie.install").init(root, nil, { download_mode = update.download_mode(ctx.ui) })
     if not res then
       ctx.ui:error(update.strip(err))
       return 1
