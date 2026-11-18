@@ -173,8 +173,10 @@ function Driver:refresh_why()
   for _, i in ipairs(info.accepts) do
     if not info.seen[i] then info.why[i] = self.E:why(i) end
   end
+  -- A U step performed off-guide keeps the why that hid it: the turn-in that follows
+  -- turns its why into "QID is complete", which would hide its hidden-use-step.
   for _, i in ipairs(info.uses) do
-    if not info.seen[i] then info.why[i] = self.E:why(i) end
+    if not info.seen[i] and not info.offguide[i] then info.why[i] = self.E:why(i) end
   end
 end
 
@@ -187,7 +189,8 @@ function Driver:open(gid)
   if included and not included[gid] then return self:jump(gid) end
   self.gid = gid
   local g = E:guide(gid)
-  local info = { file = g.file, steps = {}, accepts = {}, uses = {}, seen = {}, why = {}, sticky_done = {}, max_acted = 0, passes = {} }
+  local info = { file = g.file, steps = {}, accepts = {}, uses = {}, seen = {}, why = {}, sticky_done = {}, retried = {}, offguide = {},
+    max_acted = 0, passes = {} }
   self.info[gid] = info
   for i = 1, E:num_steps() do
     local s = E:step(i)
@@ -483,11 +486,26 @@ end
 
 -- Sets out.explained when it records a signal that says why the step was refused:
 -- the driver then clicks the step off without a did-not-advance as well.
+-- A prerequisite refusal names the prerequisites that aren't done (QuestLog:refusal)
+-- and their names, keyed by the id as a string, so the finding can say which quest is
+-- missing and the linker can attach it under that quest's own failure. any_of: the list
+-- is a pre_single one (any one of them would do).
+function Driver:missing_prerequisites(sig, missing, any_of)
+  local ids, names = {}, {}
+  for i, id in ipairs(missing) do
+    ids[i] = id
+    names[tostring(id)] = self:quest_name(id)
+  end
+  sig.missing, sig.missing_names = ids, names
+  sig.missing_any = any_of and true or nil
+end
+
 function Driver:refusals(cur, out)
   if out.kind == "refused" then
     local r = out.reason
     if REFUSAL_SIGNALS[r] then
       local sig = self:signal(REFUSAL_SIGNALS[r], cur, { qid = out.qid, reason = r, outcome = out.kind })
+      if r == "prerequisite" and out.missing then self:missing_prerequisites(sig, out.missing, out.missing_any) end
       if r == "reputation" then self:reputation_refusal(sig) end
       out.explained = true
     elseif r == "not-in-log" and (cur.action == "T" or cur.action == "C") then
@@ -537,8 +555,82 @@ function Driver:sticky_row(rows, info)
   return nil
 end
 
+-- The ids of qid's item objectives the bags are short of, as a set; empty when
+-- the quest isn't in the log.
+function Driver:short_items(qid)
+  local log = self.W.log
+  local entry = qid and log:get(qid)
+  local short = {}
+  if not entry or not entry.quest then return short end
+  for i, obj in ipairs(entry.quest.objectives or {}) do
+    if obj.kind == "item" and type(obj.ids) == "table" and log:have(qid, i) < obj.count then
+      for _, id in ipairs(obj.ids) do short[id] = true end
+    end
+  end
+  return short
+end
+
+-- Design 2026-11-18-hidden-use-turnin: a T refused "incomplete" while an item objective
+-- of its quest is short, in a guide with a U step for that quest that the engine never
+-- showed (info.seen), holds back for missing items (why has run.HIDDEN_USE_WHY,
+-- WoWPro_Broker.lua:2182) and whose L tag names a short item. In game the player
+-- combines the item themselves and turns in. The player can only use an item they
+-- hold: the U step's use item (U|<id>|, its first id) must be in the bags, and the
+-- harness never supplies it (perform_use adds a missing use item, so without this
+-- check the off-guide use would invent its reagent). A U step already performed
+-- off-guide is not performed again (a second T for the quest after a failed retry).
+-- Returns the lowest such U index, or nil.
+function Driver:hidden_use_for(step, out, info)
+  if step.action ~= "T" or out.kind ~= "refused" or out.reason ~= "incomplete" then return nil end
+  if info.retried[step.index] then return nil end -- one retry per T step
+  local qid = out.qid
+  local short = self:short_items(qid)
+  if next(short) == nil then return nil end
+  for _, i in ipairs(info.uses) do
+    local s = info.steps[i]
+    local why = info.why[i]
+    local use_id = tonumber(tostring(s.use):match("%d+"))
+    if not info.seen[i] and not info.offguide[i] and contains(s.qids, qid) and type(why) == "string"
+      and why:find(run.HIDDEN_USE_WHY, 1, true)
+      and use_id and self.W.player:item_count(use_id) > 0 then
+      for _, it in ipairs(actions.parse_loot(s.loot)) do
+        if short[it.id] then return i end
+      end
+    end
+  end
+  return nil
+end
+
+-- Performs hidden U step i off-guide (the same actions.perform a shown U step gets, so
+-- its events, levels and settle apply) and logs it in log.offguide. It stays unseen, so
+-- the guide still closes with its hidden-use-step. Returns false when the action's
+-- settle left the guide (the T step is no longer loaded to retry).
+function Driver:perform_offguide(step, i, info)
+  info.offguide[i] = true
+  local ustep = self.E:step(i)
+  ustep.gid = ustep.gid or self.gid
+  local uout = self.perform(self.ctx, ustep)
+  self:check_settle(uout.settle, ustep)
+  local o = self.log.offguide
+  o[#o + 1] = { gid = self.gid, file = info.file, line = info.steps[i].line, qid = (ustep.qids or {})[1],
+    action = "U", for_line = step.line, events = copy_array(uout.events), levels = uout.levels }
+  return self.E:gid() == self.gid
+end
+
+-- An R step's arrival credits (actions credit_arrival's out.arrivals): one
+-- log.arrivals record per objective credited.
+function Driver:record_arrivals(step, out, info)
+  local a = self.log.arrivals
+  for _, index in ipairs(out.arrivals or {}) do
+    a[#a + 1] = { gid = step.gid or self.gid, file = info.file, line = step.line, qid = out.qid, objective = index }
+  end
+end
+
 -- Performs one shown step: before/after bookkeeping, wrong-race-class, the action,
 -- its snapshot, settle-limit and refusal signals. Returns the outcome and snapshot.
+-- A turn-in refused for an item a hidden U step makes gets that U step performed
+-- off-guide and one more turn-in (Driver:hidden_use_for); the retry's outcome is the
+-- step's outcome.
 function Driver:act(step, rows, info)
   for _, s in ipairs(self.awaiting) do s.after = { name = step.name, action = step.action } end
   self.awaiting = {}
@@ -548,9 +640,23 @@ function Driver:act(step, rows, info)
   local why = self.E:why(step.index)
   self.acting = { gid = step.gid, index = step.index, why = why }
   local out = self.perform(self.ctx, step)
+  local use = self:hidden_use_for(step, out, info)
+  local checked = false -- whether out.settle was already checked
+  if use then
+    info.retried[step.index] = true
+    self:check_settle(out.settle, step)
+    checked = true
+    if self:perform_offguide(step, use, info) then
+      out = self.perform(self.ctx, step)
+      checked = false
+    end
+  end
   if step.index > info.max_acted then info.max_acted = step.index end
+  self:record_arrivals(step, out, info)
   local snap = self:snapshot(step, why, rows, out)
-  self:check_settle(out.settle, step)
+  -- The first turn-in's settle is checked before the off-guide use; it is checked here
+  -- only when no retry replaced it.
+  if not checked then self:check_settle(out.settle, step) end
   self:refusals(step, out)
   return out, snap
 end
@@ -727,6 +833,12 @@ function run.drive(ctx, opts)
     skip_dungeons = ctx.engine:skip_dungeons(),
     dungeon_skips = {},
     carried = {},
+    -- Actions the player takes off-guide: { gid, file, line, qid, action = "U",
+    -- for_line = <the T step's line>, events, levels } (Driver:perform_offguide).
+    offguide = {},
+    -- Objectives an R step's arrival credited: { gid, file, line, qid, objective = index }
+    -- (Driver:record_arrivals).
+    arrivals = {},
     steps = {}, signals = {}, guides = {}, guide_levels = {},
     jumps = {}, -- { from, passed = {gid...}, to (nil: end of chain), level_before, level_after }
   }

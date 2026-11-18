@@ -237,6 +237,32 @@ describe("group.findings", function()
       assert.is_nil(find(other, "did-not-advance", 1016).caused_by)
     end)
 
+    it("links a prerequisite refusal under the first missing quest's failure, in the same order", function()
+      local function reports(missing)
+        return { signal = "accept-refused", gid = "G1", file = "f.lua", line = 291, action = "A",
+          name = "The Reports", qid = 291, reason = "prerequisite", missing = missing }
+      end
+      local fs = group.findings({ runlog("Dwarf", "WARRIOR", { hidden_accept(98323, 162), reports({ 98323 }) }) })
+      local h, r = find(fs, "never-shown-accept", 98323), find(fs, "accept-refused", 291)
+      assert.equal(h.id, r.caused_by)
+      assert.same({ 98323 }, r.missing)
+      local function parent_signal(signals)
+        local by = {}
+        for _, f in ipairs(group.findings({ runlog("Dwarf", "WARRIOR", signals) })) do by[f.id] = f end
+        for _, f in pairs(by) do
+          if f.signal == "accept-refused" and f.qid == 291 then return f.caused_by and by[f.caused_by].signal end
+        end
+      end
+      local rr, u, t, h7 = refusal(7, 10), use_step(7, 20), turnin(7, 30), hidden_accept(7, 40)
+      assert.equal("accept-refused", parent_signal({ reports({ 7 }), rr, u, t, h7 }))
+      assert.equal("hidden-use-step", parent_signal({ reports({ 7 }), u, t, h7 }))
+      assert.equal("did-not-advance", parent_signal({ reports({ 7 }), t, h7 }))
+      assert.equal("never-shown-accept", parent_signal({ reports({ 7 }), h7 }))
+      assert.is_nil(parent_signal({ reports(nil), h7 }))
+      -- Any-of lists: the first missing id that has a failure, in order.
+      assert.equal("never-shown-accept", parent_signal({ reports({ 3, 7 }), h7 }))
+    end)
+
     it("prefers refusal, then hidden-use-step, then incomplete turn-in, then hidden accept", function()
       local function parent_signal(signals)
         local fs = group.findings({ runlog("Dwarf", "WARRIOR", signals) })

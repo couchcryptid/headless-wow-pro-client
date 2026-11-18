@@ -204,14 +204,16 @@ end
 -- Picks the id to accept from a multi-QID A step (any-of, as the engine's own
 -- QIDsInTable test at WoWPro_Events.lua:709): the first id acceptable now, else
 -- the first id whose only refusal is below-level (acceptable after a grind).
--- Returns qid, opts, needs_grind; or nil, first id's reason when every id is refused.
+-- Returns qid, opts, needs_grind; or nil, first id's reason, its missing prerequisite
+-- ids and whether they are any-of (QuestLog:refusal, for "prerequisite") when every id
+-- is refused.
 local function choose_accept(w, qids, qo)
-  local first_reason, grind_qid, grind_opts
+  local first_reason, first_missing, first_any, grind_qid, grind_opts
   for _, qid in ipairs(qids) do
     local opts = accept_opts(w, qid, qo)
-    local reason = w.log:refusal(qid, opts)
+    local reason, missing, any_of = w.log:refusal(qid, opts)
     if not reason then return qid, opts, false end
-    first_reason = first_reason or reason
+    if not first_reason then first_reason, first_missing, first_any = reason, missing, any_of end
     if reason == "below-level" and not grind_qid then
       local other = w.log:refusal(qid, { placeholder_qo = opts and opts.placeholder_qo, ignore_level = true })
       if not other then grind_qid, grind_opts = qid, opts end
@@ -222,9 +224,11 @@ local function choose_accept(w, qids, qo)
   -- quest the player can't take even once levelled).
   if first_reason == "below-level" then
     local o = accept_opts(w, qids[1], qo)
-    first_reason = w.log:refusal(qids[1], { placeholder_qo = o and o.placeholder_qo, ignore_level = true }) or first_reason
+    local other, missing, any_of = w.log:refusal(qids[1], { placeholder_qo = o and o.placeholder_qo, ignore_level = true })
+    if other then first_reason, first_missing, first_any = other, missing, any_of end
   end
-  return nil, first_reason
+  if first_reason ~= "prerequisite" then return nil, first_reason end
+  return nil, first_reason, first_missing, first_any
 end
 
 local function perform_accept(ctx, step, out)
@@ -239,11 +243,12 @@ local function perform_accept(ctx, step, out)
       return
     end
   end
-  local qid, opts, needs_grind = choose_accept(w, step.qids, qo)
+  local qid, opts, needs_grind, missing_any = choose_accept(w, step.qids, qo)
   if not qid then
-    local reason = opts
+    local reason, missing = opts, needs_grind -- the refused shape: nil, reason, missing, any-of
     out.qid = step.qids[1]
-    out.kind, out.reason = "refused", reason
+    out.kind, out.reason, out.missing = "refused", reason, missing
+    out.missing_any = missing and missing_any or nil
     return
   end
   out.qid = qid
@@ -512,6 +517,82 @@ local function walk_to_step(ctx, step, out)
   fire(ctx, out, "ZONE_CHANGED")
 end
 
+-- The actions that work on their quest's objectives: a C, K, U, l or B step with the
+-- quest's QID (its qids, ACTIVE included for the fallback actions, Engine.qids_of).
+local WORKS_ON_QUEST = { C = true, K = true, U = true, l = true, B = true }
+
+local function names_qid(list, qid)
+  for _, q in ipairs(list or {}) do
+    if q == qid then return true end
+  end
+  return false
+end
+
+local function active_qids(active)
+  local out = {}
+  for n in tostring(active or ""):gmatch("%d+") do out[#out + 1] = tonumber(n) end
+  return out
+end
+
+-- Whether a step of the loaded guide other than `self_index` works on objective `index`
+-- of quest `qid`: a C/K/U/l/B step with that QID (whatever its QO), or a step ACTIVE on
+-- the quest whose QO names that index or that has no QO (an ACTIVE step without a QO
+-- stays up for the whole quest, e.g. 01_12_Dun_Morogh.lua:219 L Level 10|ACTIVE|319|).
+-- Read through the engine (as guide_turns_in does): the guide loaded now is the one the
+-- player follows.
+local function guide_covers(engine, self_index, qid, index)
+  for j = 1, engine:num_steps() do
+    local s = j ~= self_index and engine:step(j)
+    if s then
+      if WORKS_ON_QUEST[s.action] and names_qid(s.qids, qid) then return true end
+      local tags = s.tags or {}
+      if names_qid(active_qids(tags.active), qid) then
+        local qo = parse_qo(tags.questtext)
+        if not qo then return true end
+        for _, part in ipairs(qo) do
+          if part.index == index then return true end
+        end
+      end
+    end
+  end
+  return false
+end
+
+-- An R step with a QO tag for a quest in the log (01_12_Dun_Morogh.lua:158, R Secure
+-- the Mountain|ACTIVE|98319|QO|1|: find Mountaineer Cornelius' body): in game, reaching
+-- the place credits the named objective. The engine fills a QO step's QID from ACTIVE
+-- (WoWPro_Parser.lua:834-836), so step.qids holds it. Most such R steps instead mean
+-- "head there; this step stays up until objective n is done" and later steps do the
+-- work (:209 Shimmer Ridge|ACTIVE|315|QO|1| before :210's C step loots Shimmerweed;
+-- :214 Frostmane Hold|ACTIVE|287|QO|1;2| before the C steps at :215-218). So an
+-- objective is credited on arrival only when (a) it is not an item objective (arrival
+-- loots nothing) and (b) no other step of the loaded guide works on it
+-- (guide_covers). Progress only, up to what each QO part asks: no kill XP
+-- (credit_objective's), since such an objective is a body or person found, not a
+-- kill. out.arrivals lists the credited objective indices (the driver logs them in
+-- log.arrivals).
+local function credit_arrival(ctx, step, out)
+  local w = ctx.world
+  local parts = parse_qo(step.tags and step.tags.questtext)
+  local qid = parts and in_log_qid(w, step.qids)
+  local entry = qid and w.log:get(qid)
+  if not entry then return end
+  out.qid = qid
+  out.arrivals = {}
+  for _, part in ipairs(parts) do
+    local obj = entry.quest.objectives[part.index]
+    if obj and obj.kind ~= "item" and not guide_covers(ctx.engine, step.index, qid, part.index) then
+      local have = w.log:have(qid, part.index)
+      local delta = wanted(obj, have, part) - have
+      if delta > 0 then
+        w.log:progress(qid, part.index, delta)
+        out.arrivals[#out.arrivals + 1] = part.index
+      end
+    end
+  end
+  if #out.arrivals > 0 then fire(ctx, out, "QUEST_LOG_UPDATE") end
+end
+
 local function perform_travel(ctx, step, out)
   local p = ctx.world.player
   local tags = step.tags or {}
@@ -532,6 +613,7 @@ local function perform_travel(ctx, step, out)
   out.kind = "acted"
   fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
   fire(ctx, out, "ZONE_CHANGED")
+  if step.action == "R" then credit_arrival(ctx, step, out) end
 end
 
 local function perform_flight_point(ctx, step, out)
@@ -693,6 +775,10 @@ local OTHER_HANDLERS = {
 -- still doesn't advance is a did-not-advance, unless its note says to check it off by
 -- hand (actions.expects_manual), as the guides' class-training notes do.
 actions.EXPECTED_MANUAL = { N = true, D = true, r = true, ["*"] = true }
+
+-- The L tag's items as { {id, n}, ... } sorted by id (the driver matches a hidden U
+-- step's L item against a refused turn-in's missing item with it).
+actions.parse_loot = parse_loot
 
 function actions.expects_manual(step)
   if actions.EXPECTED_MANUAL[step.action] then return true end
