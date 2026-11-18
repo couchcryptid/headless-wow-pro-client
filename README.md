@@ -177,7 +177,7 @@ Output, under `--out DIR` (default `~/.hwc/findings`, created if missing, so run
   (git-ignored).
 
 `--relative-to DIR` (default: the current directory) sets the base for every
-path in the output: the markdown, the findings JSON and the run logs write paths
+path in the output: the HTML page, the findings JSON and the run logs write paths
 under the addon checkout, the catalog sources and DIR relative to DIR. Any other
 absolute path (rare: a stub reading an unexpected file) is left as it is. Lua
 error messages are rewritten before findings are grouped, so a Lua-error
@@ -185,8 +185,8 @@ finding's id depends on the base: run from the same directory (or pass the same
 `--relative-to`) to compare ids between runs.
 
 `--date` (default: the host date) is an input, so with a fixed `--date` the same
-addon commit, catalog, config and seed give byte-identical markdown. The
-header's `Client` line is this repo's own HEAD commit.
+addon commit, catalog, config and seed give byte-identical `.html` and `.json`.
+The `Client` row under "About this run" is this repo's own HEAD commit.
 
 Matrix combos (`src/hwc/driver/matrix.lua`): for each race, every class that
 the race's start guide names in a `C|` tag on a line whose `R|` tag names the
@@ -262,17 +262,18 @@ is set only when no guide has been played yet: then it is raised to that
 guide's `startlevel` through the simulated XP path. A mid-chain jump keeps the
 level earned so far. The
 run log records each jump. The run ends at the last line of the last included
-guide on the chain. Included guides the run never reaches are listed in the
-report header (only when an `--include` was given). With filters, the header
-also lists the guides played.
+guide on the chain. With filters, the page's "About this run" section lists
+the filters and the guides played, and the included guides the run never
+reaches (only when an `--include` was given).
 
 A race whose chain reaches no included guide plays nothing. `matrix` skips its
-combos and names the race in the report header, and exits 2 (writing nothing)
+combos, names the race in a warning at the top of the page and under "About
+this run", and exits 2 (writing nothing)
 only if no race reaches one; a single `run` exits 2 and writes nothing.
 
 **Known limit:** quests from jumped guides were never done. Prerequisite
 gates, `orphan-turnin` and `leftover-quests` (`not-turned-in`) findings near a
-jump can be noise from the jump, not guide bugs. The report header says how
+jump can be noise from the jump, not guide bugs. "About this run" says how
 many guides were jumped, so weigh those findings accordingly.
 
 ## Addon worktrees and Red/Green anchors

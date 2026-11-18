@@ -262,6 +262,7 @@ A quest is an object: id, name, quest level, required level, races, classes, pre
 ### 7.2 Findings file
 
 Superseded in part by `2026-11-12-findings-report-design.md` (report layout, JSON contract, relative paths).
+The report is now a self-contained HTML page beside the JSON, not a markdown file: see `2026-11-18-html-findings-report-design.md`.
 
 One markdown file per invocation: `findings/YYYY-MM-DD-<scope>.md`, for example `findings/2026-11-12-forever-alliance-dwarf-gnome.md` (the directory defaults to `~/.hwc/findings`; scope names lost `-1-25`, see `2026-11-17-guide-filters-design.md` §6).
 - **Header:**

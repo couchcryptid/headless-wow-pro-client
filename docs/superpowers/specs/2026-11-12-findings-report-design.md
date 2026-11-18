@@ -1,5 +1,7 @@
 # Findings report redesign
 
+Superseded for the report's output and layout (§3–§4) by `2026-11-18-html-findings-report-design.md`.
+
 Status: draft for review · 2026-11-12 · Supersedes the file layout in
 `2026-11-11-headless-client-design.md` §7.2 and the input format in §8.
 

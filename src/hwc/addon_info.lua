@@ -22,7 +22,7 @@ function M.toc_version(path)
 end
 
 -- opts.tracked_only: dirty only for changes to tracked files. The client's own
--- tree uses it: the findings markdown a run writes under findings/ is untracked
+-- tree uses it: the findings page and JSON a run writes under findings/ are untracked
 -- until the user commits it, and must not make the next run's header differ.
 function M.read(path, opts)
   local version = M.toc_version(path)
