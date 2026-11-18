@@ -35,7 +35,7 @@ advancing.
 - `hidden-use-step` is still reported. Performing the step off-guide doesn't mark it shown.
 - No `did-not-advance` / `leftover-quests` for the quest when the retry succeeds.
 - The run log records each off-guide action:
-  `log.offguide = { { gid, file, line, qid, action = "U", for_step = <T line> } … }`.
+  `log.offguide = { { gid, file, line, qid, action = "U", for_line = <T line> } … }`.
   It's logged like the Camping 101 abstracted turn-in.
 - The #3554 anchor is unchanged: the U step is hidden on `main` and shown on the fix branch.
 
@@ -55,3 +55,34 @@ advancing.
 - Real check: a Dwarf Warrior run keeps the `hidden-use-step` at `19_25_Alliance.lua:449`
   (quest 1016) and drops the `did-not-advance` at :450 and the `leftover-quests` for 1016.
 - The slow suite must still pass, including the #3554 anchor.
+
+## Part 2: a run-to step that names an objective (Cornelius)
+
+Same principle: emulate what the game does.
+
+`01_12_Dun_Morogh.lua:158` is `R Secure the Mountain|ACTIVE|98319|QO|1|…|N|Locate Mountaineer
+Cornelius' body…|`. Quest 98319's only objective is NPC 278166, "Mountaineer Cornelius" (the
+body). In game, reaching him credits the objective; anyone on the quest finds him (user,
+2026-11-18). The harness's run-to action only moves the player, so 98319 stays incomplete and
+13 findings cascade from it: 98319's turn-in refused, 98323 never offered, and The Reports
+(291) refused for its `pre_group` {287, 98323}.
+
+**Rule:** when an `R` step has a `QO` tag and names a quest in the log (`ACTIVE|<qid>` or
+`QID|<qid>`), arriving credits the named objectives' progress. It records progress only and
+gives **no kill XP**, because an NPC objective here is a body or person to find, and the
+generic objective code would otherwise credit kills. Without a `QO`, or for a quest not in
+the log, the run-to step is unchanged.
+
+**Prerequisite refusals name what's missing.** `QuestLog:refusal` also returns the
+prerequisite ids that aren't done. The `accept-refused` signal carries them as `missing`. Its
+sentence names them ("needs quest 98323, Secure the Mountain, which isn't done"), and the
+linker attaches the refusal under the missing quest's own failure: a refusal,
+hidden-use-step, incomplete turn-in or never-shown accept of that id. The report then shows
+one root cause.
+
+**Expected effect (Dwarf Warrior):** 98319 completes, 98323 is offered and done, The Reports
+is taken, and the chain's findings go away.
+
+`objective-not-credited` (objectives the harness can't simulate) and faithful NPC
+interactions (flight take-off and landing with real zone text, vendor buys) are a separate
+plan.

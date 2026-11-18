@@ -60,3 +60,42 @@
 
   Paste the summary and these checks.
 - [ ] **Step 6: Commit** `fix: Combine a hidden use step's item when a turn-in needs it`.
+
+---
+
+### Task 2: Credit a run-to step's named objective; name missing prerequisites
+
+**Files:**
+- Modify:
+  - `src/hwc/driver/actions.lua` (`perform_travel` for `R`)
+  - `src/hwc/world/questlog.lua` (`refusal` returns the missing prerequisite ids)
+  - `src/hwc/driver/run.lua` (carry `missing` on the `accept-refused` signal)
+  - `src/hwc/findings/group.lua` (link a prerequisite refusal under the missing quest's failure)
+  - `src/hwc/findings/text.lua` (sentence)
+- Test: `spec/driver/actions_quest_spec.lua` (or `actions_other_spec.lua`, whichever covers `R`), `spec/world/questlog_spec.lua`, `spec/findings/group_spec.lua`, `spec/findings/text_spec.lua`, `spec/driver/run_spec.lua`
+
+**Interfaces:**
+- Produces:
+  - **`R` steps:** when `step.tags.questtext` (QO) is set and the step's qid (`ACTIVE` or `QID`) is in the log, add progress to each QO-named objective up to what the QO part asks. This uses the same QO parsing as `perform_objectives`, but **without** `credit_objective`'s kill XP: `world.log:progress(qid, index, delta)` for non-item objectives, and `add_item` for item objectives. Fire `QUEST_LOG_UPDATE`.
+  - **`QuestLog:refusal(qid, opts) -> reason, quest_or_missing`:** for `"prerequisite"`, the second value is a sorted array of the missing ids. For `pre_single`, all of them, since none is done; for `pre_group`, the undone ones. Callers that only use the reason are unaffected; check every caller.
+  - **Signal:** `accept-refused` with reason `prerequisite` carries `missing = { ids… }`.
+  - **Text:** the `prerequisite` sentence for an accept becomes "The guide shows this accept, but the quest data says it needs quest <id> (<name>)[ and …], which isn't done yet." Names come from the catalog, with "quest <id>" when unknown.
+  - **Linker:** an `accept-refused`/`prerequisite` with `missing` links (`caused_by`) to the first missing id's failure. In preference order: a refusal of that id, a hidden-use-step, an incomplete turn-in, a never-shown-accept, the same order `never-shown-accept` uses (`group.lua` `link_roots`).
+
+- [ ] **Step 1: Failing specs:**
+  - An `R` step with `ACTIVE|98319|QO|1` and an NPC objective → progress 1/1, `is_complete(98319)`, and **no XP gained**.
+  - An `R` step with no QO → no progress.
+  - An `R` step whose qid isn't in the log → no progress and no error.
+  - `refusal` for a `pre_group = {287, 98323}` quest with only 287 done → `"prerequisite", {98323}`.
+  - The sentence names "quest 98323 (Secure the Mountain)".
+  - group_spec: a prerequisite refusal of 291 with `missing = {98323}` links under a `never-shown-accept` for 98323.
+- [ ] **Step 2: RED.**
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: GREEN.** Full suite, slow suite (21 + 1 known pending; #3535 and #3554 unchanged; if #3535's Red expectations change because 98323 or 291 now play, stop and report rather than editing the anchor), and luacheck.
+- [ ] **Step 5: Real check.** Dwarf Warrior run as in Task 1. Expected:
+  - no `did-not-advance` at `01_12_Dun_Morogh.lua:161`
+  - no `never-shown-accept` for 98323 at :162
+  - no `accept-refused` for 291 at :291
+
+  Paste the summary and the `hwc diff` against the Task 1 run.
+- [ ] **Step 6: Commit** `fix: Credit a run-to step's quest objective and name missing prerequisites`.
