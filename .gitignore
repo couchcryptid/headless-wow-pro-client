@@ -8,3 +8,4 @@ evidence/
 .claude/worktrees/
 web/report/node_modules/
 web/report/dist/
+.github/release/node_modules/

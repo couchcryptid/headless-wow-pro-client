@@ -23,7 +23,13 @@ The report page has its own suite (Node 24, see
 cd web/report && npm ci && npm run typecheck && npm test
 ```
 
-Run both suites before committing; a change to the page also needs `npm run build`.
+Lint the Lua with luacheck (config in `.luacheckrc`):
+
+```sh
+~/.luarocks/bin/luacheck .
+```
+
+Run lint and both suites before committing; a change to the page also needs `npm run build`.
 
 The integration specs need two things, and are pending without them:
 - a WoW-Pro-Guides checkout;
@@ -81,6 +87,29 @@ The anchors also need the pinned addon worktrees; see
   worktree. Report the before and after signal counts in the pull request.
 - **Commits:** an imperative subject line (e.g. "Give quest reward items on
   turn-in"), and a body saying why when it isn't obvious.
+- **Pull requests** go into `main` and are squash-merged, so the PR title
+  becomes the one commit on `main`. Write it as a
+  [Conventional Commit](https://www.conventionalcommits.org/) with a
+  capitalised, imperative subject: `fix: Give quest reward items on turn-in`.
+  The `PR title` check enforces this.
+- **Releases are automatic.** Each merge into `main` runs CI again, then
+  [semantic-release](https://semantic-release.gitbook.io/) reads the merged
+  titles and decides the next version:
+
+  | Title type | Release |
+  |---|---|
+  | `fix:`, `perf:` | patch (`v1.2.3` → `v1.2.4`) |
+  | `feat:` | minor (`v1.2.3` → `v1.3.0`) |
+  | `feat!:`, `fix!:`, or a `BREAKING CHANGE:` footer | major (`v1.2.3` → `v2.0.0`) |
+  | `docs:`, `test:`, `refactor:`, `chore:`, `ci:`, `build:`, `style:` | none |
+
+  A release is a `v`-prefixed git tag plus a GitHub release with generated
+  notes. Config: `.releaserc.json`. Tooling is pinned in `.github/release/`.
+- **CI on pull requests** (`.github/workflows/ci.yml`) runs luacheck, the
+  default busted suite on LuaJIT 2.1, and the report page's typecheck, tests
+  and build. It fails if `src/hwc/findings/report.html` doesn't match a fresh
+  build. Integration specs report pending in CI because there's no WoW-Pro
+  checkout or QuestieDB there; run them locally.
 - **Design decisions** and the reasons for them are recorded under
   `docs/superpowers/`. Read the design spec before larger changes.
 
