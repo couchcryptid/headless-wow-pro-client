@@ -217,6 +217,11 @@ describe("catalog (fixtures)", function()
     assert.is_nil(cat:quest(1382).max_rep)
   end)
 
+  it("drops a reputation gate unless both of its fields are numbers", function()
+    assert.is_nil(cat:quest(1384).min_rep)
+    assert.is_nil(cat:quest(1384).max_rep)
+  end)
+
   it("lets the supplement override the reputation fields", function()
     local path = os.tmpname()
     local f = assert(io.open(path, "w"))

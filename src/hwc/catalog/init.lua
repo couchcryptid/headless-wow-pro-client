@@ -184,7 +184,7 @@ end
 
 -- QuestieDB requiredMinRep/requiredMaxRep {factionId, value} -> { faction, value } or nil.
 local function rep_gate(pair)
-  if type(pair) ~= "table" or pair[1] == nil then return nil end
+  if type(pair) ~= "table" or type(pair[1]) ~= "number" or type(pair[2]) ~= "number" then return nil end
   return { faction = pair[1], value = pair[2] }
 end
 

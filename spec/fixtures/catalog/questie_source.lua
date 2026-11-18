@@ -27,6 +27,8 @@ local QUESTS = {
     questLevel = 30, reputationReward = { { 93, -500 }, { 92, 100 } } },
   [1383] = { name = "Fixture Rep Gate", startedBy = { { 2001 } }, finishedBy = { { 2002 } }, requiredLevel = 1,
     questLevel = 30, requiredMinRep = { 72, 9000 }, requiredMaxRep = { 92, 3000 } },
+  [1384] = { name = "Fixture Bad Rep Gate", startedBy = { { 2001 } }, finishedBy = { { 2002 } }, requiredLevel = 1,
+    questLevel = 30, requiredMinRep = { 72 }, requiredMaxRep = { "92", 3000 } },
 }
 
 local NPCS = {
