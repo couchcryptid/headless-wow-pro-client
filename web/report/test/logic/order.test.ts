@@ -22,7 +22,7 @@ describe("prioritySections", () => {
     expect(lifted.size).toBe(1);
     for (const sec of secs) for (const c of sec.cards) if (!lifted.has(c.id)) expect(c.caused_by).toBeUndefined();
     expect(high.primary).toBe(8);
-    expect(high.follow).toBe(2);
+    expect(high.follow).toBe(3); // 93, 94 and the cross-file 95, all under the 96393 refusal
   });
   it("orders by explains, verified, guide order, line, id", () => {
     const q = (n: number) => idOf((f) => f.qid === n && !f.caused_by);

@@ -1,9 +1,9 @@
 // One finding (spec §4.6), with its shown follow-ons nested below it.
 import { useContext, useState } from "preact/hooks";
 import { cardChildren } from "../logic/filter";
-import { counted } from "../logic/state";
+import { counted, location } from "../logic/state";
 import type { Finding, StepRef } from "../types";
-import { PageContext, cardId, comboLabel, shortFile } from "./context";
+import { PageContext, cardId, comboLabel } from "./context";
 import { StepKey } from "./StepKey";
 
 function Step({ step, me }: { step?: StepRef; me?: boolean }) {
@@ -89,7 +89,8 @@ function FollowsFrom({ f }: { f: Finding }) {
   );
 }
 
-export function Card({ f, showFile }: { f: Finding; showFile: boolean }) {
+/** sectionFile: the file of the Guide-order section the card sits in; omitted elsewhere. */
+export function Card({ f, sectionFile }: { f: Finding; sectionFile?: string }) {
   const page = useContext(PageContext);
   const { doc, s, multi, lifted } = page;
   const [open, setOpen] = useState(false);
@@ -99,7 +100,8 @@ export function Card({ f, showFile }: { f: Finding; showFile: boolean }) {
   const sevLabel = f.severity ? (doc.labels.severities[f.severity] ?? f.severity) : undefined;
 
   const meta: string[] = [];
-  if (f.file !== undefined) meta.push(showFile ? `${shortFile(f.file)}:${f.line}` : `line ${f.line}`);
+  const loc = location(f, sectionFile);
+  if (loc !== undefined) meta.push(loc);
   if (f.qid !== undefined) meta.push(`quest ${f.qid}`);
   if (f.level !== undefined) meta.push(`level ${f.level}`);
 
@@ -151,7 +153,7 @@ export function Card({ f, showFile }: { f: Finding; showFile: boolean }) {
       {kids.length > 0 && (
         <div class="kids">
           {kids.map((k) => (
-            <Card key={k.id} f={k} showFile={showFile} />
+            <Card key={k.id} f={k} sectionFile={sectionFile} />
           ))}
         </div>
       )}

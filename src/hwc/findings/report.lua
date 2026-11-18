@@ -54,29 +54,10 @@ local function plural(n, word, words)
   return n .. " " .. (n == 1 and word or (words or word .. "s"))
 end
 
-local function lowest(cur, f)
-  if not cur or f.id < cur.id then return f end
-  return cur
-end
-
 -- The context text.sentence needs.
--- by_qid mirrors group.lua link_roots: a refusal (accept-refused / log-full)
--- wins over a never-shown-accept, lowest id within each.
 function report.context(findings, header)
-  local by_id, refusal, hidden = {}, {}, {}
-  for _, f in ipairs(findings) do
-    by_id[f.id] = f
-    if f.qid then
-      if f.signal == "accept-refused" or f.signal == "log-full" then
-        refusal[f.qid] = lowest(refusal[f.qid], f)
-      elseif f.signal == "never-shown-accept" then
-        hidden[f.qid] = lowest(hidden[f.qid], f)
-      end
-    end
-  end
-  local by_qid = {}
-  for q, f in pairs(hidden) do by_qid[q] = f end
-  for q, f in pairs(refusal) do by_qid[q] = f end
+  local by_id = {}
+  for _, f in ipairs(findings) do by_id[f.id] = f end
 
   local single
   local combos = header and header.matrix and header.matrix.combos
@@ -87,7 +68,7 @@ function report.context(findings, header)
     end
     if n == 1 then single = text.character(only) end
   end
-  return { by_id = by_id, by_qid = by_qid, single = single }
+  return { by_id = by_id, single = single }
 end
 
 ---------------------------------------------------------------------------
@@ -185,10 +166,18 @@ local function level_warnings(warn, guides)
   end
 end
 
+-- A race a filtered matrix skipped played nothing: say so up front, not only in About this run.
+local function skipped_races_warning(warn, races)
+  if not races or #races == 0 then return end
+  warn[#warn + 1] = plural(#races, "race") .. " reached no included guide and "
+    .. (#races == 1 and "was" or "were") .. " skipped: " .. table.concat(races, ", ") .. "."
+end
+
 function report.warnings(header, findings)
   local warn = setmetatable({}, ARRAY)
   checkout_warnings(warn, header)
   catalog_warnings(warn, header.catalog)
+  skipped_races_warning(warn, header.skipped_races)
   unverified_warning(warn, findings)
   level_warnings(warn, header.guides)
   return warn
@@ -238,8 +227,41 @@ function report.rank_note(rank)
   return "Guide rank: " .. tostring(rank) .. " (WoWPro's setting for which optional steps are shown)."
 end
 
+-- Patterns print on one line: a newline in a pattern must not break the sentence.
+local function one_line(v) return (tostring(v):gsub("[\r\n]+", " ")) end
+
+-- The --include / --exclude filters, in the order given (the last match wins).
+function report.filters_note(filters)
+  if not filters or #filters == 0 then return nil end
+  local parts = {}
+  for i, f in ipairs(filters) do parts[i] = "--" .. f.kind .. ' "' .. one_line(f.pattern) .. '"' end
+  return "Filters: " .. table.concat(parts, ", ") .. "."
+end
+
+-- With filters, the guides the run actually played.
+function report.played_note(played)
+  if not played or #played == 0 then return nil end
+  return "Guides played: " .. ids(played) .. "."
+end
+
+-- Guides an --include matched that no character reached.
+function report.unreached_note(unreached)
+  if not unreached or #unreached == 0 then return nil end
+  return "Included but never reached: " .. ids(unreached) .. "."
+end
+
+-- Races a filtered matrix skipped because their chain reached no included guide.
+function report.skipped_races_note(races)
+  if not races or #races == 0 then return nil end
+  return "Races that reached no included guide: " .. ids(races) .. "."
+end
+
 function report.notes(header)
   return setmetatable({
+    filters = report.filters_note(header.filters),
+    played = report.played_note(header.played),
+    unreached = report.unreached_note(header.unreached),
+    skipped_races = report.skipped_races_note(header.skipped_races),
     jumped = report.jumped_note(header.jumped),
     dungeons = report.dungeons_note(header.dungeons),
     carried = report.carried_note(header.carried),

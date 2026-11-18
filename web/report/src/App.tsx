@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 import { PageContext, cardId, fileSecId, foldId, scrollToEl, type FoldKey, type Page } from "./components/context";
 import { Folds } from "./components/Folds";
 import { GuideMap } from "./components/GuideMap";
-import { Header } from "./components/Header";
+import { Header, pageTitle } from "./components/Header";
 import { OrderSwitch, Sections } from "./components/Sections";
 import { Sidebar } from "./components/Sidebar";
 import { counts, visible } from "./logic/filter";
@@ -25,6 +25,10 @@ export function App({ doc }: { doc: ReportDoc }) {
     const url = h === "" ? location.pathname + location.search : `#${h}`;
     history.replaceState(null, "", url);
   }, [s, doc]);
+
+  useEffect(() => {
+    document.title = pageTitle(doc);
+  }, [doc]);
 
   useEffect(() => {
     const onHash = () => setS(fromHash(location.hash, doc));

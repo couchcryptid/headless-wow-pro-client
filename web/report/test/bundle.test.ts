@@ -22,7 +22,9 @@ describe("bundle", () => {
         "src/hwc/findings/report.html is stale: run `npm run build` in web/report and commit it",
       ).toBe(true);
     } finally {
-      process.env.NODE_ENV = previousEnv;
+      // Assigning undefined would leave the string "undefined": unset it instead.
+      if (previousEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousEnv;
       rmSync(out, { recursive: true, force: true });
     }
   }, 60_000);

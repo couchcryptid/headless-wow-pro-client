@@ -207,12 +207,46 @@ describe("labels and notes for wording the markdown carried", function()
     assert.is_nil(report.rank_note(nil))
   end)
 
+  it("lists the filters in order, on one line, or nothing", function()
+    assert.equal('Filters: --include "Alliance/Dun_*", --exclude "Alliance/Dun_5 11.lua".',
+      report.filters_note({ { kind = "include", pattern = "Alliance/Dun_*" },
+        { kind = "exclude", pattern = "Alliance/Dun_5\n11.lua" } }))
+    assert.is_nil(report.filters_note(nil))
+    assert.is_nil(report.filters_note({}))
+  end)
+
+  it("lists the guides played, or nothing", function()
+    assert.equal("Guides played: GA, GB.", report.played_note({ "GA", "GB" }))
+    assert.is_nil(report.played_note(nil))
+    assert.is_nil(report.played_note({}))
+  end)
+
+  it("lists included guides never reached, or nothing", function()
+    assert.equal("Included but never reached: GC.", report.unreached_note({ "GC" }))
+    assert.is_nil(report.unreached_note(nil))
+    assert.is_nil(report.unreached_note({}))
+  end)
+
+  it("lists races that reached no included guide, or nothing", function()
+    assert.equal("Races that reached no included guide: Human, NightElf.",
+      report.skipped_races_note({ "Human", "NightElf" }))
+    assert.is_nil(report.skipped_races_note(nil))
+    assert.is_nil(report.skipped_races_note({}))
+  end)
+
   it("puts the notes in the header", function()
     local notes = report.build({}, { rank = 3, jumped = { "GA" } }).header.notes
     assert.equal(report.rank_note(3), notes.rank)
     assert.equal(report.jumped_note({ "GA" }), notes.jumped)
     assert.is_nil(notes.dungeons)
     assert.is_nil(notes.carried)
+    for _, k in ipairs({ "filters", "played", "unreached", "skipped_races" }) do assert.is_nil(notes[k]) end
+    local f = report.build({}, { filters = { { kind = "include", pattern = "X" } }, played = { "GA" },
+      unreached = { "GB" }, skipped_races = { "Human" } }).header.notes
+    assert.equal(report.filters_note({ { kind = "include", pattern = "X" } }), f.filters)
+    assert.equal(report.played_note({ "GA" }), f.played)
+    assert.equal(report.unreached_note({ "GB" }), f.unreached)
+    assert.equal(report.skipped_races_note({ "Human" }), f.skipped_races)
     assert.truthy(json.encode(report.build({}, {})):find('"notes"%s*:%s*{%s*}'))
   end)
 end)
@@ -239,6 +273,14 @@ describe("report.warnings", function()
     }
     assert.same({ "2 of 3 findings rest on quest data not checked against a second source." },
       report.warnings({}, fs))
+  end)
+
+  it("warns about races that reached no included guide", function()
+    assert.same({ "1 race reached no included guide and was skipped: Human." },
+      report.warnings({ skipped_races = { "Human" } }, {}))
+    assert.same({ "2 races reached no included guide and were skipped: Human, NightElf." },
+      report.warnings({ skipped_races = { "Human", "NightElf" } }, {}))
+    assert.same({}, report.warnings({ skipped_races = {} }, {}))
   end)
 
   it("adds a level-flag warning line", function()
@@ -340,13 +382,10 @@ describe("report.guides", function()
 end)
 
 describe("report.context", function()
-  it("builds by_id, by_qid and single", function()
+  it("builds by_id and single", function()
     local fs = findings()
     local ctx = report.context(fs, header())
     for _, f in ipairs(fs) do assert.equal(f, ctx.by_id[f.id]) end
-    assert.equal("accept-refused", ctx.by_qid[96629].signal)
-    assert.equal("never-shown-accept", ctx.by_qid[5].signal)
-    assert.is_nil(ctx.by_qid[314])
     assert.equal("Dwarf Warrior", ctx.single)
   end)
 

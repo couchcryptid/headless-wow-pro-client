@@ -16,6 +16,11 @@ function who(doc: ReportDoc): string {
   return `${combos.length} characters (${[...new Set(races)].sort().join(", ")})`;
 }
 
+/** The browser tab's title: who, the run date, and what the page is. */
+export function pageTitle(doc: ReportDoc): string {
+  return [who(doc), doc.header.date, "hwc findings"].filter((p) => p).join(" · ");
+}
+
 function runLine(doc: ReportDoc): string[] {
   const h = doc.header;
   const parts: string[] = [];

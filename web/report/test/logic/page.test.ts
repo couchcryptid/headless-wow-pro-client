@@ -49,3 +49,11 @@ describe("the page renders each finding at most once", () => {
     expect(visible(single, d).lifted.map((f) => f.id)).toContain(child.id);
   });
 });
+
+describe("the tab title", () => {
+  it("names the character(s) and the run date from the header", async () => {
+    const { pageTitle } = await import("../../src/components/Header");
+    expect(pageTitle(single)).toBe("Dwarf Warrior · 2026-01-01 · hwc findings");
+    expect(pageTitle(load("matrix"))).toBe("3 characters (Dwarf, Gnome) · 2026-01-01 · hwc findings");
+  });
+});

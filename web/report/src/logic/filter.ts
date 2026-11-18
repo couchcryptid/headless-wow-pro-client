@@ -9,12 +9,14 @@ const GROUPS: Group[] = ["sev", "file", "kind", "combo"];
 function textMatches(f: Finding, q: string): boolean {
   const needle = q.trim().toLowerCase();
   if (needle === "") return true;
-  const loc = f.file !== undefined ? `${f.file}:${f.line}` : "";
+  // A number means a quest id, a guide line or a whole number in the title; never a
+  // digit run inside a file name ("12" in 01_12_*) or the hex id.
   if (/^\d+$/.test(needle)) {
-    if (f.qid === Number(needle)) return true;
-    const token = new RegExp(`(?<!\\d)${needle}(?!\\d)`);
-    return [f.title, loc, f.id].some((t) => token.test(t));
+    const n = Number(needle);
+    if (f.qid === n || f.line === n) return true;
+    return new RegExp(`(?<!\\d)${needle}(?!\\d)`).test(f.title);
   }
+  const loc = f.file !== undefined ? `${f.file}:${f.line}` : "";
   return [f.title, f.qname ?? "", loc, f.id].some((t) => t.toLowerCase().includes(needle));
 }
 

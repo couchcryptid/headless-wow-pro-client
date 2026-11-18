@@ -37,7 +37,7 @@ function PriorityView() {
             </span>
           </h2>
           {sec.cards.map((f) => (
-            <Card key={f.id} f={f} showFile />
+            <Card key={f.id} f={f} />
           ))}
         </section>
       ))}
@@ -62,7 +62,7 @@ function GuideView() {
             {sec.file && <span class="section-path mono">{sec.file}</span>}
           </h2>
           {sec.cards.map((f) => (
-            <Card key={f.id} f={f} showFile={false} />
+            <Card key={f.id} f={f} sectionFile={sec.file ?? undefined} />
           ))}
         </section>
       ))}

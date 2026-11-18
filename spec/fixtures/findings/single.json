@@ -22,10 +22,10 @@
       "title":"\"Gnome Trouble\" is never offered"
     },{
       "action":"A",
-      "causes":["F-10e6df85","F-55fddb0c"],
+      "causes":["F-10e6df85","F-55fddb0c","F-6e10bdd9"],
       "combos":["Dwarf WARRIOR baseline"],
       "confidence":"unverified",
-      "explains":3,
+      "explains":4,
       "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
       "gid":"Dun Morogh 1-5",
       "id":"F-fc3e70a6",
@@ -131,6 +131,28 @@
         "name":"Mage Training"
       },
       "title":"\"Mage Training\" is shown to the wrong class"
+    },{
+      "action":"A",
+      "caused_by":"F-fc3e70a6",
+      "causes":[],
+      "combos":["Dwarf WARRIOR baseline"],
+      "confidence":"verified",
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua",
+      "gid":"Dun Morogh 5-11",
+      "id":"F-6e10bdd9",
+      "line":25,
+      "name":"Ironforge Calls",
+      "qid":95,
+      "reasons":[],
+      "sentence":"The guide tells you to accept this quest, but WoWPro hides the step because its prerequisite, quest 96393, is never completed.",
+      "severity":"high",
+      "signal":"never-shown-accept",
+      "step":{
+        "action":"A",
+        "name":"Ironforge Calls"
+      },
+      "title":"\"Ironforge Calls\" is never offered",
+      "why":"NextStep:PRE&(96393): A mandatory prereq was not met: 96393"
     },{
       "action":"T",
       "causes":[],
@@ -711,7 +733,7 @@
     "by_combo":{
       "Dwarf WARRIOR baseline":{
         "high":{
-          "follow":2,
+          "follow":3,
           "primary":8
         },
         "low":{
@@ -763,7 +785,7 @@
       },
       "WoWPro_Leveling/Guides/Alliance/Dun_5_11.lua":{
         "high":{
-          "follow":0,
+          "follow":1,
           "primary":3
         },
         "low":{
@@ -777,7 +799,7 @@
       }
     },
     "by_severity":{
-      "high":10,
+      "high":11,
       "low":3,
       "medium":8,
       "medium-high":2
@@ -791,12 +813,12 @@
       "log-full":1,
       "lua-error":2,
       "manual-completion":1,
-      "never-shown-accept":3,
+      "never-shown-accept":4,
       "orphan-turnin":1,
       "stuck":1,
       "wrong-race-class":1
     },
-    "findings":23,
+    "findings":24,
     "roots":17
   }
 }

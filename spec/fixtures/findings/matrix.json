@@ -133,6 +133,13 @@
       "dirty":false
     },
     "date":"2026-01-01",
+    "filters":[{
+        "kind":"include",
+        "pattern":"WoWPro_Leveling/Guides/Alliance"
+      },{
+        "kind":"exclude",
+        "pattern":"WoWPro_Leveling/Guides/Alliance/Elw_*"
+      }],
     "gaps":["rested XP","Forever Boosted Rest from campfires","party XP for non-elites (spec §5.5)","dungeon runs and instance XP (spec §3)","Camping 101 quests are recognised only by name from the local supplement (no catalog source names them); without it, profession variants equal baselines","talk-to NPC objectives may be credited as kills","quest rewards give one of each item QuestieDB lists, choice rewards included","subzones are known only from R steps; steps gated on a subzone by IZ may stay hidden"],
     "guides":[{
         "end_level":5,
@@ -204,12 +211,19 @@
       "combos":["Dwarf WARRIOR baseline","Gnome MAGE baseline","Gnome PRIEST baseline"]
     },
     "notes":{
-      "rank":"Guide rank: 2 (WoWPro's setting for which optional steps are shown)."
+      "filters":"Filters: --include \"WoWPro_Leveling/Guides/Alliance\", --exclude \"WoWPro_Leveling/Guides/Alliance/Elw_*\".",
+      "played":"Guides played: Dun Morogh 1-5, Dun Morogh 5-11, Westfall 12-15.",
+      "rank":"Guide rank: 2 (WoWPro's setting for which optional steps are shown).",
+      "skipped_races":"Races that reached no included guide: Human.",
+      "unreached":"Included but never reached: Loch Modan 12-20."
     },
     "paths_relative_to":"headless-wow-pro-client",
+    "played":["Dun Morogh 1-5","Dun Morogh 5-11","Westfall 12-15"],
     "rank":2,
-    "scope":"forever-alliance-dwarf-gnome",
-    "warnings":["1 guide entered over-levelled"]
+    "scope":"forever-alliance-dwarf-gnome-human-filtered",
+    "skipped_races":["Human"],
+    "unreached":["Loch Modan 12-20"],
+    "warnings":["1 race reached no included guide and was skipped: Human.","1 guide entered over-levelled"]
   },
   "labels":{
     "actions":{

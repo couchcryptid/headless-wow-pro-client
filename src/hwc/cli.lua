@@ -282,6 +282,10 @@ local function play(combos, scope, opts, out, err)
   local logdir = outdir .. "/" .. date .. "-" .. scope
   local paths = require("hwc.paths")
   local report = require("hwc.findings.report")
+  local html = require("hwc.findings.html")
+  -- Read before anything is played or written: a missing template must not leave
+  -- a .json (or run logs) with no .html beside it.
+  local template = html.template()
   local cwd = opts.start or paths.cwd()
   local base = paths.resolve(opts["relative-to"] or cwd, cwd)
   local played, raw, labels = {}, {}, {}
@@ -373,9 +377,8 @@ local function play(combos, scope, opts, out, err)
   local findings = group.findings(logs)
   local stem = outdir .. "/" .. date .. "-" .. scope
   local doc = json.encode(report_json(report.build(findings, header)), { indent = true }) .. "\n"
-  local html = require("hwc.findings.html")
   write_file(stem .. ".json", doc)
-  write_file(stem .. ".html", html.render(doc, html.template()))
+  write_file(stem .. ".html", html.render(doc, template))
   out:write(M.wrote_line(stem, #logs))
   return 0
 end

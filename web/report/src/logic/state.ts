@@ -23,6 +23,16 @@ export function shortFile(p: string): string {
   return (p.split("/").pop() ?? p).replace(/\.lua$/, "");
 }
 
+/**
+ * A card's location. Inside a Guide-order section, a finding in that section's own file
+ * shows "line N"; anywhere else (Priority order, the folds, or a follow-on from another
+ * file nested in the section) it names its file. Undefined when the finding has no file.
+ */
+export function location(f: Finding, sectionFile?: string): string | undefined {
+  if (f.file === undefined) return undefined;
+  return sectionFile !== undefined && f.file === sectionFile ? `line ${f.line}` : `${shortFile(f.file)}:${f.line}`;
+}
+
 /** The file option a finding belongs to. */
 export function fileKey(f: Finding): string {
   return f.file ?? NO_FILE;

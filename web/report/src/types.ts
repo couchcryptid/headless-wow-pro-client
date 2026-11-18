@@ -84,6 +84,9 @@ export interface CatalogSource {
   sha256?: string | Record<string, string>;
 }
 
+/** The run facts About this run lists, each a finished sentence written by report.lua. */
+export type NoteKey = "filters" | "played" | "unreached" | "skipped_races" | "rank" | "dungeons" | "jumped" | "carried";
+
 export interface Header {
   addon: {
     branch: string | null;
@@ -100,11 +103,17 @@ export interface Header {
   gaps: string[];
   guides: GuideEntry[];
   matrix: { combos: string[] };
-  notes: Record<string, string>;
+  /** A key is absent when the run has nothing to say about it. */
+  notes: Partial<Record<NoteKey, string>>;
   paths_relative_to: string;
   rank: number;
   scope: string;
   stop?: { combo: string; reason: string }[];
+  /** Raw run facts behind notes (the page shows the notes, not these). Absent when unfiltered or empty. */
+  filters?: { kind: "include" | "exclude"; pattern: string }[];
+  played?: string[];
+  unreached?: string[];
+  skipped_races?: string[];
   warnings: string[];
 }
 

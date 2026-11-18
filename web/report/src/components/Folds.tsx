@@ -2,7 +2,7 @@
 // manual clicks and About this run. Left out of every count and filter above.
 import type { ComponentChildren } from "preact";
 import { useContext } from "preact/hooks";
-import type { Finding, ReportDoc } from "../types";
+import type { Finding, NoteKey, ReportDoc } from "../types";
 import { Card } from "./Card";
 import { PageContext, comboLabel, foldId, type FoldKey } from "./context";
 
@@ -42,7 +42,7 @@ function Entries({ list }: { list: Finding[] }) {
   return (
     <>
       {list.map((f) => (
-        <Card key={f.id} f={f} showFile />
+        <Card key={f.id} f={f} />
       ))}
     </>
   );
@@ -123,7 +123,8 @@ function About({ doc }: { doc: ReportDoc }) {
   if (h.client.commit) client.push(`commit ${h.client.commit}`);
   const cst = state(h.client.dirty);
   if (cst) client.push(cst);
-  const notes = (["rank", "dungeons", "jumped", "carried"] as const)
+  const keys: NoteKey[] = ["filters", "played", "unreached", "skipped_races", "rank", "dungeons", "jumped", "carried"];
+  const notes = keys
     .map((k) => h.notes[k])
     .filter((n): n is string => typeof n === "string" && n !== "");
 

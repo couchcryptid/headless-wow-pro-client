@@ -28,9 +28,21 @@ describe("matches", () => {
     const f = pick(single, (f) => f.qid === 500);
     expect(matches(f, withQ(single, f.id.toLowerCase()))).toBe(true);
   });
-  it("a digit token in file:line matches", () => {
+  it("digits match the guide line exactly", () => {
     const f = pick(single, (f) => f.qid === 500);
     expect(matches(f, withQ(single, "300"))).toBe(true);
+    expect(matches(f, withQ(single, "30"))).toBe(false);
+  });
+  it("digits never match inside the file name or the hex id", () => {
+    const f = pick(single, (f) => f.qid === 500); // Dun_11_14.lua:300
+    expect(matches(f, withQ(single, "11"))).toBe(false);
+    expect(matches(f, withQ(single, "14"))).toBe(false);
+    expect(matches({ ...f, id: "F-12abcdef" }, withQ(single, "12"))).toBe(false);
+  });
+  it("digits match a whole number in the title, not part of one", () => {
+    const f = pick(single, (f) => f.qid === 500);
+    expect(matches({ ...f, title: "Kill 12 boars" }, withQ(single, "12"))).toBe(true);
+    expect(matches({ ...f, title: "Kill 112 boars" }, withQ(single, "12"))).toBe(false);
   });
   it("respects the severity, file and kind sets", () => {
     const f = pick(single, (f) => f.qid === 500);

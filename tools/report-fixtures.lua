@@ -44,8 +44,9 @@ local function levels(gid, file, start_level, end_level, enter, leave, finished,
 end
 
 -- A fixed header: a git addon at a fixed commit, a clean client, one date.
-local function header(scope, combos, guide_entries, stop)
-  return {
+-- extra adds run facts (filters, played, unreached, skipped_races).
+local function header(scope, combos, guide_entries, stop, extra)
+  local h = {
     scope = scope, date = "2026-01-01", paths_relative_to = "headless-wow-pro-client",
     addon = { git = true, branch = "master", commit = "0123456789abcdef0123456789abcdef01234567",
       dirty = false, path = "../WoW-Pro-Guides", version = "1.0" },
@@ -53,15 +54,18 @@ local function header(scope, combos, guide_entries, stop)
     matrix = { combos = combos }, rank = 2,
     guides = report.guides(guide_entries), stop = stop,
   }
+  for k, v in pairs(extra or {}) do h[k] = v end
+  return h
 end
 
 -- relink, when given, edits the grouped findings' links before the report is built.
-local function document(scope, logs, combos, stop, relink)
+-- extra: more header facts, as header() takes them.
+local function document(scope, logs, combos, stop, relink, extra)
   local entries = {}
   for i, l in ipairs(logs) do entries[i] = { combo = combos[i], guide_levels = l.guide_levels or {} } end
   local findings = group.findings(logs)
   if relink then relink(findings) end
-  local doc = report.build(findings, header(scope, combos, entries, stop))
+  local doc = report.build(findings, header(scope, combos, entries, stop, extra))
   return json.encode(doc, { indent = true }) .. "\n"
 end
 
@@ -107,6 +111,10 @@ local function single_signals()
   add(sig("manual-completion", G1, DUN_1_5, 215, "H", "Hearth to Kharanos", nil, { expected = true }))
 
   -- Guide G2.
+  -- A follow-on in another file: its cause is the G1 refusal, so in Guide order it nests
+  -- under a card in the Dun_1_5 section and must name its own file.
+  add(sig("never-shown-accept", G2, DUN_5_11, 25, "A", "Ironforge Calls", 95,
+    { why = "NextStep:PRE&(96393): A mandatory prereq was not met: 96393" }))
   add(sig("manual-completion", G2, DUN_5_11, 33, "C", "Scout the Ridge", 410, { level = 6, log = { 410 } }))
   add(sig("orphan-turnin", G2, DUN_5_11, 51, "T", "Beer Run", 420, {}))
   add(sig("log-full", G2, DUN_5_11, 70, "A", "Troll Menace", 430, { level = 7, log = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25 } }))
@@ -197,7 +205,15 @@ function fixtures.matrix()
     levels(G3, WES_12_15, 12, 15, 16, 16, true, 300),
   })
   local combos = { DWARF_WARRIOR, GNOME_MAGE, GNOME_PRIEST }
-  return document("forever-alliance-dwarf-gnome", { warrior, mage, priest }, combos)
+  -- A filtered matrix: Human starts in Elwynn, which the filters exclude, so it reached no
+  -- included guide and was skipped; Loch Modan was included but no character reached it.
+  return document("forever-alliance-dwarf-gnome-human-filtered", { warrior, mage, priest }, combos, nil, nil, {
+    filters = { { kind = "include", pattern = "WoWPro_Leveling/Guides/Alliance" },
+      { kind = "exclude", pattern = "WoWPro_Leveling/Guides/Alliance/Elw_*" } },
+    played = { G1, G2, G3 },
+    unreached = { "Loch Modan 12-20" },
+    skipped_races = { "Human" },
+  })
 end
 
 ---------------------------------------------------------------------------

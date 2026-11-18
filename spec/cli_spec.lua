@@ -492,6 +492,27 @@ describe("cli", function()
     assert.equal("1 guide entered under-levelled", doc.header.warnings[#doc.header.warnings])
   end)
 
+  it("writes neither file when the report template can't be read", function()
+    local outdir = tmpdir()
+    local html = require("hwc.findings.html")
+    local real = html.template
+    html.template = function() error("findings: cannot read the report template x", 0) end
+    local status, etext
+    local ok, perr = pcall(with_runner, function()
+      local out, _ = capture()
+      local err, text = capture()
+      status = cli.main({ "run", "--class", "WARRIOR", "--date", "2026-11-17", "--out", outdir }, out, err,
+        env_at(fixture()))
+      etext = text()
+    end)
+    html.template = real
+    assert.is_true(ok, tostring(perr))
+    assert.equal(1, status)
+    assert.matches("cannot read the report template", etext)
+    assert.is_nil(lfs.attributes(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline.json"))
+    assert.is_nil(lfs.attributes(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline.html"))
+  end)
+
   it("names each character whose run stopped early in header.stop", function()
     local outdir = tmpdir()
     with_combos({ { race = "Dwarf", class = "WARRIOR", variant = "baseline" },
@@ -545,6 +566,10 @@ describe("cli", function()
     local h = read_json(outdir .. "/2026-11-17-forever-alliance-dwarf-gnome-filtered.json").header
     assert.same({ "Gnome" }, h.skipped_races)
     assert.same({ "Dwarf WARRIOR baseline" }, h.matrix.combos)
+    assert.equal("Races that reached no included guide: Gnome.", h.notes.skipped_races)
+    assert.equal('Filters: --exclude "*/a.lua".', h.notes.filters)
+    assert.equal("Guides played: GB.", h.notes.played)
+    assert.truthy(table.concat(h.warnings, "\n"):find("1 race reached no included guide and was skipped: Gnome.", 1, true))
     assert.is_nil(lfs.attributes(outdir .. "/2026-11-17-forever-alliance-dwarf-gnome-filtered/Gnome-MAGE-baseline.json"))
   end)
 

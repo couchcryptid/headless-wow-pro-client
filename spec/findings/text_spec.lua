@@ -8,7 +8,7 @@ local function F(t)
   return t
 end
 
-local ONE = { single = "Dwarf Warrior", by_qid = {}, by_id = {} }
+local ONE = { single = "Dwarf Warrior", by_id = {} }
 
 describe("text constants", function()
   it("exposes the severity display table", function()
@@ -184,7 +184,7 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     local f = F({ signal = "never-shown-accept", name = "Next", qid = 5,
       why = "NextStep:PRE&(95213): A mandatory prereq was not met: 95213" })
     local pre = F({ id = "F-7F8B32EE", signal = "accept-refused", name = "Pre", qid = 95213, reasons = { "prerequisite" } })
-    local s = text.sentence(f, { single = "Dwarf Warrior", by_id = {}, by_qid = { [95213] = pre } })
+    local s = text.sentence(f, { single = "Dwarf Warrior", by_id = { [pre.id] = pre } })
     assert.equal("The guide tells you to accept this quest, but WoWPro hides the step because its prerequisite, "
       .. "quest 95213, is never completed.", s)
   end)
@@ -192,7 +192,7 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     local pre = F({ id = "F-7F8B32EE", signal = "accept-refused", name = "Pre", qid = 95213, reasons = { "prerequisite" } })
     local f = F({ signal = "never-shown-accept", name = "Next", qid = 5, caused_by = pre.id,
       why = "NextStep:PRE&(95213): A mandatory prereq was not met: 95213" })
-    local s = text.sentence(f, { single = "Dwarf Warrior", by_id = { [pre.id] = pre }, by_qid = { [95213] = pre } })
+    local s = text.sentence(f, { single = "Dwarf Warrior", by_id = { [pre.id] = pre } })
     assert.equal("The guide tells you to accept this quest, "
       .. "but WoWPro hides the step because its prerequisite, quest 95213, is never completed.", s)
   end)
@@ -231,14 +231,14 @@ describe("text.title and text.sentence (design spec §4.7)", function()
   it("accept-refused by class across several combos", function()
     local f = F({ signal = "accept-refused", name = "Pre", qid = 7, reasons = { "class" },
       combos = { "Gnome MAGE baseline", "Dwarf PRIEST baseline", "Dwarf PRIEST lw-skin" } })
-    local t, s = both(f, { by_id = {}, by_qid = {} })
+    local t, s = both(f, { by_id = {} })
     assert.equal('"Pre" can\'t be taken by a Mage/Priest', t)
     assert.equal("The guide shows this accept, but the quest data says a Mage/Priest can't take quest 7.", s)
   end)
   it("uses an for a vowel-initial race", function()
     local f = F({ signal = "accept-refused", name = "Pre", qid = 7, reasons = { "race" }, combos = { "Orc WARRIOR baseline" } })
     assert.equal("The guide shows this accept, but the quest data says an Orc can't take quest 7.",
-      text.sentence(f, { single = "Orc Warrior", by_id = {}, by_qid = {} }))
+      text.sentence(f, { single = "Orc Warrior", by_id = {} }))
   end)
   it("accept-refused by prerequisite", function()
     local t, s = both(F({ signal = "accept-refused", name = "Pre", qid = 7, reasons = { "prerequisite" } }))
@@ -268,7 +268,7 @@ describe("text.title and text.sentence (design spec §4.7)", function()
   it("wrong-race-class, multi-combo run", function()
     local f = F({ signal = "wrong-race-class", name = "Shown", qid = 7, reasons = { "class" },
       combos = { "Dwarf PRIEST baseline", "Gnome MAGE baseline" } })
-    local t, s = both(f, { by_id = {}, by_qid = {} })
+    local t, s = both(f, { by_id = {} })
     assert.equal('"Shown" is shown to the wrong class', t)
     assert.equal("WoWPro shows this step to characters that quest 7 excludes.", s)
   end)
@@ -388,7 +388,7 @@ describe("text.title and text.sentence (design spec §4.7)", function()
   it("a follow-on keeps the first clause only, with no prefix", function()
     local parent = F({ id = "F-7F8B32EE", signal = "accept-refused", name = "Pre", qid = 7, reasons = { "prerequisite" } })
     local f = F({ signal = "never-shown-accept", name = "Next", qid = 5, why = "Something odd", caused_by = "F-7F8B32EE" })
-    local ctx = { single = "Dwarf Warrior", by_qid = {}, by_id = { ["F-7F8B32EE"] = parent } }
+    local ctx = { single = "Dwarf Warrior", by_id = { ["F-7F8B32EE"] = parent } }
     assert.equal("The guide tells you to accept this quest, but WoWPro never shows the step.", text.sentence(f, ctx))
   end)
 end)
