@@ -603,7 +603,7 @@ function M.main(args, out, err, env)
   end
   if args[1] == "boot" then
     local opts, perr = parse_boot(args, 2)
-    local root
+    local root, _
     if opts then
       root, _, perr = locate(env)
       if not root then opts = nil end

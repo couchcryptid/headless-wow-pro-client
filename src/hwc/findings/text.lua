@@ -117,7 +117,8 @@ function text.combos(affected, matrix)
 
   -- Detail is dropped only when a group reads "(all N variants)": "all N
   -- characters", "all except ..." and named-variant groups lose nothing.
-  local summary, dropped = nil, false
+  local summary
+  local dropped = false
   if #unaffected == 0 then
     summary = "all " .. #matrix .. " characters"
   elseif #unaffected <= 3 then
