@@ -233,6 +233,11 @@ local STUCK = {
   ["max-iterations"] = { "Run hit its step limit", "The run stopped at its step limit before this guide ended." },
   ["no-current-step"] = { "No step to show", "WoWPro had no current step to show, so the run couldn't continue." },
   ["no-guide-loaded"] = { "No guide loaded", "WoWPro loaded no guide, so nothing ran." },
+  -- driver/run.lua after_settle: e.g. Forever 30_41 -> Dungeon_Uld pops back to 30_41's final D step.
+  ["guide-cycle"] = { 'Guide loops back to %s',
+    "Finishing this step sent the run to another guide, and WoWPro then came back to this same step, "
+      .. "which would only send it away again; the run stopped here." },
+  ["load-guide-failed"] = { "Next guide didn't load", "WoWPro didn't load the next guide in the chain, so the run stopped." },
 }
 
 function text.title(f)
