@@ -19,7 +19,9 @@ come from a catalog built from QuestieDB, never from the guide lines.
 
 **Status:**
 - **Scope:** Forever Alliance and Horde, the race's chain to its last guide. The
-  character levels with Classic's XP rules up to 60 (`src/hwc/world/xp.lua`). Each
+  character levels to 60 with Classic's XP table (`src/hwc/world/xp.lua`); only
+  level 29 (`UnitXPMax` 44300, 2026-11-18) is verified in Forever, the other rows
+  are unverified. Each
   race starts from its guide in the addon's `ForeverStartGuides` table:
 
   | Race (`--race`) | Faction | Start |
@@ -443,6 +445,27 @@ hwc init      # from any folder
 
 This downloads the latest QuestieDB Forever release into `~/.hwc/questie/<tag>/`,
 makes it the active one, then runs the health check. `HWC_HOME` moves the QuestieDB store (`~/.hwc/questie`); findings still default to `~/.hwc/findings` unless `--out` is given.
+
+### Reputation
+
+Reputation is simulated from quest rewards (`src/hwc/world/reputation.lua`,
+`reputation_state.lua`, `stubs/reputation.lua`). It lets guide steps that need a
+faction standing be played, and it reports a faction the character never met.
+What is known about Forever, and how:
+
+| Fact | Evidence |
+|---|---|
+| The API is `C_Reputation.GetFactionDataByID`; `GetFactionInfoByID` is absent; a faction the character hasn't met returns nil | Verified in Forever |
+| Bands: Neutral 0-3000, Friendly 3000-9000, Honored 9000-21000 | Verified in Forever; the other bands are unverified for Forever (Classic values) |
+| Dwarf starting table | Verified (fresh level-1 Dwarf, 2026-11-18); other races are inferred from the Dwarf pattern |
+| Gelkis (92) and Magram (93) are met at 2000 | Verified |
+| Every other faction is met at an assumed 0 | Assumption; each run lists them in its gaps |
+| Gains come only from quest rewards (QuestieDB `reputationReward`), at full value, with no racial bonus (Diplomacy is gone in Forever) | Reward scaling is unverified for Forever |
+| `requiredMinRep` and `requiredMaxRep` gate accepts | Refusals and the `rep-faction-unmet` finding are unverified |
+
+An accept the standing refuses is an `accept-refused` finding. A step that needs
+a faction the character has not met is a `rep-faction-unmet` finding, with the
+faction id.
 
 ### Health check
 
