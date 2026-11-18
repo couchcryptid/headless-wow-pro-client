@@ -101,11 +101,10 @@ this repo: `~/.luarocks/bin/busted` (slow ones: `--tags=slow`).
 
 The findings report is a small Preact page in `web/report/`, built by Vite into
 one self-contained HTML file. That file, `src/hwc/findings/report.html`, is
-committed, so running `hwc` never needs Node. Node is for working on the page only.
+committed, so running `hwc` never needs Node. Node 24 (`.nvmrc`) is for working on the page only.
 
 ```sh
 cd web/report
-nvm use                  # Node 24 (.nvmrc)
 npm ci
 npm run dev              # http://localhost:5173/?fixture=single (or matrix, empty)
 npm test                 # fixtures parse; the committed report.html equals a fresh build
