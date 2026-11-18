@@ -403,6 +403,31 @@ describe("cli", function()
     assert.same({ "GB", "GA" }, h.played)
   end)
 
+  it("matrix resolves the QuestieDB dir once, so a mid-run sync cannot mix versions", function()
+    local home = require("hwc.questie.home")
+    local real_active = home.active
+    local n = 0
+    home.active = function() n = n + 1; return "v1.1." .. n end
+    local outdir = tmpdir()
+    local seen
+    local ok, e = pcall(with_combos, { { race = "Dwarf", class = "WARRIOR", variant = "baseline" },
+      { race = "Gnome", class = "MAGE", variant = "baseline" },
+      { race = "Dwarf", class = "MAGE", variant = "baseline" } }, function()
+      seen = with_runner(function(calls)
+        local out, _ = capture()
+        assert.equal(0, cli.main({ "matrix", "--races", "Dwarf,Gnome", "--date", "2026-11-17",
+          "--out", outdir }, out, nil, env_at(fixture(), tmpdir())))
+        return calls
+      end)
+    end)
+    home.active = real_active
+    assert(ok, e)
+    assert.equal(3, #seen)
+    local dir = seen[1].cfg.catalog.questie_dir
+    assert.is_truthy(dir:find("/questie/v1.1.", 1, true))
+    for _, c in ipairs(seen) do assert.equal(dir, c.cfg.catalog.questie_dir) end
+  end)
+
   it("a run with no filters has no played list", function()
     local outdir = tmpdir()
     with_runner(function()

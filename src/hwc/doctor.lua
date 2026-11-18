@@ -56,10 +56,15 @@ local function check_tools(deps)
   for _, tool in ipairs({ "curl", "unzip" }) do
     if not deps.has_tool(tool) then missing[#missing + 1] = tool end
   end
+  local sum
+  for _, tool in ipairs({ "shasum", "sha256sum" }) do
+    if not sum and deps.has_tool(tool) then sum = tool end
+  end
+  if not sum then missing[#missing + 1] = "shasum or sha256sum" end
   if #missing > 0 then
     return check("tools", "fail", "missing: " .. table.concat(missing, ", ") .. " (init/sync need them)")
   end
-  return check("tools", "ok", "curl, unzip")
+  return check("tools", "ok", "curl, unzip, " .. sum)
 end
 
 local function check_wowpro(env)

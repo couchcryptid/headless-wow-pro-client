@@ -51,8 +51,16 @@ function M.unzip(zip, dest)
   return true
 end
 
+function M.has_tool(name)
+  local _, code = sh("command -v " .. M.quote(name))
+  return code == 0
+end
+
 function M.sha256(path)
-  local out, code = sh("shasum -a 256 " .. M.quote(path))
+  -- shasum ships with macOS and perl; sha256sum with coreutils. Both print
+  -- "<hex>  <path>", so the first field is the digest either way.
+  local tool = M.has_tool("shasum") and "shasum -a 256" or "sha256sum"
+  local out, code = sh(tool .. " " .. M.quote(path))
   local hex = code == 0 and out:match("^(" .. ("%x"):rep(64) .. ")%s")
   if not hex then return nil, "hwc: cannot checksum " .. path end
   return hex

@@ -30,7 +30,7 @@ local function header()
   return { scope = "Dwarf-WARRIOR-baseline", date = "2026-11-12",
     addon = { path = "../WoW-Pro-Guides", branch = "main", commit = "64fe6b3aabbccddeeff00112233445566778899", dirty = false },
     catalog = { questie = { path = "/home/u/.hwc/questie/v1.1.2", present = true,
-      sha256 = "deadbeef0123456789abcdef0123456789abcdef", tag = "v1.1.2", build = "e1652ce" } },
+      sha256 = "deadbeef0123456789abcdef0123456789abcdef", tag = "v1.1.2", build = "e1652ce0123456789abcdef0123456789abcdef0" } },
     client = { commit = "c0ffee1234567890", dirty = false }, matrix = { combos = { "Dwarf WARRIOR baseline" } },
     rank = 2, dungeons = { skip = true, skipped = 12 }, paths_relative_to = "headless-wow-pro-client" }
 end
@@ -286,6 +286,8 @@ describe("render.markdown", function()
     h.catalog.questie = { path = "/home/u/.hwc/questie/v1.1.2", present = false, reason = "no QuestieDB installed" }
     assert.truthy(plain(render.markdown({}, h),
       "  - `questie`: absent (no QuestieDB installed) · `/home/u/.hwc/questie/v1.1.2`\n"))
+    h.catalog.questie = { path = "/x/wh.json", present = false }
+    assert.truthy(plain(render.markdown({}, h), "  - `questie`: absent · `/x/wh.json`\n"))
     h.catalog.questie = { present = false, reason = "not installed" }
     assert.truthy(plain(render.markdown({}, h), "  - `questie`: absent (not installed) · `-`\n"))
   end)

@@ -85,8 +85,28 @@ describe("install", function()
     assert.are.equal("v1.1.2", rel.tag)
     assert.are.equal(10, rel.size)
     assert.is_truthy(rel.sha256:match("^%x+$") and #rel.sha256 == 64)
+    assert.is_truthy(rel.downloaded_at:match("^%d%d%d%d%-%d%d%-%d%dT%d%d:%d%d:%d%dZ$"))
     assert.is_false(exists(home.version_dir(root, "v1.1.2") .. "/asset.zip"))
     assert.are.same({}, stage_dirs(root))
+  end)
+
+  it("fails and leaves no release file when the close of .hwc-release.json fails", function()
+    local real = io.open
+    io.open = function(path, mode)
+      local f, err = real(path, mode)
+      if f and tostring(path):find(".hwc-release.json", 1, true) then
+        local h = f
+        return { write = function(_, ...) return h:write(...) end,
+          close = function() h:close(); return nil, "No space left on device" end }
+      end
+      return f, err
+    end
+    local ok, res, err = pcall(install.sync, root, {}, fake_deps())
+    io.open = real
+    assert.is_true(ok)
+    assert.is_nil(res)
+    assert.is_truthy(err:find("No space left on device", 1, true))
+    assert.is_nil(home.active(root))
   end)
 
   it("reports already, with no download, when the version is installed", function()

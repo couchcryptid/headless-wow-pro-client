@@ -44,7 +44,8 @@ guide lines.
 - **A WoW-Pro folder:** a git checkout of WoW-Pro-Guides, or the game's
   `Interface/AddOns` folder. `hwc` must be run from inside it (see
   [Choosing guides](#choosing-guides)).
-- **`curl` and `unzip`**, which `hwc init` uses to download QuestieDB.
+- **`curl`, `unzip`, and `shasum` or `sha256sum`**, which `hwc init` and
+  `hwc sync questie` use to download and verify QuestieDB.
 - **Optional:** `python3`.
 
 ## Install
@@ -308,7 +309,7 @@ hwc init      # from any folder
 ```
 
 This downloads the latest QuestieDB Forever release into `~/.hwc/questie/<tag>/`,
-makes it the active one, then runs the health check. `HWC_HOME` moves `~/.hwc`.
+makes it the active one, then runs the health check. `HWC_HOME` moves the QuestieDB store (`~/.hwc/questie`); findings still default to `~/.hwc/findings` unless `--out` is given.
 
 ### Health check
 

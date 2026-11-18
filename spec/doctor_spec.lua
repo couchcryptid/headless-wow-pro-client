@@ -149,6 +149,15 @@ describe("doctor", function()
     assert.is_true(report.failed)
   end)
 
+  it("passes tools with sha256sum alone and fails with no checksum tool", function()
+    deps.has_tool = function(name) return name ~= "shasum" end
+    assert.are.equal("ok", by_id(doctor.run(env, deps)).tools.status)
+    deps.has_tool = function(name) return name == "curl" or name == "unzip" end
+    local c = by_id(doctor.run(env, deps)).tools
+    assert.are.equal("fail", c.status)
+    assert.is_truthy(c.detail:find("shasum or sha256sum", 1, true))
+  end)
+
   it("fails rocks when lfs is missing and warns when only busted is", function()
     deps.require_ok = function(m) return m ~= "lfs" end
     assert.are.equal("fail", by_id(doctor.run(env, deps)).rocks.status)

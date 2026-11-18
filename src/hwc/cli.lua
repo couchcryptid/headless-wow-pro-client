@@ -269,11 +269,14 @@ local function play(combos, scope, opts, out, err)
   local cwd = opts.start or paths.cwd()
   local base = paths.resolve(opts["relative-to"] or cwd, cwd)
   local played, raw, labels = {}, {}, {}
+  -- Resolved once: a `hwc sync questie` mid-run must not mix QuestieDB versions.
+  local questie_dir = config.default_questie_dir()
   local skipped_races, skipped_seen = {}, {}
   for _, c in ipairs(combos) do
     local cfg = config.load({
       addon_path = opts.root, race = c.race, class = c.class,
       professions = matrix.professions(c.variant),
+      catalog = { questie_dir = questie_dir },
     })
     cfg.variant = c.variant
     local log = runner.character(cfg, { included = opts.included })

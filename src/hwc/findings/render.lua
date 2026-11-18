@@ -493,11 +493,11 @@ local function catalog_lines(out, catalog)
     local s = catalog[name]
     local line
     if s.present == false then
-      line = "absent (" .. tostring(s.reason or "unknown") .. ") · " .. code(s.path or "-")
+      line = "absent" .. (s.reason and (" (" .. tostring(s.reason) .. ")") or "") .. " · " .. code(s.path or "-")
     else
       local parts = { "present" }
       if s.tag then parts[#parts + 1] = code(s.tag) end
-      if s.build then parts[#parts + 1] = "build " .. code(s.build) end
+      if s.build then parts[#parts + 1] = "build " .. code(tostring(s.build):sub(1, 7)) end
       if s.commit then parts[#parts + 1] = "commit " .. code(s.commit) end
       if type(s.sha256) == "string" then parts[#parts + 1] = "sha256 " .. code(s.sha256:sub(1, 12)) end
       if s.path then parts[#parts + 1] = code(s.path) end

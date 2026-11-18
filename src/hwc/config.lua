@@ -23,7 +23,7 @@ end
 -- The active QuestieDB version dir, even when it is broken, so the catalog
 -- can report "broken: <tag>"; nil with no store or no active tag. A tag
 -- version_dir rejects is never turned into a path, so nil too.
-local function default_questie_dir()
+function M.default_questie_dir()
   local root = home.root()
   local tag = home.active(root)
   if not tag then return nil end
@@ -37,7 +37,7 @@ local function catalog_config(c)
   c = c or {}
   local sim = (os.getenv("HOME") or "") .. "/Projects/wow-pro-leveling/sim/data/"
   return {
-    questie_dir = c.questie_dir and resolve(c.questie_dir) or default_questie_dir(),
+    questie_dir = c.questie_dir and resolve(c.questie_dir) or M.default_questie_dir(),
     wh_json = resolve(c.wh_json or (sim .. "wh.json")),
     objs_json = resolve(c.objs_json or (sim .. "objs.json")),
     rate_overrides = resolve(c.rate_overrides or (sim .. "rate_overrides.json")),

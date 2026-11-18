@@ -62,7 +62,8 @@ function M.set_active(root, tag)
   local f, err = io.open(tmp, "wb")
   if not f then fail(err) end
   local ok, werr = f:write(tag, "\n")
-  f:close()
+  local closed, cerr = f:close()
+  if ok and not closed then ok, werr = nil, cerr end
   if not ok then
     os.remove(tmp)
     fail(werr)

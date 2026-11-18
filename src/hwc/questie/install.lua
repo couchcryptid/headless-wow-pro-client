@@ -55,8 +55,13 @@ end
 local function write_file(path, text)
   local f, err = io.open(path, "wb")
   if not f then return nil, "hwc: cannot write " .. path .. ": " .. tostring(err) end
-  f:write(text)
-  f:close()
+  local ok, werr = f:write(text)
+  local closed, cerr = f:close()
+  if ok and not closed then ok, werr = nil, cerr end
+  if not ok then
+    os.remove(path)
+    return nil, "hwc: cannot write " .. path .. ": " .. tostring(werr)
+  end
   return true
 end
 
@@ -86,6 +91,7 @@ local function fill_stage(sel, stage, deps)
     size = size,
     sha256 = sha,
     build = sel.build_commit,
+    downloaded_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
   }))
   if not ok then return nil, err end
   os.remove(zip)

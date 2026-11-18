@@ -72,6 +72,28 @@ describe("home store", function()
     assert.is_nil(lfs.attributes(r .. "/questie/active.tmp"))
   end)
 
+  it("set_active raises and removes the tmp file when close fails", function()
+    local r = os.tmpname()
+    os.remove(r)
+    local real = io.open
+    io.open = function(path, mode)
+      local f, err = real(path, mode)
+      if f and tostring(path):find("active.tmp", 1, true) then
+        local h = f
+        return { write = function(_, ...) return h:write(...) end,
+          close = function() h:close(); return nil, "disk full" end }
+      end
+      return f, err
+    end
+    local ok, e = pcall(home.set_active, r, "v1.1.2")
+    io.open = real
+    assert.is_false(ok)
+    assert.are.equal("hwc: cannot write " .. r .. "/questie/active: disk full", e)
+    assert.is_nil(lfs.attributes(r .. "/questie/active.tmp", "mode"))
+    assert.is_nil(home.active(r))
+    os.execute("rm -rf '" .. r .. "'")
+  end)
+
   it("set_active raises a hwc error on an unwritable root", function()
     local ok, err = pcall(home.set_active, "/nonexistent/zz", "v1.1.2")
     assert.is_false(ok)
