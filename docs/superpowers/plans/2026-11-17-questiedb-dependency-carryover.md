@@ -72,12 +72,25 @@ Every changed finding was matched by (signal, quest id, guide, line, action).
 Old raw fields below are from `local/questie/d57637f490c9dfcdbbc967dab47a8b0d8fe1b3cc/foreverQuestDB.lua`; new fields are from `catalog.load(...):quest(id)` on v1.1.2.
 
 - **accept-refused 7 to 11 (+8, -4).** Example, 1284 *Suspicious Hoofprints* (`30_41_Alliance.lua:38`): the old raw row has no prerequisite and the starter is object 187273; v1.1.2 has `pre_single` `[1282, 1302]` and the starter is object 21015. The quest is now refused for an unfinished prerequisite, where before it was accepted and later hit a below-level refusal. The same shift explains 1252 and 1253 (prerequisite added), and 19 *Tharil'zun* and 115 *Shadow Magic* (old `preQuestSingle {20}`; now `pre_group [20, 98387]`, where 98387 is a Forever-added quest id). The four that left: 455 *The Algaz Gauntlet* (old `preQuestSingle {468}`, now none), 464 *War Banners* and 1302 *James Hyal* (old `{1301}`, now none).
-- **did-not-advance 94 to 87 (+1, -8).** 1284, 1252, 1253, 1364, 664 and 665 left because they moved to accept-refused (above). 1302 *James Hyal* (line 347) came in: its prerequisite is gone, so the step is no longer refused at accept and instead is refused for level (`below-level`) and clicked off. Two `L` "Level 10" steps (`01_12_Dun_Morogh.lua` lines 219 and 220) also left; I did not trace why.
+- **did-not-advance 94 to 87 (+1, -8).** 1284, 1252, 1253, 1364, 664 and 665 left because they moved to accept-refused (above). 1302 *James Hyal* (line 347) came in: its prerequisite is gone, so the step is no longer refused at accept and instead is refused for level and clicked off (counted here under did-not-advance, not under the below-level signal, which fell for other quests). Two `L` "Level 10" steps (`01_12_Dun_Morogh.lua` lines 219 and 220) also left; I did not trace why.
 - **never-shown-accept 154 to 153 (-1).** 473 *Report to Captain Stoutfist* (`19_25_Alliance.lua:18`) was hidden because quest 455 was never completed; with 455's prerequisite 468 removed, 455 is offered and 473 follows.
 - **below-level 4 to 2 (-2).** 6064 *Taming the Beast* (line 240) and 1679 *Muren Stormpike* (line 273) no longer reach the accept below level 10. Their required level, class and race fields are the same in both sources (1679's `exclusiveTo {1638, 1684}` is gone), so the cause is upstream of the quest row (the level the client has on arrival). I did not trace it.
 - **leftover-quests 12, wrong-race-class 1:** unchanged.
 
-None of the changed quests was found in a fix file, and the old pin and the release share no ancestry record I could check, so the 66-commit figure from the plan is not verified here.
+The 66-commit figure was verified during design via the GitHub compare API (pin d57637f is 66 commits behind v1.1.2). It was not re-verified from the installed files here.
+
+### Task 11: fresh-machine path and suites
+
+**Fresh HWC_HOME (this branch's launcher):**
+- `hwc doctor` reported questie FAIL ("none installed") and exited 1.
+- `hwc init` installed v1.1.2 (build e1652ce); doctor then passed.
+- `hwc sync questie` said "already installed; active".
+- `hwc sync questie --tag v1.1.1` worked (v1.1.1 has a Forever build, 4dbb824), and doctor showed the upstream warn ("v1.1.1 -> v1.1.2 available").
+- `hwc sync questie --tag v1.1.2` switched back; doctor passed.
+
+**Suites (v1.1.2):**
+- Fast: 699 pass, 1 failure (`spec/driver/matrix_spec.lua:83`, pre-existing).
+- Slow, with the #3554 Green filter-out: 18 pass, 2 failures (#3554 Red; `run_dun_morogh_spec` QID 384), both known and pre-existing, and 1 pending (`anchors_spec.lua:162`, #3535 Red Farsen's Watch), a deliberate `pending()` in the spec. It was not compared with the old loader.
 
 ### Task 8 (catalog on the v1.1.2 Source): spec assertions
 
