@@ -14,9 +14,9 @@ local function buffer()
   return b
 end
 
-local function make(level, tty)
+local function make(level, tty, width)
   local out, err = buffer(), buffer()
-  return ui.new({ out = out, err = err, level = level, tty = tty }), out, err
+  return ui.new({ out = out, err = err, level = level, tty = tty, width = width }), out, err
 end
 
 describe("ui levels", function()
@@ -103,6 +103,66 @@ describe("ui progress on a tty", function()
     u:progress("a")
     u:done()
     assert.equals("", err:text())
+  end)
+end)
+
+describe("ui progress fits the terminal width", function()
+  it("cuts a text longer than the width to width-1 columns ending in …", function()
+    local u, _, err = make("normal", true, 10)
+    u:progress("abcdefghijklmnop")
+    assert.equals("\rabcdefgh…", err:text())
+  end)
+
+  it("leaves a text that fits alone", function()
+    local u, _, err = make("normal", true, 10)
+    u:progress("abcdefghi")
+    assert.equals("\rabcdefghi", err:text())
+  end)
+
+  it("counts code points, not bytes, and cuts on a boundary", function()
+    local u, _, err = make("normal", true, 8)
+    -- 9 code points, 12 bytes: each · is two bytes.
+    u:progress("a·b·c·d·e")
+    assert.equals("\ra·b·c·…", err:text())
+    -- 7 code points, 9 bytes, fits in 8 - 1 columns.
+    local u2, _, e2 = make("normal", true, 8)
+    u2:progress("a·b·c·d")
+    assert.equals("\ra·b·c·d", e2:text())
+  end)
+
+  it("redraws the cut text after a warning", function()
+    local u, _, err = make("normal", true, 6)
+    u:progress("abcdefgh")
+    local before = #err:text()
+    u:warn("x")
+    assert.equals("\r\27[Kwarning: x\n\r\27[Kabcd…", err:text():sub(before + 1))
+  end)
+
+  it("does not cut off a terminal", function()
+    local u, _, err = make("normal", false, 6)
+    u:progress("abcdefgh")
+    assert.equals("abcdefgh\n", err:text())
+  end)
+end)
+
+describe("ui result while progress shows", function()
+  it("clears the progress line first", function()
+    local u, out, err = make("normal", true, 80)
+    u:progress("a")
+    u:result("r\n")
+    assert.equals("\ra\r\27[K", err:text())
+    assert.equals("r\n", out:text())
+    -- Nothing left to clear or redraw.
+    u:done()
+    assert.equals("\ra\r\27[K", err:text())
+  end)
+end)
+
+describe("ui.width", function()
+  it("returns a positive number", function()
+    local w = ui.width()
+    assert.is_number(w)
+    assert.is_true(w > 0)
   end)
 end)
 

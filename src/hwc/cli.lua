@@ -50,9 +50,10 @@ local function dispatch(decl, rest, u, env)
   return res
 end
 
--- env = { pwd, cwd, home, hwc_home, tty, clock }: where hwc runs, the user's
--- home, whether stderr is a terminal and the wall clock, each defaulting to the
--- process's own (specs pass their own; tty defaults to false).
+-- env = { pwd, cwd, home, hwc_home, tty, width, clock }: where hwc runs, the
+-- user's home, whether stderr is a terminal (and its width; nil measures it) and
+-- the wall clock, each defaulting to the process's own (specs pass their own;
+-- tty defaults to false).
 function M.main(argv, out, err, env)
   out, err = out or io.stdout, err or io.stderr
   argv = argv or {}
@@ -64,11 +65,12 @@ function M.main(argv, out, err, env)
     home = env.home == nil and os.getenv("HOME") or env.home,
     hwc_home = env.hwc_home == nil and os.getenv("HWC_HOME") or env.hwc_home,
     tty = env.tty or false,
+    width = env.width,
     clock = env.clock or os.time,
   }
   local commands = require("hwc.cli.commands")
   local g = require("hwc.cli.args").globals(argv)
-  local u = require("hwc.ui").new({ out = out, err = err, level = g.level, tty = env.tty })
+  local u = require("hwc.ui").new({ out = out, err = err, level = g.level, tty = env.tty, width = env.width })
   if g.version or g.command == "version" then return dispatch(commands.find("version"), {}, u, env) end
   if g.help and g.command and g.command ~= "help" then
     return dispatch(commands.find("help"), { g.command }, u, env)
