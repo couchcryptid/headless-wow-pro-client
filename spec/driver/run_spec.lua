@@ -406,6 +406,206 @@ describe("driver.run", function()
     assert.same({}, signals(log, "hidden-use-step"))
   end)
 
+  -- A turn-in refused for a missing item that a hidden L-gated U step of the same
+  -- quest produces: the player combines the item off-guide and turns in once more
+  -- (design 2026-11-18-hidden-use-turnin). The world is a quest log over bags: an
+  -- item objective's progress is the bag count, and a turn-in removes the quest.
+  describe("a hidden use step at a refused turn-in", function()
+    local function item_world(objectives)
+      local w = fx.fake_world()
+      local quest = { objectives = objectives }
+      local order = { 1016 }
+      w.player.bags = {}
+      w.log = {
+        history = {},
+        entries = function() local out = {} for i, q in ipairs(order) do out[i] = { id = q, quest = quest } end return out end,
+        get = function(_, q) if order[1] == q then return { id = q, quest = quest } end return nil end,
+        have = function(_, _, i)
+          local obj = quest.objectives[i]
+          return math.min(obj.count, w.player.bags[obj.ids[1]] or 0)
+        end,
+      }
+      w.turn_in = function(q)
+        for i, obj in ipairs(quest.objectives) do
+          if w.log:have(q, i) < obj.count then return false end
+        end
+        order = {}
+        w.log.history[q] = true
+        return true
+      end
+      w.catalog = { quest = function(_, q) return q == 1016 and quest or nil end }
+      return w
+    end
+
+    -- perform stand-in over the scripted engine: U puts its step's `gives` items in
+    -- the bags and fires BAG_UPDATE (with `levels` levels); T turns 1016 in or is
+    -- refused "incomplete" while an item objective is short.
+    local function drive_items(steps, script, w, opts)
+      local E = fx.scripted_engine(one_guide(steps), script, "G1", w)
+      E.fired_events = {}
+      function E:fire(event) self.fired_events[#self.fired_events + 1] = event end
+      opts = opts or {}
+      opts.perform = function(ctx, step)
+        local out = E.perform(ctx, step)
+        local s = E.guides[E.cur_gid].steps[step.index]
+        if s.action == "U" then
+          for _, id in ipairs(s.gives or {}) do w.player.bags[id] = (w.player.bags[id] or 0) + 1 end
+          ctx.engine:fire("BAG_UPDATE", 0)
+          out.events = { "BAG_UPDATE" }
+          if s.levels then
+            w.player.level = w.player.level + s.levels
+            out.levels = s.levels
+          end
+        elseif s.action == "T" then
+          if not w.turn_in(1016) then
+            out.kind, out.reason = "refused", "incomplete"
+          else
+            -- The engine skips a done quest's steps with this why (WoWPro_Broker.lua:2042).
+            for _, u in ipairs(E.guides.G1.steps) do
+              if u.action == "U" then u.why = "NextStep(): QID is complete: 1016" end
+            end
+          end
+        end
+        return out
+      end
+      local log = run.drive({ engine = E, world = w, cfg = { race = "Dwarf", class = "WARRIOR" },
+        errors = {}, missing_order = {}, addon = { path = "/x" } }, opts)
+      return log, E
+    end
+
+    local function hidden_use(lootid, extra)
+      local s = use_step({ tags = { use = "5456", lootitem = { [lootid] = 1 } }, gives = { lootid } })
+      for k, v in pairs(extra or {}) do s[k] = v end
+      return s
+    end
+
+    local function count(list, v)
+      local n = 0
+      for _, x in ipairs(list) do if x == v then n = n + 1 end end
+      return n
+    end
+
+    local SCROLL = { { kind = "item", ids = { 5455 }, count = 1 } }
+
+    it("performs the hidden U step off-guide and turns in", function()
+      local w = item_world(SCROLL)
+      local steps = {
+        { action = "l", name = "Q", qids = { 1016 }, tags = { lootitem = { [12220] = 5 } } },
+        hidden_use(5455),
+        { action = "T", name = "Q", qids = { 1016 } },
+      }
+      local log, E = drive_items(steps, { G1 = { { complete = { 1 } }, nil, { complete = { 3 } },
+        { complete = { 4 }, done = true } } }, w)
+      assert.same({ { gid = "G1", file = "g1.lua", line = 102, qid = 1016, action = "U", for_line = 103,
+        events = { "BAG_UPDATE" }, levels = 0 } }, log.offguide)
+      assert.same({ "G1:1", "G1:3", "G1:2", "G1:3", "G1:4" }, E.acted)
+      assert.is_true(w.log.history[1016])
+      local t = log.steps[2]
+      assert.equal("T", t.action)
+      assert.equal("acted", t.outcome.kind)
+      assert.same({}, signals(log, "did-not-advance"))
+      assert.same({}, signals(log, "leftover-quests"))
+      local hits = signals(log, "hidden-use-step")
+      assert.equal(1, #hits)
+      assert.equal(102, hits[1].line)
+    end)
+
+    it("has an empty offguide list when nothing was done off-guide", function()
+      local log = drive(one_guide({ { action = "R", name = "a" } }), { G1 = { { complete = { 1 } },
+        { complete = { 2 }, done = true } } })
+      assert.same({}, log.offguide)
+    end)
+
+    it("uses the lowest-index hidden U step whose L item is the missing item (Review Focus 1)", function()
+      local w = item_world(SCROLL)
+      local steps = {
+        { action = "R", name = "a" },
+        hidden_use(9999),
+        hidden_use(5455),
+        hidden_use(5455),
+        { action = "T", name = "Q", qids = { 1016 } },
+      }
+      local log, E = drive_items(steps, { G1 = { { complete = { 1 } }, nil, nil, nil, { complete = { 5 } },
+        { complete = { 6 }, done = true } } }, w)
+      assert.equal(1, #log.offguide)
+      assert.equal(103, log.offguide[1].line)
+      assert.equal(105, log.offguide[1].for_line)
+      assert.equal(0, count(E.acted, "G1:2"))
+      assert.equal(0, count(E.acted, "G1:4"))
+      assert.same({}, signals(log, "did-not-advance"))
+    end)
+
+    it("does nothing when the hidden U step's L item isn't the missing item (Review Focus 2)", function()
+      local w = item_world(SCROLL)
+      local steps = {
+        { action = "R", name = "a" },
+        hidden_use(9999),
+        { action = "T", name = "Q", qids = { 1016 } },
+      }
+      local log, E = drive_items(steps, { G1 = { { complete = { 1 } }, nil, nil,
+        { complete = { 4 }, done = true } } }, w)
+      assert.same({}, log.offguide)
+      assert.equal(0, count(E.acted, "G1:2"))
+      assert.equal(1, #signals(log, "did-not-advance"))
+      assert.equal(1, #signals(log, "leftover-quests"))
+      assert.equal(1, #signals(log, "hidden-use-step"))
+    end)
+
+    it("tries the turn-in once more only, then records did-not-advance (Review Focus 3)", function()
+      local w = item_world({ { kind = "item", ids = { 5455 }, count = 1 }, { kind = "item", ids = { 7777 }, count = 1 } })
+      local steps = {
+        { action = "R", name = "a" },
+        hidden_use(5455),
+        { action = "T", name = "Q", qids = { 1016 } },
+      }
+      local log, E = drive_items(steps, { G1 = { { complete = { 1 } }, nil, nil,
+        { complete = { 4 }, done = true } } }, w)
+      assert.equal(1, #log.offguide)
+      assert.equal(1, count(E.acted, "G1:2"))
+      assert.equal(2, count(E.acted, "G1:3"))
+      local dna = signals(log, "did-not-advance")
+      assert.equal(1, #dna)
+      assert.equal(103, dna[1].line)
+      assert.equal("incomplete", dna[1].reason)
+      assert.equal("refused", log.steps[2].outcome.kind)
+      assert.equal(1, #signals(log, "leftover-quests"))
+    end)
+
+    it("never re-performs a U step the guide showed (Review Focus 4)", function()
+      local w = item_world(SCROLL)
+      local steps = {
+        { action = "R", name = "a" },
+        use_step({ hidden = false, why = HIDDEN_USE }), -- shown and performed; gives nothing
+        { action = "T", name = "Q", qids = { 1016 } },
+      }
+      local log, E = drive_items(steps, { G1 = { { complete = { 1 } }, { complete = { 2 } }, nil,
+        { complete = { 4 }, done = true } } }, w)
+      assert.same({}, log.offguide)
+      assert.equal(1, count(E.acted, "G1:2"))
+      assert.equal(1, #signals(log, "did-not-advance"))
+    end)
+
+    it("applies the off-guide U action's events and levels (Review Focus 5)", function()
+      local w = item_world(SCROLL)
+      local steps = {
+        { action = "R", name = "a" },
+        hidden_use(5455, { levels = 1 }),
+        { action = "T", name = "Q", qids = { 1016 } },
+      }
+      local events = {}
+      local log, E = drive_items(steps, { G1 = { { complete = { 1 } }, nil, { complete = { 3 } },
+        { complete = { 4 }, done = true } } }, w, { on_progress = function(e) events[#events + 1] = e end })
+      assert.same({ "BAG_UPDATE" }, E.fired_events)
+      assert.same({ "BAG_UPDATE" }, log.offguide[1].events)
+      assert.equal(1, log.offguide[1].levels)
+      assert.equal(2, w.player.level)
+      local levels = {}
+      for _, e in ipairs(events) do if e.kind == "level" then levels[#levels + 1] = e.level end end
+      assert.same({ 2 }, levels)
+      assert.same({}, signals(log, "did-not-advance"))
+    end)
+  end)
+
   it("still flags a hidden DUNGEON accept the engine did not complete", function()
     local steps = {
       { action = "R", name = "a" },

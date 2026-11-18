@@ -694,6 +694,10 @@ local OTHER_HANDLERS = {
 -- hand (actions.expects_manual), as the guides' class-training notes do.
 actions.EXPECTED_MANUAL = { N = true, D = true, r = true, ["*"] = true }
 
+-- The L tag's items as { {id, n}, ... } sorted by id (the driver matches a hidden U
+-- step's L item against a refused turn-in's missing item with it).
+actions.parse_loot = parse_loot
+
 function actions.expects_manual(step)
   if actions.EXPECTED_MANUAL[step.action] then return true end
   local note = step.tags and step.tags.note
