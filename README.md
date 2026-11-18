@@ -176,17 +176,20 @@ race can't play in Forever).
 
 Output, under `--out DIR` (default `~/.hwc/findings`, created if missing, so runs never write into the WoW-Pro folder):
 
-- `DIR/<date>-<scope>.html`: the findings report, one self-contained page
+- `DIR/<date>-<scope>-<hash>.html`: the findings report, one self-contained page
   with the findings JSON embedded in it (it opens from disk and loads nothing
   from the network). The scope is
   `forever-<faction>-<races lower, joined by '-'>` for `matrix` (`forever-<races>`
   when the races span both factions) and
   `<race>-<class>-<variant>` for `run`. With any filter given, the scope gains
   `-filtered`.
-- `DIR/<date>-<scope>.json`: the same findings as a machine-readable document
+- `DIR/<date>-<scope>-<hash>.json`: the same findings as a machine-readable document
   (format 2, the JSON the page embeds), which `/triage` reads.
-- `DIR/<date>-<scope>/<race>-<class>-<variant>.json`: one run log per character
+- `DIR/<date>-<scope>-<hash>/<race>-<class>-<variant>.json`: one run log per character
   (git-ignored).
+
+`<hash>` is 8 hex digits of the findings JSON: two runs with different results
+never overwrite each other, and identical findings files share a name.
 
 `--relative-to DIR` (default: the current directory) sets the base for every
 path in the output: the HTML page, the findings JSON and the run logs write paths
@@ -228,6 +231,55 @@ doesn't know is by design (spec §3) and is not reported. The variants:
 | `lw-skin` | Leatherworking, Skinning |
 | `eng-ench` | Engineering, Enchanting |
 | `tailoring` | Tailoring |
+
+## Comparing runs
+
+`hwc diff` compares two findings files by finding id and tells you what a guide
+change fixed and what it broke. The loop: run on `main`, switch the addon to
+your branch, run again with the same flags from the same folder (Lua-error
+finding ids depend on the folder, see `--relative-to` above), then diff. The
+file names carry a content hash, so take both paths from each run's
+`hwc: wrote ...` line:
+
+```sh
+cd ~/Projects/WoW-Pro-Guides
+hwc run --race Dwarf --class WARRIOR --out /tmp/findings      # on main
+git switch my-guide-fix
+hwc run --race Dwarf --class WARRIOR --out /tmp/findings      # on the branch
+hwc diff /tmp/findings/2026-11-18-Dwarf-WARRIOR-baseline-1a2b3c4d.json \
+         /tmp/findings/2026-11-18-Dwarf-WARRIOR-baseline-5e6f7a8b.json
+```
+
+Pass the `.json` files; a `.html` path is refused. Add `--json` for the result
+as JSON (before or after the paths). Findings land in one of five categories:
+
+- **fixed**: in OLD, gone from NEW.
+- **new**: in NEW only.
+- **partly fixed**: in both, but NEW hits fewer characters.
+- **spread**: in both, but NEW hits more characters.
+- **unchanged**: in both on the same characters (counted, not listed).
+
+Only findings that count toward the report take part (not harness or expected
+ones), and only on the characters both runs played. A warning line says when
+the comparison may mislead:
+
+- different QuestieDB tag or build
+- different supplement
+- different guide filters
+- characters only in one run (left out)
+- a character's run stopped early in one run but not the other (findings past the stop show as fixed)
+- runs started from different folders
+- different hwc versions
+- both runs are the same addon commit
+- uncommitted changes in the OLD or NEW run
+
+| Exit | Meaning |
+|---|---|
+| 0 | nothing new (fixed, partly fixed and unchanged may be present) |
+| 1 | NEW has new or spread findings, or a shared character's NEW run stopped early |
+| 2 | usage error, unreadable file, invalid JSON, or the runs share no characters |
+
+Exit 1 means "new findings or a cut-short run" here, as in `diff(1)` it means "files differ".
 
 ## Choosing guides
 

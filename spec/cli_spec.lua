@@ -29,6 +29,25 @@ local function fixture()
   return root
 end
 
+-- Findings file names end in a content hash; these find them without knowing it.
+local function files(dir, pattern)
+  local found = {}
+  for name in lfs.dir(dir) do
+    if name:match(pattern) then found[#found + 1] = dir .. "/" .. name end
+  end
+  table.sort(found)
+  return found
+end
+
+-- The one findings file for `scope` on the test date; ext is "json" or "html".
+local function only(dir, scope, ext)
+  ext = ext or "json"
+  local pattern = "^2026%-11%-17%-" .. scope:gsub("%-", "%%-") .. "%-%x%x%x%x%x%x%x%x%." .. ext .. "$"
+  local found = files(dir, pattern)
+  assert.equal(1, #found, "expected one " .. ext .. " for " .. scope .. " in " .. dir)
+  return found[1]
+end
+
 local function env_at(dir, home) return { pwd = dir, cwd = dir, home = home or tmpdir() } end
 
 -- Replaces runner.character for one call of fn; each log plays `played(cfg)`
@@ -279,7 +298,7 @@ describe("cli", function()
     end)
     assert.same({ GB = true }, calls[1].opts.included)
     assert.equal(root, calls[1].cfg.addon_path)
-    local h = read_json(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline-filtered.json").header
+    local h = read_json(only(outdir, "Dwarf-WARRIOR-baseline-filtered")).header
     assert.same({
       { kind = "exclude", pattern = "*" }, { kind = "include", pattern = "*a.lua" },
       { kind = "exclude", pattern = "*/a.lua" }, { kind = "include", pattern = "*b.lua" },
@@ -298,7 +317,7 @@ describe("cli", function()
       { from = "GA", passed = { "GA" }, to = "GB", level_before = 1, level_after = 1 },
       { from = "GB", passed = { "GC" }, to = nil, level_before = 1, level_after = 1 },
     })
-    local h = read_json(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline-filtered.json").header
+    local h = read_json(only(outdir, "Dwarf-WARRIOR-baseline-filtered")).header
     assert.same({ "GA" }, h.jumped)
   end)
 
@@ -319,7 +338,7 @@ describe("cli", function()
       return calls
     end)
     assert.is_nil(calls[1].opts.included)
-    local h = read_json(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline.json").header
+    local h = read_json(only(outdir, "Dwarf-WARRIOR-baseline")).header
     assert.is_nil(h.filters)
     assert.is_nil(h.unreached)
   end)
@@ -331,7 +350,7 @@ describe("cli", function()
       assert.equal(0, cli.main({ "run", "--class", "WARRIOR", "--include", "*a.lua", "--include", "*b.lua",
         "--date", "2026-11-17", "--out", outdir }, out, nil, env_at(fixture())))
     end)
-    local h = read_json(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline-filtered.json").header
+    local h = read_json(only(outdir, "Dwarf-WARRIOR-baseline-filtered")).header
     assert.same({ "GA" }, h.unreached)
   end)
 
@@ -364,7 +383,7 @@ describe("cli", function()
       return calls
     end)
     assert.equal(link, calls[1].cfg.addon_path)
-    local h = read_json(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline.json").header
+    local h = read_json(only(outdir, "Dwarf-WARRIOR-baseline")).header
     assert.equal("..", h.addon.path)
     assert.equal("WoWPro_Leveling", h.paths_relative_to)
   end)
@@ -380,7 +399,7 @@ describe("cli", function()
       assert.equal(0, cli.main({ "run", "--class", "WARRIOR", "--date", "2026-11-17", "--out", outdir,
         "--relative-to", ".." }, out, err, env), etext())
     end)
-    local h = read_json(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline.json").header
+    local h = read_json(only(outdir, "Dwarf-WARRIOR-baseline")).header
     assert.equal(".", h.addon.path)
     assert.equal("AddOns", h.paths_relative_to)
   end)
@@ -410,7 +429,7 @@ describe("cli", function()
           "*", "--date", "2026-11-17", "--out", outdir }, out, nil, env_at(fixture())))
       end, function(cfg) return cfg.race == "Gnome" and { "GA", "GB" } or { "GB" } end)
     end)
-    local h = read_json(outdir .. "/2026-11-17-forever-alliance-dwarf-gnome-filtered.json").header
+    local h = read_json(only(outdir, "forever-alliance-dwarf-gnome-filtered")).header
     assert.same({ "GB", "GA" }, h.played)
   end)
 
@@ -446,7 +465,7 @@ describe("cli", function()
       assert.equal(0, cli.main({ "run", "--class", "WARRIOR", "--date", "2026-11-17", "--out", outdir },
         out, nil, env_at(fixture())))
     end)
-    assert.is_nil(read_json(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline.json").header.played)
+    assert.is_nil(read_json(only(outdir, "Dwarf-WARRIOR-baseline")).header.played)
   end)
 
   it("matrix accepts repeated --race and merges --races, first-seen order", function()
@@ -464,6 +483,37 @@ describe("cli", function()
     assert.same({ "Dwarf", "Gnome" }, got)
   end)
 
+  it("names the stem by date, scope and the findings hash", function()
+    local group = require("hwc.findings.group")
+    assert.equal("2026-11-17-s-" .. group.fnv1a32("{}\n"), cli.stem_name("2026-11-17", "s", "{}\n"))
+  end)
+
+  it("keeps both runs when the findings differ", function()
+    local outdir = tmpdir()
+    for _, g in ipairs({ "GB", "GC" }) do
+      with_runner(function()
+        local out, _ = capture()
+        assert.equal(0, cli.main({ "run", "--class", "WARRIOR", "--date", "2026-11-17", "--out", outdir }, out, nil,
+          env_at(fixture())))
+      end, function() return { g } end)
+    end
+    assert.equal(2, #files(outdir, "%.json$"))
+    assert.equal(2, #files(outdir, "%.html$"))
+  end)
+
+  it("writes run logs under the hashed stem", function()
+    local outdir = tmpdir()
+    local text = with_runner(function()
+      local out, text = capture()
+      assert.equal(0, cli.main({ "run", "--class", "WARRIOR", "--date", "2026-11-17", "--out", outdir }, out, nil,
+        env_at(fixture())))
+      return text()
+    end)
+    local stem = only(outdir, "Dwarf-WARRIOR-baseline"):gsub("%.json$", "")
+    assert.matches(stem .. ".html", text, 1, true)
+    assert.equal("file", lfs.attributes(stem .. "/Dwarf-WARRIOR-baseline.json", "mode"))
+  end)
+
   it("--out defaults to $HOME/.hwc/findings", function()
     local home = tmpdir()
     with_runner(function()
@@ -471,7 +521,7 @@ describe("cli", function()
       assert.equal(0, cli.main({ "run", "--class", "WARRIOR", "--date", "2026-11-17" }, out, nil,
         env_at(fixture(), home)))
     end)
-    assert.equal("file", lfs.attributes(home .. "/.hwc/findings/2026-11-17-Dwarf-WARRIOR-baseline.json", "mode"))
+    assert.equal("file", lfs.attributes(only(home .. "/.hwc/findings", "Dwarf-WARRIOR-baseline"), "mode"))
   end)
 
   it("writes format 2 JSON with guide levels and no markdown report", function()
@@ -481,9 +531,9 @@ describe("cli", function()
       assert.equal(0, cli.main({ "run", "--class", "WARRIOR", "--date", "2026-11-17", "--out", outdir }, out, nil,
         env_at(fixture())))
     end)
-    assert.is_nil(lfs.attributes(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline.md"))
-    local doc = read_json(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline.json")
-    local page = io.open(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline.html", "rb"):read("*a")
+    assert.same({}, files(outdir, "%.md$"))
+    local doc = read_json(only(outdir, "Dwarf-WARRIOR-baseline"))
+    local page = io.open(only(outdir, "Dwarf-WARRIOR-baseline", "html"), "rb"):read("*a")
     assert.same(doc, require("dkjson").decode(page:match('id="report">(.-)</script>')))
     assert.equal(2, doc.format)
     assert.equal(1, #doc.header.guides)
@@ -515,8 +565,8 @@ describe("cli", function()
     assert.is_true(ok, tostring(perr))
     assert.equal(1, status)
     assert.matches("cannot read the report template", etext)
-    assert.is_nil(lfs.attributes(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline.json"))
-    assert.is_nil(lfs.attributes(outdir .. "/2026-11-17-Dwarf-WARRIOR-baseline.html"))
+    assert.same({}, files(outdir, "%.json$"))
+    assert.same({}, files(outdir, "%.html$"))
   end)
 
   it("names each character whose run stopped early in header.stop", function()
@@ -529,7 +579,7 @@ describe("cli", function()
           out, nil, env_at(fixture())))
       end)
     end)
-    local doc = read_json(outdir .. "/2026-11-17-forever-alliance-dwarf-gnome.json")
+    local doc = read_json(only(outdir, "forever-alliance-dwarf-gnome"))
     assert.same({ { combo = "Gnome MAGE baseline", reason = "iterations" } }, doc.header.stop)
     assert.same({ enter = 1, leave = 4, finished = false }, doc.header.guides[1].levels["Gnome MAGE baseline"])
   end)
@@ -542,7 +592,7 @@ describe("cli", function()
         "--out", outdir }, out, nil, env_at(fixture())))
       return text()
     end)
-    assert.matches("2026%-11%-17%-Dwarf%-WARRIOR%-baseline%-filtered%.html", text)
+    assert.matches("2026%-11%-17%-Dwarf%-WARRIOR%-baseline%-filtered%-%x%x%x%x%x%x%x%x%.html", text)
   end)
 
   it("a filtered matrix scope is forever-alliance-<races>-filtered", function()
@@ -555,7 +605,7 @@ describe("cli", function()
         return text()
       end)
     end)
-    assert.matches("2026%-11%-17%-forever%-alliance%-dwarf%-filtered%.html", text)
+    assert.matches("2026%-11%-17%-forever%-alliance%-dwarf%-filtered%-%x%x%x%x%x%x%x%x%.html", text)
     assert.is_nil(text:match("1%-25"))
   end)
 
@@ -571,9 +621,9 @@ describe("cli", function()
         end)
       end)
     end
-    assert.matches("2026%-11%-17%-forever%-horde%-orc%-undead%.html",
+    assert.matches("2026%-11%-17%-forever%-horde%-orc%-undead%-%x%x%x%x%x%x%x%x%.html",
       scope("Orc,Undead", { { race = "Orc", class = "WARRIOR", variant = "baseline" } }))
-    assert.matches("2026%-11%-17%-forever%-dwarf%-orc%.html",
+    assert.matches("2026%-11%-17%-forever%-dwarf%-orc%-%x%x%x%x%x%x%x%x%.html",
       scope("Dwarf,Orc", { { race = "Dwarf", class = "WARRIOR", variant = "baseline" } }))
   end)
 
@@ -587,14 +637,14 @@ describe("cli", function()
           "2026-11-17", "--out", outdir }, out, nil, env_at(fixture())))
       end, function(cfg) return cfg.race == "Gnome" and {} or { "GB" } end)
     end)
-    local h = read_json(outdir .. "/2026-11-17-forever-alliance-dwarf-gnome-filtered.json").header
+    local h = read_json(only(outdir, "forever-alliance-dwarf-gnome-filtered")).header
     assert.same({ "Gnome" }, h.skipped_races)
     assert.same({ "Dwarf WARRIOR baseline" }, h.matrix.combos)
     assert.equal("Races that reached no included guide: Gnome.", h.notes.skipped_races)
     assert.equal('Filters: --exclude "*/a.lua".', h.notes.filters)
     assert.equal("Guides played: GB.", h.notes.played)
     assert.truthy(table.concat(h.warnings, "\n"):find("1 race reached no included guide and was skipped: Gnome.", 1, true))
-    assert.is_nil(lfs.attributes(outdir .. "/2026-11-17-forever-alliance-dwarf-gnome-filtered/Gnome-MAGE-baseline.json"))
+    assert.is_nil(lfs.attributes(only(outdir, "forever-alliance-dwarf-gnome-filtered"):gsub("%.json$", "") .. "/Gnome-MAGE-baseline.json"))
   end)
 
   it("matrix exits 2 when no race reaches an included guide", function()
@@ -791,5 +841,163 @@ describe("cli init, doctor and sync questie", function()
     end)
     assert.equal(0, r[1])
     assert.equal("QuestieDB none \226\134\146 v1.1.2 (build e1652ce)\nok   luajit: fine\n", r[2])
+  end)
+end)
+
+describe("hwc diff", function()
+  local cli = require("hwc.cli")
+  local jsonlib = require("hwc.json")
+  local DWARF, GNOME = "Dwarf WARRIOR baseline", "Gnome MAGE baseline"
+
+  local function doc(findings, header)
+    local h = {
+      addon = { git = true, branch = "main", commit = "aaaaaaa", dirty = false },
+      catalog = { questie = { tag = "v1.1.2", build = "e1652ce" }, supplement = { present = false } },
+      client = { commit = "c1" },
+      matrix = { combos = { DWARF, GNOME } },
+      paths_relative_to = "WoW-Pro-Guides",
+    }
+    for k, v in pairs(header or {}) do h[k] = v end
+    return { format = 2, header = h, findings = findings or {} }
+  end
+
+  local function finding(id)
+    return {
+      id = id, combos = { DWARF }, severity = "high", signal = "never-shown-accept",
+      title = id, file = "WoWPro_Leveling/Forever/Alliance/01_12_Dun_Morogh.lua", line = 10,
+    }
+  end
+
+  local function put(dir, name, d)
+    local path = dir .. "/" .. name
+    write(path, type(d) == "string" and d or jsonlib.encode(d))
+    return path
+  end
+
+  local function run(args, env)
+    local out, text = capture()
+    local err, etext = capture()
+    local code = cli.main(args, out, err, env or env_at(tmpdir()))
+    return code, text(), etext()
+  end
+
+  it("exits 0 and prints the summary when nothing is new", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({ finding("F-1") }))
+    local b = put(dir, "b.json", doc({ finding("F-1") }))
+    local code, out = run({ "diff", a, b })
+    assert.equal(0, code)
+    assert.matches("no changes", out)
+  end)
+
+  it("exits 1 when NEW has a new finding", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({}))
+    local b = put(dir, "b.json", doc({ finding("F-2") }))
+    local code, out = run({ "diff", a, b })
+    assert.equal(1, code)
+    assert.matches("F%-2", out)
+  end)
+
+  it("prints the result as JSON with --json", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({}))
+    local b = put(dir, "b.json", doc({}))
+    local code, out = run({ "diff", a, b, "--json" })
+    assert.equal(0, code)
+    local r = require("dkjson").decode(out)
+    for _, k in ipairs({ "counts", "warnings", "fixed", "new", "partly_fixed", "spread" }) do
+      assert.is_not_nil(r[k], k)
+    end
+    assert.matches('"new":%[%]', out)
+  end)
+
+  it("accepts --json before or after the paths", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({}))
+    local b = put(dir, "b.json", doc({}))
+    local _, after = run({ "diff", a, b, "--json" })
+    local _, before = run({ "diff", "--json", a, b })
+    assert.equal(after, before)
+    assert.matches('"counts"', before)
+  end)
+
+  it("exits 2 naming a missing file", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({}))
+    local code, _, err = run({ "diff", a, dir .. "/nope.json" })
+    assert.equal(2, code)
+    assert.matches("hwc: cannot read .*/nope.json", err)
+    assert.matches("see hwc %-%-help", err)
+    assert.is_nil(err:match("Usage:"))
+  end)
+
+  it("exits 2 for a .html path with a hint", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({}))
+    local h = put(dir, "b.html", "<html></html>")
+    local code, _, err = run({ "diff", a, h })
+    assert.equal(2, code)
+    assert.matches("use the %.json beside it", err)
+  end)
+
+  it("exits 2 for invalid JSON and for no shared characters", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({}))
+    local bad = put(dir, "bad.json", "{not json")
+    local code, _, err = run({ "diff", a, bad })
+    assert.equal(2, code)
+    assert.matches("not valid JSON", err)
+    local scalar = put(dir, "scalar.json", "42")
+    code, _, err = run({ "diff", a, scalar })
+    assert.equal(2, code)
+    assert.matches("not valid JSON", err)
+    local other = put(dir, "other.json", doc({}, { matrix = { combos = { "Human PRIEST baseline" } } }))
+    code, _, err = run({ "diff", a, other })
+    assert.equal(2, code)
+    assert.matches("^hwc: ", err)
+    assert.matches("no shared characters", err)
+  end)
+
+  it("exits 2 with fewer or more than two paths", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({}))
+    local code, _, err = run({ "diff", a })
+    assert.equal(2, code)
+    assert.matches("hwc: diff needs", err)
+    code = run({ "diff", a, a, a })
+    assert.equal(2, code)
+  end)
+
+  it("exits 2 for a format-2 file with a malformed body", function()
+    local dir = tmpdir()
+    local bad = put(dir, "bad.json", '{"format":2,"header":{"matrix":{"combos":["A"]}},"findings":5}')
+    for _, args in ipairs({ { "diff", bad, bad }, { "diff", bad, bad, "--json" } }) do
+      local code, out, err = run(args)
+      assert.equal(2, code)
+      assert.equal("", out)
+      assert.matches("^hwc: [^\n]*not valid findings files[^\n]*\nsee hwc %-%-help\n$", err)
+    end
+  end)
+
+  it("needs no WoW-Pro folder", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({}))
+    local code = run({ "diff", a, a }, env_at(tmpdir()))
+    assert.equal(0, code)
+  end)
+
+  it("handles a non-git side and the same file twice", function()
+    local dir = tmpdir()
+    local a = put(dir, "a.json", doc({ finding("F-1") }))
+    local code, out = run({ "diff", a, a })
+    assert.equal(0, code)
+    assert.matches("no changes", out)
+    assert.matches("same addon commit", out)
+    local nogit = put(dir, "nogit.json", doc({}, { addon = { git = false, version = "2026.11.12.A" } }))
+    local out2
+    code, out2 = run({ "diff", nogit, nogit })
+    assert.equal(0, code)
+    assert.matches("2026.11.12.A (not a git folder)", out2, 1, true)
   end)
 end)

@@ -16,7 +16,17 @@ end
 local REPO = lfs.currentdir()
 local RUN = "cd '%s' && '" .. REPO .. "/bin/hwc' run --race Dwarf --class WARRIOR"
   .. " --exclude '*' --include '*01_12_Dun_Morogh*' --date 2026-11-12"
-local STEM = "2026-11-12-Dwarf-WARRIOR-baseline-filtered"
+local STEM_PATTERN = "^2026%-11%-12%-Dwarf%-WARRIOR%-baseline%-filtered%-%x%x%x%x%x%x%x%x%.json$"
+
+-- The one findings .json in dir: its name carries the content hash.
+local function findings_json(dir)
+  local found = {}
+  for name in lfs.dir(dir) do
+    if name:match(STEM_PATTERN) then found[#found + 1] = name end
+  end
+  assert.equal(1, #found, "expected one findings .json in " .. dir)
+  return dir .. "/" .. found[1], found[1]
+end
 
 local function slurp(path)
   local f = assert(io.open(path, "rb"))
@@ -35,7 +45,7 @@ describe("findings determinism across processes #slow", function()
   it("two bin/hwc run processes give byte-identical findings and clean stderr", function()
     local base = os.tmpname()
     os.remove(base)
-    local md, js = {}, {}
+    local html, js, names = {}, {}, {}
     for i = 1, 2 do
       local dir = base .. "-" .. i
       local errfile = dir .. ".err"
@@ -47,17 +57,18 @@ describe("findings determinism across processes #slow", function()
       assert.equal(0, code, stderr)
       assert.is_nil(stderr:match("harness"), stderr)
       assert.is_nil(stderr:match("hwc:"), stderr)
-      local path = dir .. "/" .. STEM .. ".md"
-      assert.equal("file", lfs.attributes(path, "mode"), "missing " .. path)
-      md[i] = slurp(path)
-      local jpath = dir .. "/" .. STEM .. ".json"
-      assert.equal("file", lfs.attributes(jpath, "mode"), "missing " .. jpath)
+      local jpath, name = findings_json(dir)
+      names[i] = name
       js[i] = slurp(jpath)
+      local path = jpath:gsub("%.json$", ".html")
+      assert.equal("file", lfs.attributes(path, "mode"), "missing " .. path)
+      html[i] = slurp(path)
     end
-    assert.is_true(#md[1] > 0)
-    assert.equal(md[1], md[2])
+    assert.is_true(#html[1] > 0)
+    assert.equal(html[1], html[2])
     assert.is_true(#js[1] > 0)
     assert.equal(js[1], js[2])
+    assert.equal(names[1], names[2])
   end)
 
   it("writes no absolute addon path or cwd under --out", function()
@@ -103,7 +114,7 @@ describe("findings determinism across processes #slow", function()
       RUN .. " --relative-to '%s' --out '%s' 2>/dev/null",
       abs, base, dir))
     assert.equal(0, code)
-    local doc = require("dkjson").decode(slurp(dir .. "/" .. STEM .. ".json"))
+    local doc = require("dkjson").decode(slurp((findings_json(dir))))
     local hdr = doc.header or doc
     assert.equal("main", hdr.addon.path)
     assert.equal("addon", hdr.paths_relative_to)

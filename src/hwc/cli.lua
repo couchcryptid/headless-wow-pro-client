@@ -10,6 +10,7 @@ Usage: hwc [-h|--help]
        hwc matrix [--race RACE]... [--races LIST]
                   [--include PATTERN]... [--exclude PATTERN]...
                   [--date D] [--out DIR] [--relative-to DIR]
+       hwc diff   OLD.json NEW.json [--json]
        hwc init
        hwc doctor [--json]
        hwc sync questie [--tag TAG]
@@ -23,6 +24,7 @@ Commands:
   quest         Print a quest from the catalog, with its sources, as JSON
   run           Play one character along the guide chain; write findings and a run log
   matrix        Play every race x class (and profession variant); write findings and run logs
+  diff          Compare two findings files: fixed, new, partly fixed (exit 1 if anything is new or a run stopped early)
   init          Download QuestieDB (latest Forever release) into ~/.hwc and check the setup
   doctor        Check LuaJIT, rocks, tools, the WoW-Pro folder, QuestieDB and the supplement
   sync questie  Install the newest QuestieDB Forever release (or --tag TAG) and make it active
@@ -34,7 +36,7 @@ Options:
                 Orc, Tauren, Troll, Undead, SkyborneHorde (Horde)
   --class CLASS Player class token, e.g. WARRIOR (default WARRIOR); must be one the
                 race can play in Forever
-  --json        Print the boot result as JSON
+  --json        Print the boot result or the diff as JSON
   --variant V   Profession variant: baseline, secondary, alch-herb, bs-mining, lw-skin,
                 eng-ench, tailoring (default baseline)
   --races LIST  Comma list of races for matrix, merged with --race (default Dwarf,Gnome)
@@ -185,6 +187,11 @@ function M.wrote_line(stem, n)
   return "hwc: wrote " .. stem .. ".html and " .. stem .. ".json (" .. n .. (n == 1 and " character" or " characters") .. ")\n"
 end
 
+-- A findings file's stem: date, scope, then the hash of the findings JSON text.
+function M.stem_name(date, scope, doc)
+  return date .. "-" .. scope .. "-" .. require("hwc.findings.group").fnv1a32(doc)
+end
+
 local function write_file(path, text)
   local f = assert(io.open(path, "wb"))
   f:write(text)
@@ -266,8 +273,8 @@ local function early_stops(logs, labels)
   return #out > 0 and out or nil
 end
 
--- Plays every combo, then writes DIR/<date>-<scope>.json and one run
--- log per character under DIR/<date>-<scope>/. Every path in the output is
+-- Plays every combo, then writes DIR/<date>-<scope>-<hash>.json and one run
+-- log per character under DIR/<date>-<scope>-<hash>/. Every path in the output is
 -- rewritten relative to --relative-to (default: the logical start folder, so a
 -- symlinked $PWD such as Interface/AddOns stays the base its paths are named from).
 -- With filters, a combo whose log played no guide is skipped: a matrix names its
@@ -282,7 +289,6 @@ local function play(combos, scope, opts, out, err)
   local addon_info = require("hwc.addon_info")
   local date = opts.date or os.date("%Y-%m-%d")
   local outdir = opts.out or (opts.home .. "/.hwc/findings")
-  local logdir = outdir .. "/" .. date .. "-" .. scope
   local paths = require("hwc.paths")
   local report = require("hwc.findings.report")
   local html = require("hwc.findings.html")
@@ -320,7 +326,6 @@ local function play(combos, scope, opts, out, err)
     err:write("hwc: ", skipped_races[1], " reaches no included guide\n")
     return 2
   end
-  mkdirs(logdir)
   local first = raw[1] or {}
   -- Roots come from the first log: every combo shares one config.
   local roots = { base }
@@ -333,11 +338,7 @@ local function play(combos, scope, opts, out, err)
     if sources[name].path then roots[#roots + 1] = sources[name].path end
   end
   local logs = {}
-  for i, c in ipairs(played) do
-    logs[i] = paths.rewrite(raw[i], roots, base, cwd)
-    write_file(string.format("%s/%s-%s-%s.json", logdir, c.race, c.class, c.variant),
-      json.encode(logs[i], { indent = true }) .. "\n")
-  end
+  for i = 1, #played do logs[i] = paths.rewrite(raw[i], roots, base, cwd) end
   -- The header reads the raw first log: it is rewritten once, below.
   -- Skip Dungeon Quests is per character; a matrix runs every combo with WoWPro's
   -- defaults, so the first RunLog's value stands for the run. skipped counts distinct
@@ -378,8 +379,15 @@ local function play(combos, scope, opts, out, err)
   header = paths.rewrite(header, roots, base, cwd)
   header.paths_relative_to = base:match("([^/]+)$") or "/"
   local findings = group.findings(logs)
-  local stem = outdir .. "/" .. date .. "-" .. scope
   local doc = json.encode(report_json(report.build(findings, header)), { indent = true }) .. "\n"
+  -- The hash is of the findings, so it names the run logs too: two runs whose
+  -- findings differ never overwrite each other.
+  local stem = outdir .. "/" .. M.stem_name(date, scope, doc)
+  mkdirs(stem)
+  for i, c in ipairs(played) do
+    write_file(string.format("%s/%s-%s-%s.json", stem, c.race, c.class, c.variant),
+      json.encode(logs[i], { indent = true }) .. "\n")
+  end
   write_file(stem .. ".json", doc)
   write_file(stem .. ".html", html.render(doc, template))
   out:write(M.wrote_line(stem, #logs))
@@ -435,6 +443,46 @@ end
 local function sync_line(res)
   if res.already then return "QuestieDB " .. res.to .. " already installed; active\n" end
   return "QuestieDB " .. (res.from or "none") .. " \226\134\146 " .. res.to .. " (build " .. tostring(res.build):sub(1, 7) .. ")\n"
+end
+
+-- hwc diff OLD.json NEW.json [--json]: needs no WoW-Pro folder. Exit 0 when
+-- nothing is new, 1 when something is, 2 when the input can't be compared.
+local function run_diff(args, out, err)
+  local function fail(msg)
+    err:write("hwc: ", msg, "\nsee hwc --help\n")
+    return 2
+  end
+  local paths, as_json = {}, false
+  for i = 2, #args do
+    if args[i] == "--json" then as_json = true else paths[#paths + 1] = args[i] end
+  end
+  if #paths ~= 2 then return fail("diff needs two findings files: hwc diff OLD.json NEW.json [--json]") end
+  local docs = {}
+  for i, path in ipairs(paths) do
+    if path:match("%.html$") then return fail(path .. " is the report page; use the .json beside it") end
+    local f = io.open(path, "r")
+    if not f then return fail("cannot read " .. path) end
+    local text = f:read("*a")
+    f:close()
+    local ok, decoded = pcall(require("dkjson").decode, text)
+    if not ok or type(decoded) ~= "table" then return fail(path .. " is not valid JSON") end
+    docs[i] = decoded
+  end
+  local diff = require("hwc.findings.diff")
+  -- A format-2 file with a malformed body must not crash into a traceback.
+  local ok, result, cerr, text, code = pcall(function()
+    local r, e = diff.compare(docs[1], docs[2])
+    if not r then return nil, e end
+    local body = as_json and (require("hwc.json").encode(r, { indent = true }) .. "\n") or diff.render(r)
+    return r, nil, body, diff.exit_code(r)
+  end)
+  if not ok then
+    local first = tostring(result):match("^[^\n]*"):gsub("^[^:]*:%d+: ", "")
+    return fail("not valid findings files: " .. first)
+  end
+  if not result then return fail(cerr) end
+  out:write(text)
+  return code
 end
 
 -- hwc init / doctor / sync questie: they work on ~/.hwc, so they need no WoW-Pro
@@ -635,6 +683,7 @@ function M.main(args, out, err, env)
   if args[1] == "init" or args[1] == "doctor" or args[1] == "sync" then
     return run_store(args[1], args, out, err, env)
   end
+  if args[1] == "diff" then return run_diff(args, out, err) end
   if args[1] == "quest" then
     local id = tonumber(args[2] or "")
     if not id or #args > 2 then

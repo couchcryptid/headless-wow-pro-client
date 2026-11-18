@@ -378,4 +378,41 @@ function text.sentence(f, ctx)
   return first
 end
 
+-- `hwc diff` comparability warnings (findings-diff design §4.3): code -> function(args) -> message.
+-- The order of the entries is the order diff.compare emits them in.
+local function short(s) return tostring(s or "?"):sub(1, 7) end
+
+text.DIFF_WARNINGS = {
+  questie = function(a)
+    return string.format("different QuestieDB: %s (%s) → %s (%s); changes may come from the data, not the guide",
+      tostring(a.old_tag), short(a.old_build), tostring(a.new_tag), short(a.new_build))
+  end,
+  supplement = function()
+    return "different supplement; changes may come from the data, not the guide"
+  end,
+  filters = function() return "different guide filters" end,
+  combos = function(a)
+    local names = {}
+    for i, c in ipairs(a.combos) do names[i] = text.character(c) end
+    return string.format("characters only in %s: %s; left out", a.side, table.concat(names, ", "))
+  end,
+  stop = function(a)
+    local function reason(r) return r and (text.STOPS[r] or r) or "ran to the end" end
+    return string.format("runs stopped differently for %s (OLD: %s; NEW: %s); findings past the stop show as fixed",
+      text.character(a.combo), reason(a.old), reason(a.new))
+  end,
+  ["relative-to"] = function(a)
+    return string.format("runs started from different folders (%s, %s); Lua errors may show as fixed and new",
+      tostring(a.old), tostring(a.new))
+  end,
+  client = function(a)
+    return string.format("different hwc versions (%s, %s)", short(a.old), short(a.new))
+  end,
+  ["same-commit"] = function(a)
+    return string.format("both runs are the same addon commit (%s)", short(a.commit))
+  end,
+  ["dirty-old"] = function() return "uncommitted changes in the OLD run" end,
+  ["dirty-new"] = function() return "uncommitted changes in the NEW run" end,
+}
+
 return text
