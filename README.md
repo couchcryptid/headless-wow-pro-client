@@ -18,10 +18,9 @@ quest log, Classic XP rules, a virtual clock, frames and events. Quest facts
 come from a catalog built from QuestieDB, never from the guide lines.
 
 **Status:**
-- **Scope:** Forever Alliance and Horde, the race's chain to its last guide. The XP
-  table caps at level 26, so play past 25 currently runs at level 26 (quest
-  data to level 60 is a separate future plan). Each race starts from its guide in
-  the addon's `ForeverStartGuides` table:
+- **Scope:** Forever Alliance and Horde, the race's chain to its last guide. The
+  character levels with Classic's XP rules up to 60 (`src/hwc/world/xp.lua`). Each
+  race starts from its guide in the addon's `ForeverStartGuides` table:
 
   | Race (`--race`) | Faction | Start |
   |---|---|---|

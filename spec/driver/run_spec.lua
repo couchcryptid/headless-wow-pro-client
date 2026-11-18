@@ -806,9 +806,16 @@ describe("driver.run", function()
       assert.equal(3, log.jumps[1].level_after)
     end)
 
-    it("stops the raise at the XP cap", function()
+    it("raises the level past 25 to a later guide's start level", function()
       local guides = chain()
       guides.G3.startlevel = 40
+      local log = drive(guides, SCRIPT, { included = set("G3") })
+      assert.equal(40, log.jumps[1].level_after)
+    end)
+
+    it("stops the raise at the XP cap", function()
+      local guides = chain()
+      guides.G3.startlevel = 70
       local log = drive(guides, SCRIPT, { included = set("G3") })
       assert.equal(require("hwc.world.xp").CAP_LEVEL, log.jumps[1].level_after)
     end)
