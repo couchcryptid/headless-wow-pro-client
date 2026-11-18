@@ -396,6 +396,11 @@ text.DIFF_WARNINGS = {
     for i, c in ipairs(a.combos) do names[i] = text.character(c) end
     return string.format("characters only in %s: %s; left out", a.side, table.concat(names, ", "))
   end,
+  stop = function(a)
+    local function reason(r) return r and (text.STOPS[r] or r) or "ran to the end" end
+    return string.format("runs stopped differently for %s (OLD: %s; NEW: %s); findings past the stop show as fixed",
+      text.character(a.combo), reason(a.old), reason(a.new))
+  end,
   ["relative-to"] = function(a)
     return string.format("runs started from different folders (%s, %s); Lua errors may show as fixed and new",
       tostring(a.old), tostring(a.new))

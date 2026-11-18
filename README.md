@@ -189,7 +189,7 @@ Output, under `--out DIR` (default `~/.hwc/findings`, created if missing, so run
   (git-ignored).
 
 `<hash>` is 8 hex digits of the findings JSON: two runs with different results
-never overwrite each other, and identical results share a name.
+never overwrite each other, and identical findings files share a name.
 
 `--relative-to DIR` (default: the current directory) sets the base for every
 path in the output: the HTML page, the findings JSON and the run logs write paths
@@ -267,6 +267,7 @@ the comparison may mislead:
 - different supplement
 - different guide filters
 - characters only in one run (left out)
+- a character's run stopped early in one run but not the other (findings past the stop show as fixed)
 - runs started from different folders
 - different hwc versions
 - both runs are the same addon commit
@@ -275,10 +276,10 @@ the comparison may mislead:
 | Exit | Meaning |
 |---|---|
 | 0 | nothing new (fixed, partly fixed and unchanged may be present) |
-| 1 | NEW has new or spread findings |
+| 1 | NEW has new or spread findings, or a shared character's NEW run stopped early |
 | 2 | usage error, unreadable file, invalid JSON, or the runs share no characters |
 
-Exit 1 means "new findings" here, as in `diff(1)` it means "files differ".
+Exit 1 means "new findings or a cut-short run" here, as in `diff(1)` it means "files differ".
 
 ## Choosing guides
 

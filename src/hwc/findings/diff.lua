@@ -82,7 +82,15 @@ local function side(doc)
   return { branch = a.branch, commit = a.commit, dirty = a.dirty, git = a.git, version = a.version }
 end
 
-local function warnings_for(old, new, shared)
+-- combo -> stop reason for the characters whose run stopped early.
+local function stops_of(doc)
+  local m = {}
+  for _, s in ipairs(doc.header and doc.header.stop or {}) do m[s.combo] = s.reason end
+  return m
+end
+
+-- Warnings, and how many shared characters' NEW run stopped early where OLD's did not.
+local function warnings_for(old, new, shared, shared_list)
   local oh, nh = old.header or {}, new.header or {}
   local out = {}
   local function warn(code, args)
@@ -109,6 +117,15 @@ local function warnings_for(old, new, shared)
     if #extras > 0 then warn("combos", { side = spec[1], combos = extras }) end
   end
 
+  local stopped_early = 0
+  local os_stop, ns_stop = stops_of(old), stops_of(new)
+  for _, c in ipairs(shared_list) do
+    if os_stop[c] ~= ns_stop[c] then
+      warn("stop", { combo = c, old = os_stop[c], new = ns_stop[c] })
+      if ns_stop[c] then stopped_early = stopped_early + 1 end
+    end
+  end
+
   if oh.paths_relative_to ~= nh.paths_relative_to then
     warn("relative-to", { old = oh.paths_relative_to, new = nh.paths_relative_to })
   end
@@ -123,12 +140,16 @@ local function warnings_for(old, new, shared)
   end
   if oa.dirty then warn("dirty-old") end
   if na.dirty then warn("dirty-new") end
-  return out
+  return out, stopped_early
 end
 
 function diff.compare(old, new)
-  if type(old) ~= "table" or type(new) ~= "table" or old.format ~= 2 or new.format ~= 2 then
-    return nil, "not comparable: findings files must be format 2"
+  for _, side_ in ipairs({ { "OLD", old }, { "NEW", new } }) do
+    local d = side_[2]
+    if type(d) ~= "table" or d.format ~= 2 then
+      local found = type(d) == "table" and d.format ~= nil and ("format " .. tostring(d.format)) or "not a findings file"
+      return nil, string.format("not comparable: %s is %s; hwc diff needs format 2", side_[1], found)
+    end
   end
   local in_new = set_of(combos_of(new))
   local shared_set, shared = {}, {}
@@ -139,10 +160,12 @@ function diff.compare(old, new)
   if #shared == 0 then return nil, "not comparable: no shared characters" end
 
   local o, n = index(old, shared_set), index(new, shared_set)
+  local warnings, stopped_early = warnings_for(old, new, shared_set, shared)
   local r = {
     runs = { old = side(old), new = side(new) },
     shared = shared,
-    warnings = warnings_for(old, new, shared_set),
+    warnings = warnings,
+    stopped_early = stopped_early,
     fixed = {}, new = {}, partly_fixed = {}, spread = {},
     counts = { fixed = 0, new = 0, partly_fixed = 0, spread = 0, unchanged = 0 },
   }
@@ -180,7 +203,7 @@ function diff.compare(old, new)
 end
 
 function diff.exit_code(result)
-  return (result.counts.new + result.counts.spread > 0) and 1 or 0
+  return (result.counts.new + result.counts.spread > 0 or (result.stopped_early or 0) > 0) and 1 or 0
 end
 
 local function names(combos)

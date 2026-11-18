@@ -45,7 +45,7 @@ describe("findings determinism across processes #slow", function()
   it("two bin/hwc run processes give byte-identical findings and clean stderr", function()
     local base = os.tmpname()
     os.remove(base)
-    local md, js, names = {}, {}, {}
+    local html, js, names = {}, {}, {}
     for i = 1, 2 do
       local dir = base .. "-" .. i
       local errfile = dir .. ".err"
@@ -62,10 +62,10 @@ describe("findings determinism across processes #slow", function()
       js[i] = slurp(jpath)
       local path = jpath:gsub("%.json$", ".html")
       assert.equal("file", lfs.attributes(path, "mode"), "missing " .. path)
-      md[i] = slurp(path)
+      html[i] = slurp(path)
     end
-    assert.is_true(#md[1] > 0)
-    assert.equal(md[1], md[2])
+    assert.is_true(#html[1] > 0)
+    assert.equal(html[1], html[2])
     assert.is_true(#js[1] > 0)
     assert.equal(js[1], js[2])
     assert.equal(names[1], names[2])

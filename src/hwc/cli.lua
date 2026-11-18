@@ -24,7 +24,7 @@ Commands:
   quest         Print a quest from the catalog, with its sources, as JSON
   run           Play one character along the guide chain; write findings and a run log
   matrix        Play every race x class (and profession variant); write findings and run logs
-  diff          Compare two findings files: fixed, new, partly fixed (exit 1 if anything is new)
+  diff          Compare two findings files: fixed, new, partly fixed (exit 1 if anything is new or a run stopped early)
   init          Download QuestieDB (latest Forever release) into ~/.hwc and check the setup
   doctor        Check LuaJIT, rocks, tools, the WoW-Pro folder, QuestieDB and the supplement
   sync questie  Install the newest QuestieDB Forever release (or --tag TAG) and make it active
@@ -273,8 +273,8 @@ local function early_stops(logs, labels)
   return #out > 0 and out or nil
 end
 
--- Plays every combo, then writes DIR/<date>-<scope>.json and one run
--- log per character under DIR/<date>-<scope>/. Every path in the output is
+-- Plays every combo, then writes DIR/<date>-<scope>-<hash>.json and one run
+-- log per character under DIR/<date>-<scope>-<hash>/. Every path in the output is
 -- rewritten relative to --relative-to (default: the logical start folder, so a
 -- symlinked $PWD such as Interface/AddOns stays the base its paths are named from).
 -- With filters, a combo whose log played no guide is skipped: a matrix names its

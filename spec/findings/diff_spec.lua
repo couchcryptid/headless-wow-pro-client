@@ -12,6 +12,7 @@ local function doc(opts)
       client = { commit = opts.client or "c1" },
       matrix = { combos = opts.combos or { DWARF, GNOME } },
       filters = opts.filters,
+      stop = opts.stop,
       paths_relative_to = opts.relative_to or "WoW-Pro-Guides",
     },
     findings = opts.findings or {},
@@ -124,7 +125,57 @@ describe("diff.compare", function()
     local bad = doc(); bad.format = 1
     local r, err = diff.compare(bad, doc())
     assert.is_nil(r)
-    assert.matches("format", err)
+    assert.equal("not comparable: OLD is format 1; hwc diff needs format 2", err)
+    local r2, err2 = diff.compare(doc(), bad)
+    assert.is_nil(r2)
+    assert.equal("not comparable: NEW is format 1; hwc diff needs format 2", err2)
+  end)
+
+  it("warns about characters only in NEW", function()
+    local r = diff.compare(doc({ commit = "b", combos = { DWARF } }), doc({ commit = "c", combos = { DWARF, GNOME } }))
+    assert.same({ "combos" }, codes(r))
+    assert.matches("only in NEW", r.warnings[1].message)
+    assert.matches("Gnome Mage", r.warnings[1].message)
+  end)
+
+  describe("early stops", function()
+    local errors_stop = { { combo = DWARF, reason = "errors" } }
+
+    it("warns and exits 1 when only NEW stopped early, even with no new findings", function()
+      local r = diff.compare(doc({ commit = "b" }), doc({ commit = "c", stop = errors_stop }))
+      assert.same({ "stop" }, codes(r))
+      assert.matches("Dwarf Warrior", r.warnings[1].message)
+      assert.matches("OLD: ran to the end", r.warnings[1].message)
+      assert.matches("NEW: Too many addon errors", r.warnings[1].message)
+      assert.matches("findings past the stop show as fixed", r.warnings[1].message)
+      assert.equal(1, r.stopped_early)
+      assert.equal(1, diff.exit_code(r))
+    end)
+
+    it("warns but keeps exit 0 when only OLD stopped early", function()
+      local r = diff.compare(doc({ commit = "b", stop = errors_stop }), doc({ commit = "c" }))
+      assert.same({ "stop" }, codes(r))
+      assert.matches("OLD: Too many addon errors", r.warnings[1].message)
+      assert.matches("NEW: ran to the end", r.warnings[1].message)
+      assert.equal(0, r.stopped_early)
+      assert.equal(0, diff.exit_code(r))
+    end)
+
+    it("does not warn when both runs stopped the same way", function()
+      local r = diff.compare(doc({ commit = "b", stop = errors_stop }), doc({ commit = "c", stop = errors_stop }))
+      assert.same({}, codes(r))
+      assert.equal(0, r.stopped_early)
+      assert.equal(0, diff.exit_code(r))
+    end)
+
+    it("ignores a stop on a character that is not shared", function()
+      local priest = "Human PRIEST baseline"
+      local r = diff.compare(doc({ commit = "b", combos = { DWARF, GNOME } }),
+        doc({ commit = "c", combos = { DWARF, priest }, stop = { { combo = priest, reason = "stuck" } } }))
+      assert.same({ "combos", "combos" }, codes(r))
+      assert.equal(0, r.stopped_early)
+      assert.equal(0, diff.exit_code(r))
+    end)
   end)
 
   it("sorts by severity, file, line, then id", function()
