@@ -28,6 +28,9 @@ run.DEFAULTS = {
 run.STOP = {
   ["no-next-guide"] = true, stuck = true,
   iterations = true, errors = true, ["no-step"] = true, ["max-guides"] = true,
+  -- The engine switched back to a guide that came back on the very step that sent
+  -- the run away (Forever 30_41 -> Dungeon_Uld pops back to 30_41's final D step).
+  ["guide-cycle"] = true,
 }
 
 -- Accept refusals that are signals of their own (spec §7.1). Other refusal reasons
@@ -476,7 +479,7 @@ function Driver:iterate()
     sticky.gid = sticky.gid or self.gid
     local _, snap = self:act(sticky, rows, info)
     snap.sticky = true
-    return self:after_settle()
+    return self:after_settle(sticky)
   end
 
   -- Stuck watchdog: the same (gid, index) acted on more than stuck_limit times in a row.
@@ -525,16 +528,32 @@ function Driver:iterate()
     self:check_settle(E:settle(), cur)
   end
 
-  return self:after_settle()
+  return self:after_settle(cur)
 end
 
 -- Follow the engine's own guide switch (Review Focus 1): read the gid after every settle.
-function Driver:after_settle()
+-- `acted` is the step whose action led here. A switch records it as the step the old
+-- guide was left on; a guide that later comes back on that same step would only send
+-- the run away again (the same-step watchdog resets on every switch, so it never trips),
+-- and a player stops there: stuck guide-cycle. Coming back further along is a normal
+-- return from a side guide.
+function Driver:after_settle(acted)
   local E = self.E
   local new = E:gid()
   if new ~= nil and new ~= self.gid then
     self:close(self.gid, true)
     self.repeats, self.last_key = 0, nil
+    self.left_at = self.left_at or {}
+    if acted then self.left_at[self.gid] = acted.index end
+    local back = self.left_at[new]
+    if back ~= nil then
+      local now = E:current()
+      if now and now.index == back then
+        now.gid = now.gid or new
+        self:signal("stuck", now, { gid = new, reason = "guide-cycle", from = self.gid })
+        return self:stop("guide-cycle")
+      end
+    end
     return self:open(new)
   end
   if E:guide(self.gid).done then return self:stop("no-next-guide") end

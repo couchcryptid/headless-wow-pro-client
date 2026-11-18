@@ -373,6 +373,42 @@ describe("driver.run", function()
     assert.same({ "G1", "G2" }, log.guides)
   end)
 
+  -- Forever 30_41 -> Dungeon_Uld -> 30_41 ...: Uld has no next guide, so the addon pops
+  -- back to 30_41, which comes back on the same final step that sent the run away. A
+  -- player stops there; the driver must too, instead of clicking it until max-iterations.
+  it("stops with guide-cycle when a guide comes back on the step that left it", function()
+    local guides = {
+      G1 = { startlevel = 1, next_gid = "G2", file = "g1.lua", steps = {
+        { action = "R", name = "a" }, { action = "R", name = "Onwards" } } },
+      G2 = { startlevel = 5, file = "g2.lua", steps = { { action = "R", name = "Onwards" } } },
+    }
+    local script = { G1 = { { complete = { 1 } }, { switch = "G2" } }, G2 = { { switch = "G1" } } }
+    local log = drive(guides, script, { max_iterations = 200 })
+    assert.equal("guide-cycle", log.stop.reason)
+    assert.same({ "G1", "G2" }, log.guides)
+    local stuck = signals(log, "stuck")
+    assert.equal(1, #stuck)
+    assert.equal("guide-cycle", stuck[1].reason)
+    assert.equal("G1", stuck[1].gid)
+    assert.equal("Onwards", stuck[1].name)
+  end)
+
+  it("keeps playing a guide the engine returns to further along", function()
+    local guides = {
+      G1 = { startlevel = 1, file = "g1.lua", steps = {
+        { action = "R", name = "a" }, { action = "R", name = "jump" }, { action = "R", name = "after" } } },
+      G2 = { startlevel = 5, file = "g2.lua", steps = { { action = "R", name = "x" } } },
+    }
+    local script = {
+      G1 = { { complete = { 1 } }, { complete = { 2 }, switch = "G2" }, { complete = { 3 }, done = true } },
+      G2 = { { complete = { 1 }, switch = "G1" } },
+    }
+    local log = drive(guides, script, { max_iterations = 200 })
+    assert.equal("no-next-guide", log.stop.reason)
+    assert.same({ "G1", "G2", "G1" }, log.guides)
+    assert.same({}, signals(log, "stuck"))
+  end)
+
   it("turns refusals into log-full, accept-refused, orphan-turnin and below-level", function()
     local steps = {
       { action = "A", name = "Full", qids = { 1 }, outcome = { kind = "refused", reason = "log-full" } },
@@ -568,7 +604,7 @@ describe("driver.run", function()
   end)
 
   it("lists the stop reasons", function()
-    for _, r in ipairs({ "no-next-guide", "stuck", "iterations", "errors", "no-step", "max-guides" }) do
+    for _, r in ipairs({ "no-next-guide", "stuck", "iterations", "errors", "no-step", "max-guides", "guide-cycle" }) do
       assert.is_true(run.STOP[r], r)
     end
     assert.is_nil(run.STOP.level)
