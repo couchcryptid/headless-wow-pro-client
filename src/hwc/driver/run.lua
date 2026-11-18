@@ -231,6 +231,24 @@ function Driver:level_passing(info, i)
   return self.W.player.level
 end
 
+-- Appends the signal for step i of a guide the engine never showed, with the
+-- fields every such signal carries; `extra` adds the signal's own fields.
+function Driver:record_hidden_step(gid, info, i, signal, extra)
+  local s = info.steps[i]
+  local prev, nxt = info.steps[i - 1], info.steps[i + 1]
+  local sig = {
+    signal = signal, gid = gid, file = info.file, line = s.line, ordinal = s.ordinal,
+    action = s.action, name = s.name, qid = s.qids[1], why = info.why[i], level = self:level_passing(info, i),
+    log = self:log_qids(),
+    before = prev and { name = prev.name, action = prev.action } or nil,
+    after = nxt and { name = nxt.name, action = nxt.action } or nil,
+  }
+  for k, v in pairs(extra or {}) do sig[k] = v end
+  sig.qname = self:quest_name(sig.qid)
+  sig.confidence = self:confidence(sig.qid)
+  self.log.signals[#self.log.signals + 1] = sig
+end
+
 -- Closes a guide: unshown accepts and the quests left in the log. A guide the
 -- run left part-way (end of run, not done) only reports accepts below the
 -- furthest index acted on: the unreached rest was never due to be shown.
@@ -251,26 +269,18 @@ function Driver:close(gid, full)
     }
   end
   local limit = full and math.huge or info.max_acted
+  local function unshown(i)
+    return not info.seen[i] and i < limit and not run.already_done(info.why[i])
+  end
   for _, i in ipairs(info.accepts) do
     local s = info.steps[i]
-    if not info.seen[i] and i < limit and not run.already_done(info.why[i])
-        and not self:taken(s.qids) and not self:lacks_profession(s) then
+    if unshown(i) and not self:taken(s.qids) and not self:lacks_profession(s) then
       if s.dungeon and self.E:completed(i, gid) then
         -- Skip Dungeon Quests completed it unshown: run info, not a signal.
         local d = self.log.dungeon_skips
         d[#d + 1] = { gid = gid, file = info.file, line = s.line, qid = s.qids[1], name = s.name }
       else
-        local prev, nxt = info.steps[i - 1], info.steps[i + 1]
-        local sig = {
-          signal = "never-shown-accept", gid = gid, file = info.file, line = s.line, ordinal = s.ordinal,
-          action = s.action, name = s.name, qid = s.qids[1], why = info.why[i], level = self:level_passing(info, i),
-          log = self:log_qids(),
-          before = prev and { name = prev.name, action = prev.action } or nil,
-          after = nxt and { name = nxt.name, action = nxt.action } or nil,
-        }
-        sig.qname = self:quest_name(sig.qid)
-        sig.confidence = self:confidence(sig.qid)
-        self.log.signals[#self.log.signals + 1] = sig
+        self:record_hidden_step(gid, info, i, "never-shown-accept")
       end
     end
   end
@@ -278,19 +288,8 @@ function Driver:close(gid, full)
   -- (WoWPro_Broker.lua:2182); the same unshown conditions as an accept apply.
   for _, i in ipairs(info.uses) do
     local s = info.steps[i]
-    if not info.seen[i] and i < limit and not run.already_done(info.why[i]) and not s.optional
-        and info.why[i] and info.why[i]:find(run.HIDDEN_USE_WHY, 1, true) then
-      local prev, nxt = info.steps[i - 1], info.steps[i + 1]
-      local sig = {
-        signal = "hidden-use-step", gid = gid, file = info.file, line = s.line, ordinal = s.ordinal,
-        action = s.action, name = s.name, qid = s.qids[1], why = info.why[i], level = self:level_passing(info, i),
-        use = s.use, loot = s.loot, log = self:log_qids(),
-        before = prev and { name = prev.name, action = prev.action } or nil,
-        after = nxt and { name = nxt.name, action = nxt.action } or nil,
-      }
-      sig.qname = self:quest_name(sig.qid)
-      sig.confidence = self:confidence(sig.qid)
-      self.log.signals[#self.log.signals + 1] = sig
+    if unshown(i) and not s.optional and info.why[i] and info.why[i]:find(run.HIDDEN_USE_WHY, 1, true) then
+      self:record_hidden_step(gid, info, i, "hidden-use-step", { use = s.use, loot = s.loot })
     end
   end
 end
