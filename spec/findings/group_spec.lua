@@ -330,6 +330,30 @@ describe("group.findings", function()
     }, sev)
   end)
 
+  it("grades a group spanning characters by the largest gap, not the first character's", function()
+    local function sig(short)
+      return { signal = "below-level", gid = "G", file = "f", line = 1, action = "A", name = "q", qid = 9,
+        levels_short = short }
+    end
+    local fs = group.findings({
+      runlog("Dwarf", "WARRIOR", { sig(0.9) }),
+      runlog("Gnome", "MAGE", { sig(3.0) }),
+    })
+    assert.equal(1, #fs)
+    assert.equal(3.0, fs[1].levels_short)
+    assert.equal("medium", fs[1].severity)
+    local function csig(qlvl, clvl)
+      return { signal = "quest-orange", gid = "G", file = "f", line = 2, action = "A", name = "q", qid = 9,
+        quest_level = qlvl, char_level = clvl }
+    end
+    fs = group.findings({
+      runlog("Dwarf", "WARRIOR", { csig(33, 30) }),
+      runlog("Gnome", "MAGE", { csig(34, 30) }),
+    })
+    assert.equal(1, #fs)
+    assert.equal(4, fs[1].quest_level - fs[1].char_level)
+  end)
+
   it("grades below-level by levels_short and quest colours by their own severity", function()
     local function sev(sig)
       sig.gid, sig.file, sig.line, sig.action, sig.name, sig.qid = "G", "f", 1, "A", "q", 9

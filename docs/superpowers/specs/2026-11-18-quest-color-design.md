@@ -52,12 +52,19 @@ The grey side applies to every quest.
 - Severity is **low** under 2 levels short (my call: within the simulation's missing XP from
   incidental kills and rested XP; the sentence then adds that), and **medium** at 2 or more.
 
-**`L` (reach level) steps.** Today they end as `did-not-advance` after the harness reaches the
-level. WoWPro completes an `L` step inside `NextStep` once `UnitLevel` meets it
-(`WoWPro_Broker.lua:2597-2645`), so it needs a guide refresh after the level-up. The builder
-first checks which event the real client fires on a level-up that makes WoWPro refresh, and
-fires it the same way. If WoWPro registers no such event, the finding is real WoWPro
-behaviour: the harness leaves it and documents why. Never patch the addon or the guide.
+**`L` (reach level) steps.** At a guide level check the character ends at `max(check, actual)`:
+it grinds only when below the check point and is never moved back. The `LVL` tag is `level` or
+`level;offset`, and WoWPro completes an `L` step at that point (`WoWPro_Broker.lua:2597-2645`):
+- **no offset:** when `UnitLevel >= level`
+- **negative offset:** when `UnitLevel == level and UnitXPMax - UnitXP <= -offset`, or when `UnitLevel > level`
+- **positive offset:** when `UnitLevel == level and UnitXP >= offset`, or when `UnitLevel > level`
+
+So an `L` step grinds to the `level;offset` point (`kills.grind_to_point`), and the update the
+level-up needs refreshes the guide. A step that is not an `L` step never hides on an offset tag
+(`WoWPro_Broker.lua:2648-2680`): the addon just completes it once the XP point is reached, and
+grinding there would invent XP the guide never asks for. So an offset `LVL` tag on a non-`L`
+step does not grind; a plain-integer `LVL` on a non-`L` step keeps grinding to that level
+(Ruling G). Never patch the addon or the guide.
 
 ## Constraints
 

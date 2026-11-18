@@ -1,8 +1,8 @@
 -- Quest difficulty colour by level difference (design 2026-11-18-quest-color).
--- Source: Classic GetQuestDifficultyColor (FrameXML QuestUtils): quest level minus
--- character level >= 5 red, 3-4 orange, -(gray offset)+1 .. 2 yellow (grey at or below
--- the grey level, which xp.gray_level gives), the rest green. Unverified for Forever
--- (Classic): the bands are Classic's, not checked in game.
+-- The bands come from Classic GetQuestDifficultyColor (FrameXML QuestUtils): quest level minus
+-- character level >= 5 red, 3-4 orange, yellow up to 2, the rest green. The grey line is the mob
+-- grey level (xp.gray_level), a project choice and not taken from that API. Unverified for
+-- Forever (Classic): none of it is checked in game.
 local xp = require("hwc.world.xp")
 
 local quest_color = {}

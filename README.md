@@ -297,6 +297,11 @@ Authority and Darkmoon Faire quests. Grey applies to every quest.
 ground to the required level: low under 2 levels (within what the missing
 incidental XP explains), medium from 2.
 
+Level checks (`L` steps) grind to the guide's `level;offset` check point, ending at
+`max(check, actual)`: the client grinds only when below the point and never moves the
+character back. Offset tags on other steps don't grind, since WoWPro never hides those
+steps; it just completes them at the XP point.
+
 ## Comparing runs
 
 `hwc diff` compares two findings files by finding id and tells you what a guide

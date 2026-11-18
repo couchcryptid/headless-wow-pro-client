@@ -225,7 +225,19 @@ function group.findings(runlogs)
       if a.idx ~= b.idx then return a.idx < b.idx end
       return tostring(a.sig.why) < tostring(b.sig.why)
     end)
-    local f = new_finding(g.entries[1].sig, g.key)
+    -- A group spanning characters is graded and worded by its worst entry: the largest
+    -- levels_short (below-level) or quest_level - char_level (colour findings).
+    local worst = g.entries[1].sig
+    for _, e in ipairs(g.entries) do
+      local sg = e.sig
+      if sg.signal == "below-level" and sg.levels_short and (worst.levels_short or -1) < sg.levels_short then
+        worst = sg
+      elseif sg.quest_level and sg.char_level and worst.quest_level and worst.char_level
+        and sg.quest_level - sg.char_level > worst.quest_level - worst.char_level then
+        worst = sg
+      end
+    end
+    local f = new_finding(worst, g.key)
     local combos, reasons = {}, {}
     for _, e in ipairs(g.entries) do
       combos[e.combo] = true

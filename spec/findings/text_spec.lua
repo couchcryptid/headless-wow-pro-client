@@ -459,7 +459,7 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     f.signal, f.color, f.quest_level = "quest-grey", "grey", 10
     t, s = both(F(f))
     assert.equal('"Hard" is grey for this character (quest level 10, character level 30)', t)
-    assert.equal("The quest is grey at level 30, so it gives little or no XP.", s)
+    assert.equal("The quest is grey at level 30, so it gives 10% of its XP (Classic rates, unverified for Forever).", s)
   end)
   it("below-level without a grind stays neutral", function()
     local _, s = both(F({ signal = "below-level", name = "Low", qid = 7, level = 4 }))

@@ -60,6 +60,8 @@ QUESTS[1206] = { name = "Fixture Faire Rep", questLevel = 30, reputationReward =
 QUESTS[1207] = { name = "Fixture Faire Zone", questLevel = 30, zoneOrSort = -364, objectives = { { { 2003 } } } }
 QUESTS[1208] = { name = "Fixture Talk And Kill", questLevel = 30, startedBy = { { 2001 } }, finishedBy = { { 2002 } },
   objectives = { { { 2002 }, { 2003 } } } }
+QUESTS[1209] = { name = "Fixture Unknown Npc", questLevel = 30, objectives = { { { 9999 } } } }
+QUESTS[1210] = { name = "Fixture Unknown Item", questLevel = 30, objectives = { nil, nil, { { 9998 } } } }
 QUESTS[1131] = { name = "Fixture Solo" }
 QUESTS[1132] = { name = "Fixture Solo", preQuestSingle = { 1105 } }
 

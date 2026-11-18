@@ -305,7 +305,9 @@ local DARKMOON_SORT = -364
 -- Is the quest something the player does without fighting (design 2026-11-18-quest-color)?
 -- true, reason: "commerce" / "darkmoon" (QuestieDB marks it a non-combat activity), or
 -- "no-combat-objective" (no kill objective and no item objective whose item a mob drops).
--- false for a quest with a combat objective, or one not in the catalog.
+-- false for a quest with a combat objective, or one not in the catalog. An objective NPC or item
+-- missing from QuestieDB counts as non-combat (fail open: no data is not evidence of combat).
+-- Item drops come from the catalog's own item data (Catalog:item), so "combat" has one definition.
 function Catalog:noncombat(qid)
   local quest = self:quest(qid)
   if not quest then return false end
@@ -319,8 +321,8 @@ function Catalog:noncombat(qid)
       local npc = self:npc(o.ids and o.ids[1])
       if npc and not kills.talk_to(npc, quest) then return false end
     elseif o.kind == "item" then
-      local it = self.questie and self.questie:item(o.ids and o.ids[1])
-      if it and #(it.npcDrops or {}) > 0 then return false end
+      local it = self:item(o.ids and o.ids[1])
+      if it and #it.drops > 0 then return false end
     end
   end
   return true, "no-combat-objective"

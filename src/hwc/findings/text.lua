@@ -3,6 +3,7 @@
 -- here, so the wording lives in one place and the HTML page holds none.
 local RACES = require("hwc.world.player").RACES
 local reputation = require("hwc.world.reputation")
+local xp = require("hwc.world.xp")
 
 local text = {}
 
@@ -477,7 +478,9 @@ local function clauses(f, ctx)
     return "The guide sends a level " .. tostring(f.char_level) .. " character to a level " .. tostring(f.quest_level)
       .. " quest with combat objectives."
   elseif s == "quest-grey" then
-    return "The quest is grey at level " .. tostring(f.char_level) .. ", so it gives little or no XP."
+    local pct = (f.char_level and f.quest_level) and xp.quest_xp(100, f.char_level, f.quest_level) or nil
+    return "The quest is grey at level " .. tostring(f.char_level) .. ", so it gives "
+      .. (pct and (tostring(pct) .. "% of its XP") or "reduced XP") .. " (Classic rates, unverified for Forever)."
   elseif s == "did-not-advance" then
     -- The reason is the refusal of the client's action (driver.actions); none means it acted.
     local r = (f.reasons or {})[1]

@@ -34,7 +34,14 @@ export interface Finding {
   use?: string;
   /** Item id (as a string) to quantity. */
   loot?: Record<string, number>;
-  grind?: { kills: number; to: number };
+  grind?: { kills: number; to: number; short?: number; point?: number };
+  /** below-level: levels short of the quest's level, to a tenth. */
+  levels_short?: number;
+  /** quest-red / quest-orange / quest-grey: the quest's and the character's level. */
+  quest_level?: number;
+  char_level?: number;
+  /** Quest colour at accept: red, orange, yellow, green or grey. */
+  color?: string;
   message?: string;
   stack?: string;
   /** Id of the finding this one follows from. */
