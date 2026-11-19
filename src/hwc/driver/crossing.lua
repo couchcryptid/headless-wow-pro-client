@@ -6,7 +6,7 @@
 --
 -- Outcome fields set here (see the hwc.driver.flight header): out.data_gap
 -- ("arrival-unknown" with key "<action>:<map_id>:<x>,<y>", "destination-unresolved"),
--- out.expected, out.arrived, out.resolved_by = "loose", out.classify. Crossings come
+-- out.named, out.arrived, out.resolved_by = "loose", out.classify. Crossings come
 -- from ctx.world.arrivals.crossings, so they land with or without the Forever tables;
 -- only out.classify needs them (nil without).
 local arrival = require("hwc.driver.arrival")
@@ -89,7 +89,7 @@ function crossing.perform(ctx, step, out, h)
   local tz = step.tags and step.tags.targetzone
   out.kind = "acted"
   h.depart(ctx, step, out)
-  out.expected = { name = step.name, tz = tz }
+  out.named = { name = step.name, tz = tz }
   local cands = candidates(ctx, step, p)
   if #cands == 0 then
     gap(out, "arrival-unknown", string.format("%s:%s:%.1f,%.1f", step.action, tostring(p.map_id), p.x * 100, p.y * 100))

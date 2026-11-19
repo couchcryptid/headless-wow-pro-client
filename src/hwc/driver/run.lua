@@ -832,11 +832,11 @@ function Driver:iterate()
         { qid = out.qid, reason = out.reason, outcome = out.kind, expected = true })
     elseif gap then
       self:signal("arrival-data-gap", cur, { qid = out.qid, reason = gap.reason, key = gap.key, outcome = out.kind,
-        expected = out.expected, arrived = out.arrived, resolved_by = out.resolved_by })
+        named = out.named, arrived = out.arrived, resolved_by = out.resolved_by })
       out.explained = true
     elseif not out.explained then
       sig = self:signal("did-not-advance", cur, { qid = out.qid, reason = stall_reason(out), outcome = out.kind,
-        expected = out.expected, arrived = out.arrived, resolved_by = out.resolved_by })
+        named = out.named, arrived = out.arrived, resolved_by = out.resolved_by })
     end
     -- An addon error inside the right-click is in sb.errors (a lua-error at the end)
     -- and becomes this signal's reason.

@@ -11,7 +11,7 @@
 --                 "start-node-unknown", "destination-unresolved"), or "taxi-not-taken": the
 --                 addon never tried to pick a node it would have matched (ruling R12). The
 --                 first gap recorded wins.
---   out.expected  { name, tz }: what the step asks for (F)
+--   out.named     { name, tz }: what the step asks for (F)
 --   out.arrived   { zone, subzone, map_id }: where the player landed; subzone nil when no
 --                 capture says what it is (ruling R4)
 --   out.resolved_by "loose" when the landing came from arrival.loose (spec section 9)
@@ -87,7 +87,7 @@ function flight.fly(ctx, step, out, h)
   local tz = step.tags and step.tags.targetzone
   out.kind = "acted"
   h.depart(ctx, step, out)
-  out.expected = { name = step.name, tz = tz }
+  out.named = { name = step.name, tz = tz }
   local db = db_of(ctx)
   if not db then
     gap(out, NO_TABLES.reason, NO_TABLES.key)

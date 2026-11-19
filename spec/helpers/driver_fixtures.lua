@@ -168,7 +168,7 @@ local function scripted_engine(guides, script, start, world)
       grind = o.grind, level_grind = o.level_grind, elite = false, abstracted_turnin = o.abstracted_turnin, missing = o.missing,
       missing_any = o.missing_any, arrivals = o.arrivals,
       -- Travel steps' arrival fields (hwc.driver.flight header).
-      data_gap = o.data_gap, expected = o.expected, arrived = o.arrived, resolved_by = o.resolved_by,
+      data_gap = o.data_gap, named = o.named, arrived = o.arrived, resolved_by = o.resolved_by,
       classify = o.classify }
     E.performed = E.performed or {}
     E.performed[#E.performed + 1] = step

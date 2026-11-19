@@ -11,7 +11,7 @@
 -- run AutoCompleteZone, WoWPro_AutoComplete.lua:488-530).
 --
 -- Outcome fields: out.data_gap ("inn-unknown", key "<map_id>:<x>,<y>" for h, the bind
--- name for H, or "<gid>:<line>" when there is no bind), out.expected, out.arrived, out.classify (nil without the Forever tables).
+-- name for H, or "<gid>:<line>" when there is no bind), out.named, out.arrived, out.classify (nil without the Forever tables).
 local arrival = require("hwc.driver.arrival")
 
 local hearth = {}
@@ -47,7 +47,7 @@ function hearth.home(ctx, step, out, h)
   local p = ctx.world.player
   local tz = step.tags and step.tags.targetzone
   out.kind = "acted"
-  out.expected = { name = step.name, tz = tz }
+  out.named = { name = step.name, tz = tz }
   local e = p.bind and p.bind.entry
   if not e then
     -- A bind with no inn entry names itself; with no bind at all, the step is the key.

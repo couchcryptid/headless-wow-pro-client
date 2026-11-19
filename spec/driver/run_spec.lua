@@ -1544,7 +1544,7 @@ describe("driver.run: arrival signals", function()
 
   it("a stalled arrival with a data gap records arrival-data-gap, not did-not-advance", function()
     local log, E = stalled({ action = "F", name = "Stormwind", outcome = { kind = "acted",
-      data_gap = { reason = "destination-unresolved", key = "Stormwind" }, expected = { name = "Stormwind" } } })
+      data_gap = { reason = "destination-unresolved", key = "Stormwind" }, named = { name = "Stormwind" } } })
     assert.same({}, signals(log, "did-not-advance"))
     local g = signals(log, "arrival-data-gap")
     assert.equal(1, #g)
@@ -1558,11 +1558,11 @@ describe("driver.run: arrival signals", function()
   it("a stalled F named Stormwind records did-not-advance name-not-an-area with expected and arrived", function()
     local arrived = { zone = "Stormwind City", map_id = 1453 }
     local log = stalled({ action = "F", name = "Stormwind", outcome = { kind = "acted",
-      expected = { name = "Stormwind" }, arrived = arrived, classify = "name-not-an-area" } })
+      named = { name = "Stormwind" }, arrived = arrived, classify = "name-not-an-area" } })
     local d = signals(log, "did-not-advance")
     assert.equal(1, #d)
     assert.equal("name-not-an-area", d[1].reason)
-    assert.same({ name = "Stormwind" }, d[1].expected)
+    assert.same({ name = "Stormwind" }, d[1].named)
     assert.same(arrived, d[1].arrived)
     assert.same({}, signals(log, "arrival-data-gap"))
   end)
@@ -1570,19 +1570,19 @@ describe("driver.run: arrival signals", function()
   it("a stalled F named after a real area records arrival-mismatch", function()
     local arrived = { zone = "Loch Modan", subzone = "Thelsamar", map_id = 1432 }
     local log = stalled({ action = "F", name = "Sentinel Hill", outcome = { kind = "acted",
-      expected = { name = "Sentinel Hill", tz = "Westfall" }, arrived = arrived, classify = "subzone-known",
+      named = { name = "Sentinel Hill", tz = "Westfall" }, arrived = arrived, classify = "subzone-known",
       resolved_by = "loose" } })
     local d = signals(log, "did-not-advance")
     assert.equal(1, #d)
     assert.equal("arrival-mismatch", d[1].reason)
-    assert.same({ name = "Sentinel Hill", tz = "Westfall" }, d[1].expected)
+    assert.same({ name = "Sentinel Hill", tz = "Westfall" }, d[1].named)
     assert.same(arrived, d[1].arrived)
     assert.equal("loose", d[1].resolved_by)
   end)
 
   it("a guide reason wins over the arrival classification", function()
     local log = stalled({ action = "F", name = "Thelsamar", outcome = { kind = "acted",
-      reason = "flight-point-undiscovered", expected = { name = "Thelsamar" },
+      reason = "flight-point-undiscovered", named = { name = "Thelsamar" },
       arrived = { zone = "Loch Modan", map_id = 1432 }, classify = "advances", resolved_by = "loose" } })
     local d = signals(log, "did-not-advance")
     assert.equal(1, #d)
@@ -1591,7 +1591,7 @@ describe("driver.run: arrival signals", function()
 
   it("subzone-unknown is a notice", function()
     local log = stalled({ action = "R", name = "Amberstill Ranch", outcome = { kind = "acted",
-      expected = { name = "Amberstill Ranch" }, arrived = { zone = "Dun Morogh", map_id = 1426 },
+      named = { name = "Amberstill Ranch" }, arrived = { zone = "Dun Morogh", map_id = 1426 },
       classify = "subzone-unknown" } })
     assert.same({}, signals(log, "did-not-advance"))
     local g = signals(log, "arrival-data-gap")
@@ -1609,7 +1609,7 @@ describe("driver.run: arrival signals", function()
 
   it("without the Forever tables a stalled R step is tables-missing, not did-not-advance", function()
     local log = stalled({ action = "R", name = "Amberstill Ranch", qids = { 314 }, outcome = { kind = "acted",
-      expected = { name = "Amberstill Ranch" }, arrived = { zone = "Dun Morogh", map_id = 1426 } } },
+      named = { name = "Amberstill Ranch" }, arrived = { zone = "Dun Morogh", map_id = 1426 } } },
       { no_tables = true })
     assert.same({}, signals(log, "did-not-advance"))
     local g = signals(log, "arrival-data-gap")

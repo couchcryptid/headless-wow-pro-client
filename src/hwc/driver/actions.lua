@@ -621,7 +621,7 @@ end
 
 -- R: run to Z/M. A numeric-only Z names its zone through DB:zone_of_map (without the
 -- tables the previous zone name stays); the subzone is "" on a zone or map change and
--- kept otherwise, never the step name. out.arrived/out.classify/out.expected feed the
+-- kept otherwise, never the step name. out.arrived/out.classify/out.named feed the
 -- driver's arrival grading (spec section 8); waypcomplete 1 or 2 cannot be emulated
 -- (waypoint-arrival-not-emulated, key "<gid>:<line>"), otherwise the driver decides from
 -- out.classify. WoWPro_Events.lua:301-316 / WoWPro_AutoComplete.lua:488-530.
@@ -637,7 +637,7 @@ local function perform_travel(ctx, step, out)
   local subzone = same_area and p.subzone or ""
   p:set_zone(to_zone, subzone, to_map, x or p.x, y or p.y)
   out.kind = "acted"
-  out.expected = { name = step.name, tz = tags.targetzone }
+  out.named = { name = step.name, tz = tags.targetzone }
   out.arrived = { zone = p.zone, subzone = p.subzone ~= "" and p.subzone or nil, map_id = p.map_id }
   out.classify = db and arrival.classify(db, out.arrived, step.name, tags.targetzone) or nil
   local wc = tags.waypcomplete
