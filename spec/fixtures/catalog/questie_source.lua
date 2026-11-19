@@ -63,6 +63,14 @@ QUESTS[1208] = { name = "Fixture Talk And Kill", questLevel = 30, startedBy = { 
 QUESTS[1209] = { name = "Fixture Unknown Npc", questLevel = 30, objectives = { { { 9999 } } } }
 QUESTS[1210] = { name = "Fixture Unknown Item", questLevel = 30, objectives = { nil, nil, { { 9998 } } } }
 QUESTS[1211] = { name = "Fixture Bought", questLevel = 30, objectives = { nil, nil, { { 5005 } } } }
+-- Follow-ups (Catalog:follow_ups): 1301 -> 1302 (next, and 1302 lists it back) and 1304 (preQuestGroup);
+-- 1302 -> 1303 (hop 2); 1305 <-> 1306 loops.
+QUESTS[1301] = { name = "Follow Start", questLevel = 10, nextQuestInChain = 1302 }
+QUESTS[1302] = { name = "Follow One", questLevel = 11, preQuestSingle = { 1301 }, nextQuestInChain = 1303 }
+QUESTS[1303] = { name = "Follow Two", questLevel = 12, preQuestSingle = { 1302 } }
+QUESTS[1304] = { name = "Follow Group", questLevel = 9, preQuestGroup = { 1301, 1399 } }
+QUESTS[1305] = { name = "Follow Loop", questLevel = 10, nextQuestInChain = 1306 }
+QUESTS[1306] = { name = "Follow Loop Back", questLevel = 10, preQuestSingle = { 1305 }, nextQuestInChain = 1305 }
 QUESTS[1131] = { name = "Fixture Solo" }
 QUESTS[1132] = { name = "Fixture Solo", preQuestSingle = { 1105 } }
 
@@ -140,6 +148,13 @@ function Source:factions()
   local out = {}
   for k, v in pairs(FACTIONS) do out[k] = v end
   return out
+end
+
+function Source:quest_ids()
+  local ids = {}
+  for id in pairs(QUESTS) do ids[#ids + 1] = id end
+  table.sort(ids)
+  return ids
 end
 
 function Source:item_ids()

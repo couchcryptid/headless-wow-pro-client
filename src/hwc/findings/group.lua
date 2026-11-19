@@ -35,7 +35,7 @@ local SEVERITY = {
   ["lua-error"] = "high", ["below-level"] = "medium-high", ["level-check"] = "low",
   ["did-not-advance"] = "medium", stuck = "medium", ["manual-completion"] = "medium",
   ["rep-faction-unmet"] = "medium",
-  ["quest-red"] = "high", ["quest-orange"] = "medium", ["quest-grey"] = "low",
+  ["quest-red"] = "high", ["quest-orange"] = "medium", ["quest-grey"] = "low", ["quest-green"] = "low",
   ["leftover-quests"] = "low", ["missing-global"] = "low",
 }
 local SEVERITY_ORDER = { "high", "medium-high", "medium", "low" }
@@ -68,6 +68,25 @@ local function gap_of(s)
   return s.gap
 end
 
+-- A grey or green quest finding with a gap (newer logs): graded from its gap, then capped by how
+-- soon a quest at the character's level follows.
+local function is_low_quest(s)
+  return (s.signal == "quest-grey" or s.signal == "quest-green") and s.gap ~= nil
+end
+
+-- The most severity a follow-up at this hop leaves: hop 1 low, hop 2 medium, none uncapped.
+local FOLLOW_UP_CAP = { "low", "medium" }
+
+-- min(severity, cap) on the SEVERITY_ORDER scale.
+local function capped(severity, cap)
+  if not cap then return severity end
+  return SEVERITY_RANK[cap] > SEVERITY_RANK[severity] and cap or severity
+end
+
+local function low_quest_severity(s)
+  return capped(gap.severity(s.gap), s.follow_up and FOLLOW_UP_CAP[s.follow_up.hop] or nil)
+end
+
 local function key_of(s)
   if s.signal == "lua-error" then
     return table.concat({ "lua-error", s.reason == "harness" and "harness" or "addon", tostring(s.message) }, "\0")
@@ -90,7 +109,7 @@ local function new_finding(s, key)
     -- Like missing: new_finding copies the first combo's signal, so a group spanning characters
     -- reports that combo's outcomes.
     missing_outcome = s.missing_outcome,
-    levels_short = s.levels_short, gap = s.gap, accept_gap = s.accept_gap, quest_level = s.quest_level, char_level = s.char_level, color = s.color,
+    levels_short = s.levels_short, gap = s.gap, accept_gap = s.accept_gap, quest_level = s.quest_level, char_level = s.char_level, color = s.color, follow_up = s.follow_up,
     combos = {}, causes = {}, reasons = {},
   }
   if s.signal == "lua-error" then
@@ -106,7 +125,7 @@ local function new_finding(s, key)
     -- Every level check is graded on the one gap scale (findings.gap). A run log without the
     -- gap keeps the signal's fixed severity.
     local g = gap_of(s)
-    if g then f.severity = gap.severity(g) end
+    if g then f.severity = is_low_quest(s) and low_quest_severity(s) or gap.severity(g) end
   end
   return f
 end
@@ -240,6 +259,12 @@ function group.findings(runlogs)
       local sg = e.sig
       local a, b = gap_of(sg) or sg.quest_level and sg.char_level and sg.quest_level - sg.char_level,
         gap_of(worst) or worst.quest_level and worst.char_level and worst.quest_level - worst.char_level
+      -- A capped low quest compares by its graded severity first: its largest gap may be the one
+      -- a follow-up cap lowered.
+      if is_low_quest(sg) and is_low_quest(worst) then
+        local ra, rb = SEVERITY_RANK[low_quest_severity(sg)], SEVERITY_RANK[low_quest_severity(worst)]
+        if ra ~= rb then a, b = rb, ra end
+      end
       if a and (not b or a > b) then worst = sg end
     end
     local f = new_finding(worst, g.key)

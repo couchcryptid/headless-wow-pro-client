@@ -177,6 +177,11 @@ local function fake_world(quests, log_qids)
       if x and x.noncombat then return true, x.noncombat end
       return false
     end,
+    -- A quest table's `follow_ups = { {qid, level, name, hop}, ... }` stands in for Catalog:follow_ups.
+    follow_ups = function(_, q)
+      local x = (quests or {})[q]
+      return x and x.follow_ups or {}
+    end,
     -- A quest table's `chain = { part, total }` stands in for the catalog's chain_part.
     chain_part = function(_, q)
       local x = (quests or {})[q]

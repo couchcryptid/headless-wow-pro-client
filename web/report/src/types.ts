@@ -41,7 +41,9 @@ export interface Finding {
   gap?: number;
   /** quest-red / quest-orange: the gap at the accept, to a tenth. */
   accept_gap?: number;
-  /** quest-red / quest-orange / quest-grey: the quest's and the character's level. */
+  /** quest-grey / quest-green: the nearest follow-up at the character's level that the run accepts, if any. */
+  follow_up?: { qid: number; name: string; level: number; hop: number };
+  /** quest-red / quest-orange / quest-grey / quest-green: the quest's and the character's level. */
   quest_level?: number;
   char_level?: number;
   /** Quest colour: red, orange, yellow, green or grey. */

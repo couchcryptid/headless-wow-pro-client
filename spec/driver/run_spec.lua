@@ -844,9 +844,81 @@ describe("driver.run", function()
       local c = colours(accept(30, { level = 10, noncombat = "commerce" }))
       assert.equal("quest-grey", c[1].signal)
     end)
-    it("emits nothing for yellow or green", function()
+    it("emits nothing for yellow", function()
       assert.same({}, colours(accept(30, { level = 30 })))
-      assert.same({}, colours(accept(30, { level = 25 })))
+      assert.same({}, colours(accept(30, { level = 28 })))
+    end)
+    it("emits quest-green for a green quest, with its gap below the character", function()
+      local c = colours(accept(30, { level = 25 }))
+      assert.equal(1, #c)
+      assert.equal("quest-green", c[1].signal)
+      assert.same({ 25, 30, "green", 5.0 }, { c[1].quest_level, c[1].char_level, c[1].color, c[1].gap })
+      assert.equal("A", c[1].action)
+    end)
+    it("measures the low quest's gap on the fractional level", function()
+      local steps = { { action = "A", name = "Q", qids = { 5 } } }
+      local world = fx.fake_world({ [5] = { name = "Q", level = 10 } })
+      world.player.level, world.player.xp = 30, 0
+      local log = drive(one_guide(steps), { G1 = { { complete = { 1 } } } }, {}, world)
+      assert.equal(20.0, signals(log, "quest-grey")[1].gap)
+    end)
+
+    describe("follow-ups", function()
+      -- Low quest 5 (level 10, character 30: grey); 6 is a level-30 quest the guide may accept.
+      local function fu(qid, level, hop) return { qid = qid, level = level, name = "F" .. qid, hop = hop } end
+      local function run_with(steps, follow_ups, quests)
+        local world = fx.fake_world(quests or {
+          [5] = { name = "Low", level = 10, follow_ups = follow_ups },
+          [6] = { name = "F6", level = 30 }, [7] = { name = "F7", level = 30 }, [8] = { name = "F8", level = 28 },
+          [9] = { name = "F9", level = 27 } })
+        world.player.level = 30
+        local script = { G1 = {} }
+        for i = 1, #steps do script.G1[i] = { complete = { i } } end
+        return drive(one_guide(steps), script, {}, world)
+      end
+      local function acc(qid) return { action = "A", name = "Q" .. qid, qids = { qid } } end
+
+      it("attaches the follow-up the run accepts, after the low quest", function()
+        local log = run_with({ acc(5), acc(6) }, { fu(6, 30, 1) })
+        assert.same({ qid = 6, name = "F6", level = 30, hop = 1 }, signals(log, "quest-grey")[1].follow_up)
+      end)
+      it("attaches a follow-up accepted before the low quest", function()
+        local log = run_with({ acc(6), acc(5) }, { fu(6, 30, 1) })
+        assert.equal(6, signals(log, "quest-grey")[1].follow_up.qid)
+      end)
+      it("ignores a follow-up the run never accepts (Review Focus 1)", function()
+        local log = run_with({ acc(5) }, { fu(6, 30, 1) })
+        assert.is_nil(signals(log, "quest-grey")[1].follow_up)
+      end)
+      it("ignores a follow-up whose accept was refused", function()
+        local refused = { action = "A", name = "Q6", qids = { 6 }, outcome = { kind = "refused", reason = "class" } }
+        local log = run_with({ acc(5), refused }, { fu(6, 30, 1) })
+        assert.is_nil(signals(log, "quest-grey")[1].follow_up)
+      end)
+      it("ignores a follow-up below the character's level minus 2", function()
+        local log = run_with({ acc(5), acc(9) }, { fu(9, 27, 1) })
+        assert.is_nil(signals(log, "quest-grey")[1].follow_up)
+        local ok = run_with({ acc(5), acc(8) }, { fu(8, 28, 1) })
+        assert.equal(8, signals(ok, "quest-grey")[1].follow_up.qid)
+      end)
+      it("prefers the lower hop, then the one accepted first, then the lowest qid (Review Focus 3)", function()
+        local log = run_with({ acc(5), acc(7), acc(6) }, { fu(6, 30, 1), fu(7, 30, 1) })
+        assert.equal(7, signals(log, "quest-grey")[1].follow_up.qid)
+        log = run_with({ acc(5), acc(7), acc(6) }, { fu(6, 30, 2), fu(7, 30, 1) })
+        assert.equal(7, signals(log, "quest-grey")[1].follow_up.qid)
+        log = run_with({ acc(5), acc(7), acc(6) }, { fu(7, 30, 2), fu(6, 30, 1) })
+        assert.equal(6, signals(log, "quest-grey")[1].follow_up.qid)
+        log = run_with({ { action = "A", name = "Both", qids = { 5 } }, { action = "A", name = "Pair", qids = { 7, 6 } } },
+          { fu(6, 30, 1), fu(7, 30, 1) })
+        assert.equal(7, signals(log, "quest-grey")[1].follow_up.qid)
+      end)
+      it("attaches to a green quest as well", function()
+        local world = fx.fake_world({ [5] = { name = "Low", level = 25, follow_ups = { fu(6, 30, 2) } },
+          [6] = { name = "F6", level = 30 } })
+        world.player.level = 30
+        local log = drive(one_guide({ acc(5), acc(6) }), { G1 = { { complete = { 1 } }, { complete = { 2 } } } }, {}, world)
+        assert.same({ qid = 6, name = "F6", level = 30, hop = 2 }, signals(log, "quest-green")[1].follow_up)
+      end)
     end)
     it("exempts a non-combat quest from red and orange", function()
       assert.same({}, colours(accept(1, { level = 60, noncombat = "commerce" })))
@@ -894,7 +966,7 @@ describe("driver.run", function()
     local function colours(log)
       local out = {}
       for _, s in ipairs(log.signals) do
-        if s.signal:match("^quest%-") and s.signal ~= "quest-grey" then out[#out + 1] = s end
+        if s.signal:match("^quest%-") and s.signal ~= "quest-grey" and s.signal ~= "quest-green" then out[#out + 1] = s end
       end
       return out
     end

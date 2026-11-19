@@ -297,6 +297,7 @@ Three checks use it:
 | The guide's level check (`L` step, or the `LVL` tag on any step) when the character arrived below the check point and the client ground | `level-check` | check point minus the level before the grind |
 | An accept below the quest's required level (the client grinds to it) | `below-level` | levels short of the required level |
 | A quest above the character, judged at the do step: the first `C` or `K` step played after its accept, else its `T` step | `quest-red`, `quest-orange` | quest level minus the character's level at the do step |
+| A quest below the character, judged at the accept | `quest-green`, `quest-grey` | the character's level at the accept minus the quest level, capped by the follow-up rule below |
 
 The colour band decides whether a quest finding exists (Classic
 `GetQuestDifficultyColor`; **unverified for Forever**, the bands are Classic's and
@@ -306,8 +307,27 @@ not checked in game); the gap decides its severity. The bands use whole levels:
 |---|---|---|
 | red | 5 or more | `quest-red` |
 | orange | 3 to 4 | `quest-orange` |
-| yellow, green | -2 to 2, then below | none |
-| grey | at or below the grey line (`xp.gray_level`) | `quest-grey`, low, judged at the accept |
+| yellow | -2 to 2 | none |
+| green | below -2, above the grey line | `quest-green`, judged at the accept |
+| grey | at or below the grey line (`xp.gray_level`) | `quest-grey`, judged at the accept |
+
+Green and grey take the severity of their gap, capped by how soon the quest leads on to
+one at the character's level (never raised above that gap's severity). A follow-up is a
+quest QuestieDB reaches through `nextQuestInChain`, or one whose `preQuestSingle` or
+`preQuestGroup` lists the quest; hop 1 is a direct follow-up, hop 2 a follow-up of a
+follow-up, and the search stops there. It counts only if its level is at least the
+character's level at the accept minus 2 and the run accepts it (an acted `A` step anywhere
+in the run, before or after). The nearest counts: lowest hop, then accepted first, then
+lowest quest id.
+
+| Nearest qualifying follow-up | Severity cap |
+|---|---|
+| hop 1 | low |
+| hop 2 | medium |
+| none within 2 hops | the gap's own severity |
+
+A log without the gap (written before this rule) keeps a fixed low severity and no
+follow-up sentence.
 
 Red and orange skip quests with no combat objective (including quests the
 harness buys items for) and the Azeroth Commerce Authority and Darkmoon Faire

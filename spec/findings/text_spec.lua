@@ -30,6 +30,7 @@ describe("text constants", function()
       ["quest-red"] = "Quest too hard (red)",
       ["quest-orange"] = "Quest too hard (orange)",
       ["quest-grey"] = "Quest grey",
+      ["quest-green"] = "Quest green",
       ["did-not-advance"] = "Doesn't advance",
       ["manual-completion"] = "Manual click",
       ["stuck"] = "Stuck",
@@ -494,6 +495,44 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     t, s = both(F(f))
     assert.equal('"Hard" is grey for this character (quest level 10, character level 30)', t)
     assert.equal("The quest is grey at level 30, so it gives 10% of its XP (Classic rates, unverified for Forever).", s)
+  end)
+  describe("low quests", function()
+    local function low(over)
+      local f = { signal = "quest-grey", name = "Old", qid = 7, quest_level = 10, char_level = 30, color = "grey", gap = 20.3 }
+      for k, v in pairs(over or {}) do f[k] = v end
+      if f.no_gap then f.gap, f.no_gap = nil, nil end
+      return both(F(f))
+    end
+    it("titles by the gap below the character, with the colour", function()
+      assert.equal('"Old" is 20.3 levels below the character (grey)', (low()))
+      assert.equal('"Old" is 5.0 levels below the character (green)',
+        (low({ signal = "quest-green", color = "green", gap = 5.0, quest_level = 25 })))
+      assert.equal('"Old" is less than 0.1 levels below the character (green)',
+        (low({ signal = "quest-green", color = "green", gap = 0.04, quest_level = 25 })))
+    end)
+    it("keeps grey's XP-rate clause and names the follow-up, one hop", function()
+      local _, s = low({ follow_up = { qid = 8, name = "Next", level = 30, hop = 1 } })
+      assert.equal('The quest is grey at level 30, so it gives 10% of its XP (Classic rates, unverified for Forever). '
+        .. 'It leads to "Next" (level 30), at your level, 1 hop on.', s)
+    end)
+    it("says hops for two", function()
+      local _, s = low({ follow_up = { qid = 8, name = "Next", level = 29, hop = 2 } })
+      assert.truthy(s:find('It leads to "Next" (level 29), at your level, 2 hops on.', 1, true))
+    end)
+    it("says nothing at your level follows when there is no follow-up", function()
+      local _, s = low()
+      assert.truthy(s:find(" Nothing at your level follows within two quests.", 1, true))
+    end)
+    it("words a green quest the same way", function()
+      local _, s = low({ signal = "quest-green", color = "green", gap = 5.0, quest_level = 25 })
+      assert.truthy(s:find("^The quest is green at level 30, so it gives %d+%% of its XP"))
+      assert.truthy(s:find("Nothing at your level follows within two quests.", 1, true))
+    end)
+    it("keeps an older grey log's title and sentence (no gap)", function()
+      local t, s = low({ no_gap = true })
+      assert.equal('"Old" is grey for this character (quest level 10, character level 30)', t)
+      assert.equal("The quest is grey at level 30, so it gives 10% of its XP (Classic rates, unverified for Forever).", s)
+    end)
   end)
   it("below-level without a grind stays neutral", function()
     local _, s = both(F({ signal = "below-level", name = "Low", qid = 7, level = 4 }))

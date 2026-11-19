@@ -568,20 +568,26 @@ function Driver:level_gap(quest, fractional)
   return gap.round(quest.level - (fractional or self.W.player:fractional_level()))
 end
 
--- The colour of an accept the run plays: grey is judged here, at the character's level after
--- any grind to the required level, for any quest (one finding per accept line). Red and orange
--- are judged later, at the do step (Driver:quest_color); the accept only notes its gap.
+-- The colour of an accept the run plays: grey and green are judged here, at the character's level
+-- after any grind to the required level, for any quest (one finding per accept line). Their
+-- follow-up is decided at the end of the run (Driver:attach_follow_ups). Red and orange are judged
+-- later, at the do step (Driver:quest_color); the accept only notes its gap.
 function Driver:quest_accepted(cur, out)
   local catalog = self.W.catalog
+  self:note_accepts(cur)
   local quest = out.qid and catalog and catalog:quest(out.qid)
   if not (quest and quest.level) then return end
   local level = self.W.player.level
-  self.greyed = self.greyed or {}
-  local line_key = tostring(cur.gid or self.gid) .. ":" .. tostring(cur.line)
-  if quest_color.of(level, quest.level) == "grey" then
-    if not self.greyed[line_key] then
-      self.greyed[line_key] = true
-      self:signal("quest-grey", cur, { qid = out.qid, quest_level = quest.level, char_level = level, color = "grey" })
+  local color = quest_color.of(level, quest.level)
+  if color == "grey" or color == "green" then
+    self.low_seen = self.low_seen or {}
+    local line_key = tostring(cur.gid or self.gid) .. ":" .. tostring(cur.line)
+    if not self.low_seen[line_key] then
+      self.low_seen[line_key] = true
+      local sig = self:signal("quest-" .. color, cur, { qid = out.qid, quest_level = quest.level, char_level = level,
+        color = color, gap = gap.round(self.W.player:fractional_level() - quest.level) })
+      self.low_quests = self.low_quests or {}
+      self.low_quests[#self.low_quests + 1] = sig
     end
     return
   end
@@ -589,6 +595,40 @@ function Driver:quest_accepted(cur, out)
   -- Entries for quests never done stay for the run; a re-accept re-arms.
   self.awaiting_do = self.awaiting_do or {}
   self.awaiting_do[out.qid] = { accept_gap = self:level_gap(quest) }
+end
+
+-- Remembers the order in which the run first accepted each quest of an acted A step.
+function Driver:note_accepts(cur)
+  self.accepted_order = self.accepted_order or {}
+  self.accepted_count = self.accepted_count or 0
+  for _, qid in ipairs(cur.qids or {}) do
+    if not self.accepted_order[qid] then
+      self.accepted_count = self.accepted_count + 1
+      self.accepted_order[qid] = self.accepted_count
+    end
+  end
+end
+
+-- Gives each grey or green quest finding the nearest follow-up the run accepts that is yellow or
+-- higher for the character at the accept: lowest hop, then accepted first, then lowest qid. A
+-- follow-up the run never accepts doesn't count. Decided at the end, once every accept is known.
+function Driver:attach_follow_ups()
+  local catalog = self.W.catalog
+  if not (catalog and catalog.follow_ups) then return end
+  local order = self.accepted_order or {}
+  for _, sig in ipairs(self.low_quests or {}) do
+    local best
+    for _, f in ipairs(catalog:follow_ups(sig.qid)) do
+      if order[f.qid] and f.level >= sig.char_level - 2 then
+        if not best or f.hop < best.hop or (f.hop == best.hop and
+          (order[f.qid] < order[best.qid] or (order[f.qid] == order[best.qid] and f.qid < best.qid))) then
+          best = f
+        end
+      end
+    end
+    sig.follow_up = best and { qid = best.qid, name = best.name, level = best.level, hop = best.hop } or nil
+  end
+  self.low_quests = nil
 end
 
 -- Red and orange, judged at the do step of each quest the step lists that was accepted and not
@@ -913,6 +953,7 @@ end
 function Driver:finish()
   local log, W = self.log, self.W
   self:missing_outcomes()
+  self:attach_follow_ups()
   self:close(self.gid, self.stopped == "no-next-guide")
   self:leftovers()
   for _, e in ipairs(self.ctx.errors or {}) do

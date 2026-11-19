@@ -402,8 +402,54 @@ describe("group.findings", function()
     assert.equal("high", sev({ signal = "quest-red" }).severity)
     assert.equal("medium", sev({ signal = "quest-orange" }).severity)
     assert.equal("low", sev({ signal = "quest-grey" }).severity)
+    assert.equal("low", sev({ signal = "quest-green" }).severity)
     local f = sev({ signal = "quest-red", quest_level = 40, char_level = 30, color = "red", exempt = nil })
     assert.same({ 40, 30, "red" }, { f.quest_level, f.char_level, f.color })
+  end)
+
+  describe("low quests", function()
+    local function low(signal, gap_, follow_up, over)
+      local s = { signal = signal, gid = "G", file = "f", line = 1, action = "A", name = "q", qid = 9, gap = gap_,
+        quest_level = 10, char_level = 10 + math.floor(gap_ or 0), color = signal == "quest-green" and "green" or "grey",
+        follow_up = follow_up }
+      for k, v in pairs(over or {}) do s[k] = v end
+      return s
+    end
+    local function sev(sig) return group.findings({ runlog("Dwarf", "WARRIOR", { sig }) })[1].severity end
+    local H1, H2 = { qid = 6, name = "F", level = 30, hop = 1 }, { qid = 6, name = "F", level = 30, hop = 2 }
+
+    it("caps a high base at low for a hop-1 follow-up, medium for hop 2, and leaves it high with none", function()
+      assert.equal("low", sev(low("quest-grey", 5.0, H1)))
+      assert.equal("medium", sev(low("quest-grey", 5.0, H2)))
+      assert.equal("high", sev(low("quest-grey", 5.0, nil)))
+      assert.equal("high", sev(low("quest-green", 4.0, nil)))
+    end)
+    it("never raises a base: medium with hop 2 stays medium, low stays low", function()
+      assert.equal("medium", sev(low("quest-green", 2.5, H2)))
+      assert.equal("low", sev(low("quest-green", 2.5, H1)))
+      assert.equal("medium", sev(low("quest-green", 2.5, nil)))
+      assert.equal("low", sev(low("quest-green", 1.2, nil)))
+      assert.equal("low", sev(low("quest-green", 1.2, H2)))
+    end)
+    it("keeps the fixed low severity of an older grey log without a gap", function()
+      assert.equal("low", sev({ signal = "quest-grey", gid = "G", file = "f", line = 1, action = "A", name = "q",
+        qid = 9, quest_level = 5, char_level = 30, color = "grey" }))
+    end)
+    it("carries the gap and follow-up onto the finding", function()
+      local f = group.findings({ runlog("Dwarf", "WARRIOR", { low("quest-grey", 5.0, H1) }) })[1]
+      assert.same({ 5.0, H1 }, { f.gap, f.follow_up })
+    end)
+    it("grades and words a group by its most severe entry, then its largest gap", function()
+      local fs = group.findings({
+        runlog("Dwarf", "WARRIOR", { low("quest-grey", 9.0, H1) }),
+        runlog("Gnome", "MAGE", { low("quest-grey", 3.0, nil) }),
+        runlog("Human", "MAGE", { low("quest-grey", 5.0, nil) }),
+      })
+      assert.equal(1, #fs)
+      assert.equal("high", fs[1].severity)
+      assert.equal(5.0, fs[1].gap)
+      assert.is_nil(fs[1].follow_up)
+    end)
   end)
 
   it("carries a rep-faction-unmet signal's faction, name and tag name onto its finding", function()

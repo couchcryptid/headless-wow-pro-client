@@ -375,6 +375,72 @@ function Catalog:chain_part(qid)
   return part, total
 end
 
+-- Quest id -> the sorted ids of the quests whose pre-quest lists name it, from QuestieDB's raw
+-- records over every quest id. Built once per Catalog: it reads the whole quest table.
+local function pre_quest_index(self)
+  if not self._followers then
+    local index = {}
+    local src = self.questie
+    for _, id in ipairs(src and src.quest_ids and src:quest_ids() or {}) do
+      local q = src:quest(id)
+      local seen = {}
+      q = q or {}
+      for _, list in ipairs({ q.preQuestSingle or {}, q.preQuestGroup or {} }) do
+        for _, pre in ipairs(type(list) == "table" and list or {}) do
+          if not seen[pre] then
+            seen[pre] = true
+            index[pre] = index[pre] or {}
+            table.insert(index[pre], id)
+          end
+        end
+      end
+    end
+    -- quest_ids is ascending, so each list is already sorted by id.
+    self._followers = index
+  end
+  return self._followers
+end
+
+-- The quests a quest leads on to: its nextQuestInChain and the quests whose pre-quest lists
+-- name it (hop 1), then the same for each of those (hop 2); nothing further. Each quest appears
+-- once, at its nearest hop, never the quest itself (so a loop ends). Ordered by hop, then qid:
+-- { { qid, level, name, hop }, ... }. Empty for an unknown quest or no QuestieDB.
+function Catalog:follow_ups(qid)
+  qid = tonumber(qid)
+  local root = qid and self:quest(qid)
+  if not root then return {} end
+  local followers = pre_quest_index(self)
+  local function next_of(id)
+    local q = self:quest(id)
+    local set = {}
+    if q and q.next_in_chain then set[q.next_in_chain] = true end
+    for _, f in ipairs(followers[id] or {}) do set[f] = true end
+    local ids = {}
+    for id2 in pairs(set) do ids[#ids + 1] = id2 end
+    table.sort(ids)
+    return ids
+  end
+  local seen, out, frontier = { [qid] = true }, {}, { qid }
+  for hop = 1, 2 do
+    local found = {}
+    for _, id in ipairs(frontier) do
+      for _, nxt in ipairs(next_of(id)) do
+        if not seen[nxt] then
+          seen[nxt] = true
+          found[#found + 1] = nxt
+        end
+      end
+    end
+    table.sort(found)
+    for _, id in ipairs(found) do
+      local q = self:quest(id)
+      if q and q.level then out[#out + 1] = { qid = id, level = q.level, name = q.name, hop = hop } end
+    end
+    frontier = found
+  end
+  return out
+end
+
 -- The only guide-derived path (design spec §6): a quest in no source, shaped from
 -- the step's own QO count. Always marked unverified.
 function Catalog:placeholder(id, qo_count)

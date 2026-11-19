@@ -59,6 +59,7 @@ text.SIGNALS = {
   ["quest-red"] = "Quest too hard (red)",
   ["quest-orange"] = "Quest too hard (orange)",
   ["quest-grey"] = "Quest grey",
+  ["quest-green"] = "Quest green",
   ["did-not-advance"] = "Doesn't advance",
   ["manual-completion"] = "Manual click",
   ["stuck"] = "Stuck",
@@ -328,6 +329,9 @@ function text.title(f)
     local quest = (f.qname and f.qname ~= "") and text.with_part(f.qname, f.chain) or nm
     return quest .. " is " .. gap.text(f.gap) .. " levels above the character when the guide has you do it ("
       .. tostring(f.color) .. ")"
+  elseif (s == "quest-grey" or s == "quest-green") and f.gap then
+    local quest = (f.qname and f.qname ~= "") and text.with_part(f.qname, f.chain) or nm
+    return quest .. " is " .. gap.text(f.gap) .. " levels below the character (" .. tostring(f.color) .. ")"
   elseif s == "quest-red" or s == "quest-orange" or s == "quest-grey" then
     return nm .. " is " .. tostring(f.color) .. " for this character (quest level " .. tostring(f.quest_level)
       .. ", character level " .. tostring(f.char_level) .. ")"
@@ -494,10 +498,18 @@ local function clauses(f, ctx)
   elseif s == "quest-red" or s == "quest-orange" then
     return "The guide sends a level " .. tostring(f.char_level) .. " character to a level " .. tostring(f.quest_level)
       .. " quest with combat objectives."
-  elseif s == "quest-grey" then
+  elseif s == "quest-grey" or s == "quest-green" then
     local pct = (f.char_level and f.quest_level) and xp.quest_xp(100, f.char_level, f.quest_level) or nil
-    return "The quest is grey at level " .. tostring(f.char_level) .. ", so it gives "
+    local out = "The quest is " .. tostring(f.color or s:sub(7)) .. " at level " .. tostring(f.char_level) .. ", so it gives "
       .. (pct and (tostring(pct) .. "% of its XP") or "reduced XP") .. " (Classic rates, unverified for Forever)."
+    -- A log without the gap (older) says nothing of what follows.
+    if not f.gap then return out end
+    local fu = f.follow_up
+    if fu then
+      return out .. " It leads to " .. quoted(fu.name or "") .. " (level " .. tostring(fu.level) .. "), at your level, "
+        .. tostring(fu.hop) .. (fu.hop == 1 and " hop" or " hops") .. " on."
+    end
+    return out .. " Nothing at your level follows within two quests."
   elseif s == "did-not-advance" then
     -- The reason is the refusal of the client's action (driver.actions); none means it acted.
     local r = (f.reasons or {})[1]

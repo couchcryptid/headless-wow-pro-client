@@ -441,3 +441,44 @@ describe("Catalog:quest_rewards", function()
     assert.same({}, c:quest_rewards(9999))
   end)
 end)
+
+describe("Catalog:follow_ups", function()
+  local cat = catalog.load(fixture_cfg())
+  local function ids(qid)
+    local out = {}
+    for i, f in ipairs(cat:follow_ups(qid)) do out[i] = { f.qid, f.hop } end
+    return out
+  end
+
+  it("lists hop 1 (next in chain, and quests whose pre-quests list it) then hop 2, each by qid", function()
+    assert.same({ { 1302, 1 }, { 1304, 1 }, { 1303, 2 } }, ids(1301))
+  end)
+  it("carries the follow-up's level and name", function()
+    local f = cat:follow_ups(1301)[3]
+    assert.same({ 1303, 12, "Follow Two", 2 }, { f.qid, f.level, f.name, f.hop })
+  end)
+  it("stops at hop 2", function()
+    assert.same({ { 1303, 1 } }, ids(1302))
+    assert.same({}, ids(1303))
+  end)
+  it("terminates on a loop and never lists the quest itself", function()
+    assert.same({ { 1306, 1 } }, ids(1305))
+  end)
+  it("gives a quest with no follow-up, an unknown quest or nil an empty list", function()
+    assert.same({}, ids(1131))
+    assert.same({}, ids(999999))
+    assert.same({}, ids(nil))
+  end)
+  it("builds the reverse index once", function()
+    local n, src = 0, dofile(FIX .. "/questie_source.lua")
+    local inner = src.quest_ids
+    function src:quest_ids() n = n + 1; return inner(self) end
+    local c = catalog.load(fixture_cfg({ questie_source = src }))
+    c:follow_ups(1301); c:follow_ups(1302)
+    assert.equal(1, n)
+  end)
+  it("is empty with no QuestieDB", function()
+    local c = catalog.load(fixture_cfg({ questie_source = false, questie_dir = "/nonexistent" }))
+    assert.same({}, c:follow_ups(1301))
+  end)
+end)
