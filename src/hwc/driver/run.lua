@@ -564,8 +564,8 @@ function Driver:refusals(cur, out)
 end
 
 -- The quest's level less the character's fractional level, to one decimal.
-function Driver:level_gap(quest)
-  return gap.round(quest.level - self.W.player:fractional_level())
+function Driver:level_gap(quest, fractional)
+  return gap.round(quest.level - (fractional or self.W.player:fractional_level()))
 end
 
 -- The colour of an accept the run plays: grey is judged here, at the character's level after
@@ -586,19 +586,22 @@ function Driver:quest_accepted(cur, out)
     return
   end
   if catalog:noncombat(out.qid) then return end
+  -- Entries for quests never done stay for the run; a re-accept re-arms.
   self.awaiting_do = self.awaiting_do or {}
   self.awaiting_do[out.qid] = { accept_gap = self:level_gap(quest) }
 end
 
 -- Red and orange, judged at the do step of each quest the step lists that was accepted and not
 -- yet judged: the first C or K step played after its accept, else its T step. The band comes
--- from the integer levels (quest_color.of); the gap is the fractional one. One finding per
+-- from the integer levels (quest_color.of); the gap is the fractional one, both before the step's XP. One finding per
 -- do-step line: the first play wins.
 function Driver:quest_color(cur)
   local awaiting = self.awaiting_do
   if not awaiting then return end
   local catalog = self.W.catalog
-  local level = self.W.player.level
+  -- Judged on the character before the do step's own XP (Driver:act), so a turn-in reward
+  -- or objective kills don't hide how hard the quest was when the guide sent the character.
+  local level, fractional = self.pre_step.level, self.pre_step.fractional
   self.colored = self.colored or {}
   local line_key = tostring(cur.gid or self.gid) .. ":" .. tostring(cur.line)
   for _, qid in ipairs(cur.qids or {}) do
@@ -610,7 +613,7 @@ function Driver:quest_color(cur)
       if (color == "red" or color == "orange") and not self.colored[line_key .. ":" .. qid] then
         self.colored[line_key .. ":" .. qid] = true
         self:signal("quest-" .. color, cur, { qid = qid, quest_level = quest.level, char_level = level, color = color,
-          gap = self:level_gap(quest), accept_gap = note.accept_gap, do_action = cur.action })
+          gap = self:level_gap(quest, fractional), accept_gap = note.accept_gap })
       end
     end
   end
@@ -731,6 +734,9 @@ function Driver:act(step, rows, info)
   self:wrong_race_class(step)
   local why = self.E:why(step.index)
   self.acting = { gid = step.gid, index = step.index, why = why }
+  -- The character before the step's own XP (kills, a reward): the do-step colour is judged here.
+  local pl = self.W.player
+  self.pre_step = { level = pl.level, fractional = pl:fractional_level() }
   local out = self.perform(self.ctx, step)
   local use = self:hidden_use_for(step, out, info)
   local checked = false -- whether out.settle was already checked

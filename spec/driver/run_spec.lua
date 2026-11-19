@@ -926,19 +926,19 @@ describe("driver.run", function()
       assert.same({}, signals(play(steps, { G1 = { { complete = { 1 } } } }), "level-check"))
     end)
 
-    it("judges the colour at the C step, not the accept", function()
-      -- Red/orange at the accept (level 20 vs 26) would be red; at the C step the character
-      -- is 23.7, so the gap is 2.3 and the band orange (26 - 23 = 3).
+    it("judges the colour at the C step, not the accept, from the character before the step's XP", function()
+      -- Red at the accept (level 20 vs 26). An R step brings the character to 23.7 (orange, gap
+      -- 2.3); the C step's own kills then take it to 25, which must not count.
+      local xp = require("hwc.world.xp")
       local steps = {
         { action = "A", name = "Hard", qids = { 5 } },
-        { action = "C", name = "Kill things", qids = { 5 }, outcome = { kind = "acted", level = 23, xp = 700 } },
+        { action = "R", name = "Walk" },
+        { action = "C", name = "Kill things", qids = { 5 }, outcome = { kind = "acted", level = 25, xp = 0 } },
       }
-      local script = { G1 = { { complete = { 1 } }, { complete = { 2 } } } }
+      local script = { G1 = { { complete = { 1 } },
+        { complete = { 2 }, level = 23, xp = math.floor(xp.to_next(23) * 0.7) }, { complete = { 3 } } } }
       local world = fx.fake_world({ [5] = { name = "Hard", level = 26 } })
       world.player.level = 20
-      -- level 23 needs xp_max(23) to give .7
-      local xp = require("hwc.world.xp")
-      steps[2].outcome.xp = math.floor(xp.to_next(23) * 0.7)
       local log = drive(one_guide(steps), script, {}, world)
       local c = colours(log)
       assert.equal(1, #c)
@@ -948,6 +948,17 @@ describe("driver.run", function()
       assert.equal(23, c[1].char_level)
       assert.equal(5, c[1].qid)
       assert.equal(6.0, c[1].accept_gap)
+    end)
+    it("judges a T step before its reward XP", function()
+      -- Red before the turn-in (20 vs 26); the reward carries the character to 22 (orange).
+      local steps = {
+        { action = "A", name = "Hard", qids = { 5 } },
+        { action = "T", name = "Hard", qids = { 5 }, outcome = { kind = "acted", level = 22, xp = 0 } },
+      }
+      local c = colours(play(steps, { G1 = { { complete = { 1 } }, { complete = { 2 } } } }))
+      assert.equal(1, #c)
+      assert.equal("quest-red", c[1].signal)
+      assert.same({ 20, 6.0 }, { c[1].char_level, c[1].gap })
     end)
     it("judges a quest at its T step when no C or K step is played", function()
       local steps = {

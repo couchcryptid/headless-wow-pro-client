@@ -311,7 +311,8 @@ not checked in game); the gap decides its severity. The bands use whole levels:
 
 Red and orange skip quests with no combat objective (including quests the
 harness buys items for) and the Azeroth Commerce Authority and Darkmoon Faire
-quests. Grey applies to every quest. A quest accepted but never done (no `C`,
+quests. Grey applies to every quest. The do step is judged on the character before
+that step's own XP (objective kills, a turn-in reward). A quest accepted but never done (no `C`,
 `K` or `T` step played) gets no red or orange finding; there is one per guide
 line of the do step, and its sentence says how far above the character the quest
 was at the accept too.
@@ -377,6 +378,11 @@ When the runs share no character, `hwc diff` says what each side played, e.g.
 before the `--professions` flag names its characters differently (`baseline`,
 `alch-herb`, ...), so it never shares one with a newer file; the message then
 ends `; OLD was written before --professions, so re-run it with this hwc`.
+
+`quest-red` and `quest-orange` findings are anchored on the do step (see "Level
+findings"), so their ids differ from those of a file written before that change:
+diffing an older file against a newer one lists them as fixed and new. Re-run the old
+side with this hwc to compare.
 
 Exit 1 means "new findings or a cut-short run" here, as in `diff(1)` it means "files differ".
 
