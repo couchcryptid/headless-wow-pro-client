@@ -29,6 +29,68 @@ describe("actions.perform: A", function()
     assert.are.same({ "QUEST_ACCEPTED", "QUEST_LOG_UPDATE", "BAG_UPDATE" }, names(E))
   end)
 
+  describe("item-started quests (QuestieDB startedBy item)", function()
+    local function count(E, name)
+      local n = 0
+      for _, e in ipairs(names(E)) do if e == name then n = n + 1 end end
+      return n
+    end
+
+    it("puts the starter item in the bags before QUEST_ACCEPTED, then BAG_UPDATE", function()
+      local ctx, E, w = setup()
+      local at_accept
+      local fire = E.fire
+      function E:fire(event, ...)
+        if event == "QUEST_ACCEPTED" then at_accept = w.player:item_count(5021) end
+        return fire(self, event, ...)
+      end
+      local o = actions.perform(ctx, step("A", { 1202 }))
+      assert.are.equal("acted", o.kind)
+      assert.are.equal(1, at_accept)
+      assert.are.equal(1, w.player:item_count(5021))
+      assert.are.same({ "BAG_UPDATE", "QUEST_ACCEPTED", "QUEST_LOG_UPDATE" }, names(E))
+    end)
+
+    it("credits a starter item that is also the objective, so the turn-in succeeds", function()
+      local ctx, E, w = setup()
+      actions.perform(ctx, step("A", { 1201 }))
+      assert.is_true(w.log:is_complete(1201))
+      local o = actions.perform(ctx, step("T", { 1201 }))
+      assert.are.equal("acted", o.kind)
+      assert.is_nil(w.log:get(1201))
+      assert.is_truthy(has_event(w, "quest_turn_in"))
+    end)
+
+    it("adds no second copy and no extra BAG_UPDATE when the bags already hold it", function()
+      local ctx, E, w = setup()
+      w.player:add_item(5021, 1)
+      actions.perform(ctx, step("A", { 1202 }))
+      assert.are.equal(1, w.player:item_count(5021))
+      assert.are.equal(0, count(E, "BAG_UPDATE"))
+    end)
+
+    it("leaves an NPC-started quest alone", function()
+      local ctx, E, w = setup()
+      actions.perform(ctx, step("A", { 179 }))
+      assert.are.same({ "QUEST_ACCEPTED", "QUEST_LOG_UPDATE" }, names(E))
+    end)
+
+    it("gives both the starter item and the source item", function()
+      local ctx, E, w = setup()
+      actions.perform(ctx, step("A", { 1203 }))
+      assert.are.equal(1, w.player:item_count(5021))
+      assert.are.equal(1, w.player:item_count(5002))
+    end)
+
+    it("adds no item when the accept is refused", function()
+      local ctx, E, w = setup("Dwarf")
+      local o = actions.perform(ctx, step("A", { 1204 }))
+      assert.are.equal("refused", o.kind)
+      assert.are.equal(0, w.player:item_count(5021))
+      assert.are.same({}, E.fired)
+    end)
+  end)
+
   it("holds world.dialog = {qid, detail} while the accept events fire", function()
     local ctx, E, w = setup()
     local seen

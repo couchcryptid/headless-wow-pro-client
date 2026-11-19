@@ -31,6 +31,18 @@ local QUESTS = {
     questLevel = 30, requiredMinRep = { 72 }, requiredMaxRep = { "92", 3000 } },
 }
 
+-- Item-started quests (QuestieDB startedBy = { creatures, objects, items }): the starter item is
+-- the item objective (1201), is no objective (1202), comes with a sourceItemId (1203), or the
+-- quest is refused for a Dwarf (1204, Human only).
+QUESTS[1201] = { name = "Fixture Note Quest", startedBy = { nil, nil, { 5020 } }, finishedBy = { { 2002 } }, requiredLevel = 1,
+  questLevel = 5, objectives = { nil, nil, { { 5020, "Fixture Note" } } } }
+QUESTS[1202] = { name = "Fixture Map Quest", startedBy = { nil, nil, { 5021 } }, finishedBy = { { 2002 } }, requiredLevel = 1,
+  questLevel = 5 }
+QUESTS[1203] = { name = "Fixture Map And Fang", startedBy = { nil, nil, { 5021 } }, finishedBy = { { 2002 } }, requiredLevel = 1,
+  questLevel = 5, sourceItemId = 5002 }
+QUESTS[1204] = { name = "Fixture Human Note", startedBy = { nil, nil, { 5021 } }, finishedBy = { { 2002 } }, requiredLevel = 1,
+  questLevel = 5, requiredRaces = 1 }
+
 -- A same-name chain (1101 -> 1104), a branch off 1102 with another name, a cycle,
 -- two same-name quests behind one predecessor, and a same-name pair that is not adjacent.
 QUESTS[1101] = { name = "Fixture Chain", nextQuestInChain = 1102 }
@@ -63,6 +75,8 @@ local ITEMS = {
   [5002] = { name = "Fixture Fang", npcDrops = { 2001, 2002 } },
   [5003] = { name = "Fixture Fang" },
   [5004] = { name = "Fixture Keg", questRewards = { 179 } },
+  [5020] = { name = "Fixture Note" },
+  [5021] = { name = "Fixture Map" },
   [4990] = { name = "Fixture Mug", questRewards = { 179 } },
 }
 
