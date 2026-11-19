@@ -35,9 +35,12 @@ local SEVERITY = {
   ["lua-error"] = "high", ["below-level"] = "medium-high", ["level-check"] = "low",
   ["did-not-advance"] = "medium", stuck = "medium", ["manual-completion"] = "medium",
   ["rep-faction-unmet"] = "medium",
-  ["quest-red"] = "high", ["quest-orange"] = "medium", ["quest-grey"] = "low", ["quest-green"] = "low",
   ["leftover-quests"] = "low", ["missing-global"] = "low",
 }
+-- Retired signals: the client no longer emits them (it grades only whether the character can accept
+-- a quest, not its colour), but an older run log may hold them. They keep their old fixed severity.
+local RETIRED = { ["quest-red"] = "high", ["quest-orange"] = "medium", ["quest-grey"] = "low", ["quest-green"] = "low" }
+for signal, severity in pairs(RETIRED) do SEVERITY[signal] = severity end
 local SEVERITY_ORDER = { "high", "medium-high", "medium", "low" }
 local SEVERITY_RANK = {}
 for i, s in ipairs(SEVERITY_ORDER) do SEVERITY_RANK[s] = i end
@@ -61,30 +64,12 @@ local function profs(log)
   return table.concat((log.character or {}).professions or {}, ",")
 end
 
--- The fractional-level gap a signal reports, or nil for one with none (an older log, or a
--- signal that is not a level check).
+-- The fractional-level gap a signal reports, or nil for one with none (an older log, a retired
+-- colour signal, or a signal that is not a level check).
 local function gap_of(s)
+  if RETIRED[s.signal] then return nil end
   if s.signal == "below-level" then return s.levels_short end
   return s.gap
-end
-
--- A grey or green quest finding with a gap (newer logs): graded from its gap, then capped by how
--- soon a quest at the character's level follows.
-local function is_low_quest(s)
-  return (s.signal == "quest-grey" or s.signal == "quest-green") and s.gap ~= nil
-end
-
--- The most severity a follow-up at this hop leaves: hop 1 low, hop 2 medium, none uncapped.
-local FOLLOW_UP_CAP = { "low", "medium" }
-
--- min(severity, cap) on the SEVERITY_ORDER scale.
-local function capped(severity, cap)
-  if not cap then return severity end
-  return SEVERITY_RANK[cap] > SEVERITY_RANK[severity] and cap or severity
-end
-
-local function low_quest_severity(s)
-  return capped(gap.severity(s.gap), s.follow_up and FOLLOW_UP_CAP[s.follow_up.hop] or nil)
 end
 
 local function key_of(s)
@@ -109,7 +94,7 @@ local function new_finding(s, key)
     -- Like missing: new_finding copies the first combo's signal, so a group spanning characters
     -- reports that combo's outcomes.
     missing_outcome = s.missing_outcome,
-    levels_short = s.levels_short, gap = s.gap, accept_gap = s.accept_gap, quest_level = s.quest_level, char_level = s.char_level, color = s.color, follow_up = s.follow_up,
+    levels_short = s.levels_short, gap = s.gap,
     combos = {}, causes = {}, reasons = {},
   }
   if s.signal == "lua-error" then
@@ -125,7 +110,7 @@ local function new_finding(s, key)
     -- Every level check is graded on the one gap scale (findings.gap). A run log without the
     -- gap keeps the signal's fixed severity.
     local g = gap_of(s)
-    if g then f.severity = is_low_quest(s) and low_quest_severity(s) or gap.severity(g) end
+    if g then f.severity = gap.severity(g) end
   end
   return f
 end
@@ -252,20 +237,11 @@ function group.findings(runlogs)
       return tostring(a.sig.why) < tostring(b.sig.why)
     end)
     -- A group spanning characters is graded and worded by its worst entry: the largest gap
-    -- (below-level levels_short, level-check and colour gap). Older colour entries without a
-    -- gap fall back to quest_level - char_level.
+    -- (below-level levels_short, level-check gap).
     local worst = g.entries[1].sig
     for _, e in ipairs(g.entries) do
-      local sg = e.sig
-      local a, b = gap_of(sg) or sg.quest_level and sg.char_level and sg.quest_level - sg.char_level,
-        gap_of(worst) or worst.quest_level and worst.char_level and worst.quest_level - worst.char_level
-      -- A capped low quest compares by its graded severity first: its largest gap may be the one
-      -- a follow-up cap lowered.
-      if is_low_quest(sg) and is_low_quest(worst) then
-        local ra, rb = SEVERITY_RANK[low_quest_severity(sg)], SEVERITY_RANK[low_quest_severity(worst)]
-        if ra ~= rb then a, b = rb, ra end
-      end
-      if a and (not b or a > b) then worst = sg end
+      local a, b = gap_of(e.sig), gap_of(worst)
+      if a and (not b or a > b) then worst = e.sig end
     end
     local f = new_finding(worst, g.key)
     local combos, reasons = {}, {}

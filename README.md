@@ -290,52 +290,20 @@ one decimal:
 | 2 to under 4 | medium |
 | 4 or more | high |
 
-Three checks use it:
+Two checks use it:
 
 | Check | Signal | Gap |
 |---|---|---|
 | The guide's level check (`L` step, or the `LVL` tag on any step) when the character arrived below the check point and the client ground | `level-check` | check point minus the level before the grind |
 | An accept below the quest's required level (the client grinds to it) | `below-level` | levels short of the required level |
-| A quest above the character, judged at the do step: the first `C` or `K` step played after its accept, else its `T` step | `quest-red`, `quest-orange` | quest level minus the character's level at the do step |
-| A quest below the character, judged at the accept | `quest-green`, `quest-grey` | the character's level at the accept minus the quest level, capped by the follow-up rule below |
 
-The colour band decides whether a quest finding exists (Classic
-`GetQuestDifficultyColor`; **unverified for Forever**, the bands are Classic's and
-not checked in game); the gap decides its severity. The bands use whole levels:
-
-| Colour | Quest level minus character level | Finding |
-|---|---|---|
-| red | 5 or more | `quest-red` |
-| orange | 3 to 4 | `quest-orange` |
-| yellow | -2 to 2 | none |
-| green | below -2, above the grey line | `quest-green`, judged at the accept |
-| grey | at or below the grey line (`xp.gray_level`) | `quest-grey`, judged at the accept |
-
-Green and grey take the severity of their gap, capped by how soon the quest leads on to
-one at the character's level (never raised above that gap's severity). A follow-up is a
-quest QuestieDB reaches through `nextQuestInChain`, or one whose `preQuestSingle` or
-`preQuestGroup` lists the quest; hop 1 is a direct follow-up, hop 2 a follow-up of a
-follow-up, and the search stops there. It counts only if its level is at least the
-character's level at the accept minus 2 and the run accepts it (an acted `A` step anywhere
-in the run, before or after). The nearest counts: lowest hop, then accepted first, then
-lowest quest id.
-
-| Nearest qualifying follow-up | Severity cap |
-|---|---|
-| hop 1 | low |
-| hop 2 | medium |
-| none within 2 hops | the gap's own severity |
-
-A log without the gap (written before this rule) keeps a fixed low severity and no
-follow-up sentence.
-
-Red and orange skip quests with no combat objective (including quests the
-harness buys items for) and the Azeroth Commerce Authority and Darkmoon Faire
-quests. Grey applies to every quest. The do step is judged on the character before
-that step's own XP (objective kills, a turn-in reward). A quest accepted but never done (no `C`,
-`K` or `T` step played) gets no red or orange finding; there is one per guide
-line of the do step, and its sentence says how far above the character the quest
-was at the accept too.
+The client grades only whether the character can accept a quest (the required
+level) and the guide's own level checks. It doesn't grade quest difficulty or
+colour (too hard, too easy): those are routing decisions for the guide, not for
+this client. Run logs written by an older hwc may hold `quest-red`, `quest-orange`,
+`quest-grey` and `quest-green` findings; they still load in the report and `hwc diff`,
+keep their old fixed severity (high, medium, low, low) and their label, and are not
+produced any more.
 
 Level checks (`L` steps) grind to the guide's `level;offset` check point, ending at
 `max(check, actual)`: the client grinds only when below the point and never moves the
@@ -398,11 +366,6 @@ When the runs share no character, `hwc diff` says what each side played, e.g.
 before the `--professions` flag names its characters differently (`baseline`,
 `alch-herb`, ...), so it never shares one with a newer file; the message then
 ends `; OLD was written before --professions, so re-run it with this hwc`.
-
-`quest-red` and `quest-orange` findings are anchored on the do step (see "Level
-findings"), so their ids differ from those of a file written before that change:
-diffing an older file against a newer one lists them as fixed and new. Re-run the old
-side with this hwc to compare.
 
 Exit 1 means "new findings or a cut-short run" here, as in `diff(1)` it means "files differ".
 

@@ -9,7 +9,6 @@
 local dkjson = require("dkjson")
 local lfs = require("lfs")
 local source = require("hwc.questie.source")
-local kills = require("hwc.world.kills")
 
 local Catalog = {}
 Catalog.__index = Catalog
@@ -238,8 +237,6 @@ local function build_quest(self, id)
   -- Reputation (design 2026-11-18-reputation §4.3): the rewards a turn-in gives and the
   -- standing an accept needs, on QuestieDB's cumulative scale.
   quest.reputation_reward = rep_rewards(q.reputationReward)
-  -- QuestieDB zoneOrSort: a zone id, or a negative sort id (-364 Darkmoon Faire).
-  quest.zone_or_sort = type(q.zoneOrSort) == "number" and q.zoneOrSort or nil
   quest.min_rep = rep_gate(q.requiredMinRep)
   quest.max_rep = rep_gate(q.requiredMaxRep)
 
@@ -297,41 +294,6 @@ function Catalog:quest(id)
   return self._quests[id] or nil
 end
 
--- Faction ids whose rewards mark a quest as a non-combat activity.
-local COMMERCE_FACTION = 2586 -- Azeroth Commerce Authority
-local DARKMOON_FACTION = 909 -- Darkmoon Faire
-local DARKMOON_SORT = -364
-
--- Is the quest something the player does without fighting (design 2026-11-18-quest-color)?
--- true, reason: "commerce" / "darkmoon" (QuestieDB marks it a non-combat activity), or
--- "no-combat-objective" (no kill objective and no item objective whose item a mob drops).
--- false for a quest with a combat objective, or one not in the catalog. An objective NPC or item
--- missing from QuestieDB counts as non-combat (fail open: no data is not evidence of combat).
--- Item drops come from the catalog's own item data (Catalog:item), so "combat" has one definition.
-function Catalog:noncombat(qid)
-  local quest = self:quest(qid)
-  if not quest then return false end
-  for _, r in ipairs(quest.reputation_reward or {}) do
-    if r.faction == COMMERCE_FACTION then return true, "commerce" end
-    if r.faction == DARKMOON_FACTION then return true, "darkmoon" end
-  end
-  if quest.zone_or_sort == DARKMOON_SORT then return true, "darkmoon" end
-  for _, o in ipairs(quest.objectives or {}) do
-    if o.kind == "npc" then
-      local npc = self:npc(o.ids and o.ids[1])
-      if npc and not kills.talk_to(npc, quest) then return false end
-    elseif o.kind == "item" then
-      -- Combat only when a mob drops it AND nobody sells it: an item you can buy is never a
-      -- combat objective, whatever rare drops exist.
-      local id = o.ids and o.ids[1]
-      local it = self:item(id)
-      local raw = self.questie and self.questie:item(id)
-      if it and #it.drops > 0 and #(raw and raw.vendors or {}) == 0 then return false end
-    end
-  end
-  return true, "no-combat-objective"
-end
-
 -- The part and total of a quest in a chain whose parts share one name (design
 -- 2026-11-18-quest-chain-parts): part = 1 + same-name predecessors walked back (the
 -- lowest-id one when several), total = the same-name run walked forward from part 1
@@ -373,90 +335,6 @@ function Catalog:chain_part(qid)
   if total < part then total = part end
   if total < 2 then return nil end
   return part, total
-end
-
--- Quest id -> the sorted ids of the quests whose pre-quest lists name it: QuestieDB's raw records
--- over every quest id, except that a quest whose supplement entry sets pre_single or pre_group
--- uses the merged lists (as Catalog:quest does), and supplement-only quests are included.
--- Built once per Catalog: it reads the whole quest table.
-local function pre_quest_index(self)
-  if not self._followers then
-    local index = {}
-    local src = self.questie
-    local ids, listed = {}, {}
-    for _, id in ipairs(src and src.quest_ids and src:quest_ids() or {}) do
-      ids[#ids + 1], listed[id] = id, true
-    end
-    for key in pairs(self.supplement) do
-      local id = tonumber(key)
-      if id and not listed[id] then ids[#ids + 1], listed[id] = id, true end
-    end
-    table.sort(ids)
-    for _, id in ipairs(ids) do
-      local sup = self.supplement[tostring(id)]
-      local lists
-      if sup and (sup.pre_single ~= nil or sup.pre_group ~= nil) then
-        local merged = self:quest(id)
-        lists = { merged.pre_single, merged.pre_group }
-      else
-        local q = src and src:quest(id) or {}
-        lists = { q.preQuestSingle or {}, q.preQuestGroup or {} }
-      end
-      local seen = {}
-      for _, list in ipairs(lists) do
-        for _, pre in ipairs(type(list) == "table" and list or {}) do
-          if not seen[pre] then
-            seen[pre] = true
-            index[pre] = index[pre] or {}
-            table.insert(index[pre], id)
-          end
-        end
-      end
-    end
-    -- ids is ascending, so each list is already sorted by id.
-    self._followers = index
-  end
-  return self._followers
-end
-
--- The quests a quest leads on to: its nextQuestInChain and the quests whose pre-quest lists
--- name it (hop 1), then the same for each of those (hop 2); nothing further. Each quest appears
--- once, at its nearest hop, never the quest itself (so a loop ends). Ordered by hop, then qid:
--- { { qid, level, name, hop }, ... }. Empty for an unknown quest or no QuestieDB.
-function Catalog:follow_ups(qid)
-  qid = tonumber(qid)
-  local root = qid and self:quest(qid)
-  if not root then return {} end
-  local followers = pre_quest_index(self)
-  local function next_of(id)
-    local q = self:quest(id)
-    local set = {}
-    if q and q.next_in_chain then set[q.next_in_chain] = true end
-    for _, f in ipairs(followers[id] or {}) do set[f] = true end
-    local ids = {}
-    for id2 in pairs(set) do ids[#ids + 1] = id2 end
-    table.sort(ids)
-    return ids
-  end
-  local seen, out, frontier = { [qid] = true }, {}, { qid }
-  for hop = 1, 2 do
-    local found = {}
-    for _, id in ipairs(frontier) do
-      for _, nxt in ipairs(next_of(id)) do
-        if not seen[nxt] then
-          seen[nxt] = true
-          found[#found + 1] = nxt
-        end
-      end
-    end
-    table.sort(found)
-    for _, id in ipairs(found) do
-      local q = self:quest(id)
-      if q and q.level then out[#out + 1] = { qid = id, level = q.level, name = q.name, hop = hop } end
-    end
-    frontier = found
-  end
-  return out
 end
 
 -- The only guide-derived path (design spec §6): a quest in no source, shaped from

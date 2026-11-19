@@ -88,8 +88,6 @@ local function talk_to(npc, quest)
   return false
 end
 
-kills.talk_to = talk_to
-
 -- { npc_id, level, elite, count } for a kill/drop objective, or nil when it yields no
 -- kill XP (quest, optional, lets a talk-to NPC objective be told from a kill).
 function kills.objective_kills(catalog, objective, quest)

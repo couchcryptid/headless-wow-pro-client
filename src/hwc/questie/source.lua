@@ -117,13 +117,6 @@ function Source:factions()
   return out
 end
 
-function Source:quest_ids()
-  local ids = {}
-  for i, id in ipairs(self._lib.Quest.GetAllIds()) do ids[i] = id end
-  table.sort(ids)
-  return ids
-end
-
 function Source:item_ids()
   local ids = {}
   for i, id in ipairs(self._lib.Item.GetAllIds()) do ids[i] = id end

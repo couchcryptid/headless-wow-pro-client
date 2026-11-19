@@ -3,7 +3,6 @@
 -- here, so the wording lives in one place and the HTML page holds none.
 local RACES = require("hwc.world.player").RACES
 local reputation = require("hwc.world.reputation")
-local xp = require("hwc.world.xp")
 local gap = require("hwc.findings.gap")
 
 local text = {}
@@ -56,6 +55,8 @@ text.SIGNALS = {
   ["wrong-race-class"] = "Wrong race or class",
   ["below-level"] = "Offered below level",
   ["level-check"] = "Level check reached short",
+  -- Retired: the client no longer emits the four quest colour signals; the labels stay so an older
+  -- run log's findings still render.
   ["quest-red"] = "Quest too hard (red)",
   ["quest-orange"] = "Quest too hard (orange)",
   ["quest-grey"] = "Quest grey",
@@ -325,16 +326,6 @@ function text.title(f)
     return nm .. " is offered below its level"
   elseif s == "level-check" and f.gap then
     return "The guide's level check " .. quoted(f.name or "") .. " is reached " .. gap.text(f.gap) .. " levels short"
-  elseif (s == "quest-red" or s == "quest-orange") and f.gap then
-    local quest = (f.qname and f.qname ~= "") and text.with_part(f.qname, f.chain) or nm
-    return quest .. " is " .. gap.text(f.gap) .. " levels above the character when the guide has you do it ("
-      .. tostring(f.color) .. ")"
-  elseif (s == "quest-grey" or s == "quest-green") and f.gap then
-    local quest = (f.qname and f.qname ~= "") and text.with_part(f.qname, f.chain) or nm
-    return quest .. " is " .. gap.text(f.gap) .. " levels below the character (" .. tostring(f.color) .. ")"
-  elseif s == "quest-red" or s == "quest-orange" or s == "quest-grey" then
-    return nm .. " is " .. tostring(f.color) .. " for this character (quest level " .. tostring(f.quest_level)
-      .. ", character level " .. tostring(f.char_level) .. ")"
   elseif s == "did-not-advance" then
     return nm .. " doesn't advance"
   elseif s == "manual-completion" then
@@ -488,28 +479,6 @@ local function clauses(f, ctx)
       .. tostring(g.to) .. point .. ")."
     if f.gap < gap.MEDIUM then out = out .. " " .. gap.MARGIN_SENTENCE end
     return out
-  elseif (s == "quest-red" or s == "quest-orange") and f.gap then
-    local out = "The guide has a level " .. string.format("%.1f", f.quest_level - f.gap) .. " character do a level "
-      .. tostring(f.quest_level) .. " quest with combat objectives at this step"
-    if f.accept_gap then out = out .. "; it was " .. gap.text(f.accept_gap) .. " levels above at the accept" end
-    out = out .. "."
-    if f.gap < gap.MEDIUM then out = out .. " " .. gap.MARGIN_SENTENCE end
-    return out
-  elseif s == "quest-red" or s == "quest-orange" then
-    return "The guide sends a level " .. tostring(f.char_level) .. " character to a level " .. tostring(f.quest_level)
-      .. " quest with combat objectives."
-  elseif s == "quest-grey" or s == "quest-green" then
-    local pct = (f.char_level and f.quest_level) and xp.quest_xp(100, f.char_level, f.quest_level) or nil
-    local out = "The quest is " .. tostring(f.color or s:sub(7)) .. " at level " .. tostring(f.char_level) .. ", so it gives "
-      .. (pct and (tostring(pct) .. "% of its XP") or "reduced XP") .. " (Classic rates, unverified for Forever)."
-    -- A log without the gap (older) says nothing of what follows.
-    if not f.gap then return out end
-    local fu = f.follow_up
-    if fu then
-      return out .. " It leads to " .. quoted(fu.name or "") .. " (level " .. tostring(fu.level) .. "), at your level, "
-        .. tostring(fu.hop) .. (fu.hop == 1 and " hop" or " hops") .. " on."
-    end
-    return out .. " Nothing at your level follows within two quests."
   elseif s == "did-not-advance" then
     -- The reason is the refusal of the client's action (driver.actions); none means it acted.
     local r = (f.reasons or {})[1]
@@ -543,6 +512,8 @@ local function clauses(f, ctx)
       "Reputation from kills and encounters isn't modelled; if the guide meant another faction, the id is wrong."
   elseif s == "lua-error" then
     return "WoWPro raised an error during the run.", "The message and stack are in the detail below."
+  elseif s == "quest-red" or s == "quest-orange" or s == "quest-grey" or s == "quest-green" then
+    return "From an older run log: this client no longer grades quest colour."
   end
   return ""
 end

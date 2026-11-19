@@ -12,8 +12,6 @@
 -- walked 1..n); nothing in it is built from pairs.
 local actions = require("hwc.driver.actions")
 local xp = require("hwc.world.xp")
-local quest_color = require("hwc.world.quest_color")
-local gap = require("hwc.findings.gap")
 local findings_text = require("hwc.findings.text")
 
 local run = {}
@@ -559,104 +557,6 @@ function Driver:refusals(cur, out)
     self:signal("below-level", cur, { qid = out.qid, reason = "below-level", outcome = out.kind,
       grind = { kills = out.grind.kills, to = out.grind.to }, levels_short = out.grind.short })
   end
-  if out.kind == "acted" and cur.action == "A" then self:quest_accepted(cur, out) end
-  if cur.action == "C" or cur.action == "K" or cur.action == "T" then self:quest_color(cur) end
-end
-
--- The quest's level less the character's fractional level, to one decimal.
-function Driver:level_gap(quest, fractional)
-  return gap.round(quest.level - (fractional or self.W.player:fractional_level()))
-end
-
--- The colour of an accept the run plays: grey and green are judged here, at the character's level
--- after any grind to the required level, for any quest (one finding per accept line). Their
--- follow-up is decided at the end of the run (Driver:attach_follow_ups). Red and orange are judged
--- later, at the do step (Driver:quest_color); the accept only notes its gap.
-function Driver:quest_accepted(cur, out)
-  local catalog = self.W.catalog
-  self:note_accepts(cur)
-  local quest = out.qid and catalog and catalog:quest(out.qid)
-  if not (quest and quest.level) then return end
-  local level = self.W.player.level
-  local color = quest_color.of(level, quest.level)
-  if color == "grey" or color == "green" then
-    self.low_seen = self.low_seen or {}
-    local line_key = tostring(cur.gid or self.gid) .. ":" .. tostring(cur.line)
-    if not self.low_seen[line_key] then
-      self.low_seen[line_key] = true
-      local sig = self:signal("quest-" .. color, cur, { qid = out.qid, quest_level = quest.level, char_level = level,
-        color = color, gap = gap.round(self.W.player:fractional_level() - quest.level) })
-      self.low_quests = self.low_quests or {}
-      self.low_quests[#self.low_quests + 1] = sig
-    end
-    return
-  end
-  if catalog:noncombat(out.qid) then return end
-  -- Entries for quests never done stay for the run; a re-accept re-arms.
-  self.awaiting_do = self.awaiting_do or {}
-  self.awaiting_do[out.qid] = { accept_gap = self:level_gap(quest) }
-end
-
--- Remembers the order in which the run first accepted each quest of an acted A step.
-function Driver:note_accepts(cur)
-  self.accepted_order = self.accepted_order or {}
-  self.accepted_count = self.accepted_count or 0
-  for _, qid in ipairs(cur.qids or {}) do
-    if not self.accepted_order[qid] then
-      self.accepted_count = self.accepted_count + 1
-      self.accepted_order[qid] = self.accepted_count
-    end
-  end
-end
-
--- Gives each grey or green quest finding the nearest follow-up the run accepts that is yellow or
--- higher for the character at the accept: lowest hop, then accepted first, then lowest qid. A
--- follow-up the run never accepts doesn't count. Decided at the end, once every accept is known.
-function Driver:attach_follow_ups()
-  local catalog = self.W.catalog
-  if not (catalog and catalog.follow_ups) then return end
-  local order = self.accepted_order or {}
-  for _, sig in ipairs(self.low_quests or {}) do
-    local best
-    for _, f in ipairs(catalog:follow_ups(sig.qid)) do
-      if order[f.qid] and f.level >= sig.char_level - 2 then
-        -- Accepted order is unique per quest, so hop then order is a total order.
-        if not best or f.hop < best.hop or (f.hop == best.hop and order[f.qid] < order[best.qid]) then
-          best = f
-        end
-      end
-    end
-    sig.follow_up = best and { qid = best.qid, name = best.name, level = best.level, hop = best.hop } or nil
-  end
-  self.low_quests = nil
-end
-
--- Red and orange, judged at the do step of each quest the step lists that was accepted and not
--- yet judged: the first C or K step played after its accept, else its T step. The band comes
--- from the integer levels (quest_color.of); the gap is the fractional one, both before the step's XP. One finding per
--- do-step line: the first play wins.
-function Driver:quest_color(cur)
-  local awaiting = self.awaiting_do
-  if not awaiting then return end
-  local catalog = self.W.catalog
-  -- Judged on the character before the do step's own XP (Driver:act), so a turn-in reward
-  -- or objective kills don't hide how hard the quest was when the guide sent the character.
-  local level, fractional = self.pre_step.level, self.pre_step.fractional
-  self.colored = self.colored or {}
-  local line_key = tostring(cur.gid or self.gid) .. ":" .. tostring(cur.line)
-  for _, qid in ipairs(cur.qids or {}) do
-    local note = awaiting[qid]
-    local quest = note and catalog:quest(qid)
-    if quest then
-      awaiting[qid] = nil
-      local color = quest_color.of(level, quest.level)
-      if (color == "red" or color == "orange") and not self.colored[line_key .. ":" .. qid] then
-        self.colored[line_key .. ":" .. qid] = true
-        self:signal("quest-" .. color, cur, { qid = qid, quest_level = quest.level, char_level = level, color = color,
-          gap = self:level_gap(quest, fractional), accept_gap = note.accept_gap })
-      end
-    end
-  end
 end
 
 function Driver:snapshot(cur, why, rows, out)
@@ -774,9 +674,6 @@ function Driver:act(step, rows, info)
   self:wrong_race_class(step)
   local why = self.E:why(step.index)
   self.acting = { gid = step.gid, index = step.index, why = why }
-  -- The character before the step's own XP (kills, a reward): the do-step colour is judged here.
-  local pl = self.W.player
-  self.pre_step = { level = pl.level, fractional = pl:fractional_level() }
   local out = self.perform(self.ctx, step)
   local use = self:hidden_use_for(step, out, info)
   local checked = false -- whether out.settle was already checked
@@ -953,7 +850,6 @@ end
 function Driver:finish()
   local log, W = self.log, self.W
   self:missing_outcomes()
-  self:attach_follow_ups()
   self:close(self.gid, self.stopped == "no-next-guide")
   self:leftovers()
   for _, e in ipairs(self.ctx.errors or {}) do

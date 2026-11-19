@@ -47,34 +47,6 @@ QUESTS[1123] = { name = "Fixture Fork", preQuestSingle = { 1121 } }
 QUESTS[1141] = { name = "Fixture Loop", nextQuestInChain = 1142 }
 QUESTS[1142] = { name = "Fixture Loop", preQuestSingle = { 1141 }, nextQuestInChain = 1143 }
 QUESTS[1143] = { name = "Fixture Loop", preQuestSingle = { 1142 }, nextQuestInChain = 1142 }
--- Non-combat test (quest_color): objective groups are { creatures, objects, items }.
-QUESTS[1201] = { name = "Fixture Talk", questLevel = 30, startedBy = { { 2001 } }, finishedBy = { { 2002 } },
-  objectives = { { { 2002 } } } }
-QUESTS[1202] = { name = "Fixture Kill", questLevel = 30, objectives = { { { 2003 } } } }
-QUESTS[1203] = { name = "Fixture Drop", questLevel = 30, objectives = { nil, nil, { { 5001 } } } }
-QUESTS[1204] = { name = "Fixture Gather", questLevel = 30, objectives = { nil, nil, { { 5003 } } } }
-QUESTS[1205] = { name = "Fixture Writ", questLevel = 60, reputationReward = { { 2586, 75 } },
-  objectives = { nil, nil, { { 5001 } } } }
-QUESTS[1206] = { name = "Fixture Faire Rep", questLevel = 30, reputationReward = { { 909, 25 } },
-  objectives = { nil, nil, { { 5001 } } } }
-QUESTS[1207] = { name = "Fixture Faire Zone", questLevel = 30, zoneOrSort = -364, objectives = { { { 2003 } } } }
-QUESTS[1208] = { name = "Fixture Talk And Kill", questLevel = 30, startedBy = { { 2001 } }, finishedBy = { { 2002 } },
-  objectives = { { { 2002 }, { 2003 } } } }
-QUESTS[1209] = { name = "Fixture Unknown Npc", questLevel = 30, objectives = { { { 9999 } } } }
-QUESTS[1210] = { name = "Fixture Unknown Item", questLevel = 30, objectives = { nil, nil, { { 9998 } } } }
-QUESTS[1211] = { name = "Fixture Bought", questLevel = 30, objectives = { nil, nil, { { 5005 } } } }
--- Follow-ups (Catalog:follow_ups): 1301 -> 1302 (next, and 1302 lists it back) and 1304 (preQuestGroup);
--- 1302 -> 1303 (hop 2); 1305 <-> 1306 loops.
-QUESTS[1301] = { name = "Follow Start", questLevel = 10, nextQuestInChain = 1302 }
-QUESTS[1302] = { name = "Follow One", questLevel = 11, preQuestSingle = { 1301 }, nextQuestInChain = 1303 }
-QUESTS[1303] = { name = "Follow Two", questLevel = 12, preQuestSingle = { 1302 } }
-QUESTS[1304] = { name = "Follow Group", questLevel = 9, preQuestGroup = { 1301, 1399 } }
-QUESTS[1305] = { name = "Follow Loop", questLevel = 10, nextQuestInChain = 1306 }
-QUESTS[1306] = { name = "Follow Loop Back", questLevel = 10, preQuestSingle = { 1305 }, nextQuestInChain = 1305 }
--- Supplement prerequisites: 1312 lists 1311 in QuestieDB, the supplement moves it behind 1313.
-QUESTS[1311] = { name = "Sup Start", questLevel = 10 }
-QUESTS[1312] = { name = "Sup Moved", questLevel = 10, preQuestSingle = { 1311 } }
-QUESTS[1313] = { name = "Sup Other", questLevel = 10 }
 QUESTS[1131] = { name = "Fixture Solo" }
 QUESTS[1132] = { name = "Fixture Solo", preQuestSingle = { 1105 } }
 
@@ -90,7 +62,6 @@ local ITEMS = {
   [5001] = { name = "Fixture Pelt", npcDrops = { 2003 } },
   [5002] = { name = "Fixture Fang", npcDrops = { 2001, 2002 } },
   [5003] = { name = "Fixture Fang" },
-  [5005] = { name = "Fixture Mead", npcDrops = { 2003 }, vendors = { 2001 } },
   [5004] = { name = "Fixture Keg", questRewards = { 179 } },
   [4990] = { name = "Fixture Mug", questRewards = { 179 } },
 }
@@ -101,7 +72,6 @@ local OBJECTS = {
 
 -- Drop tables (Source:drops shape, rate 0-1); 5002 has none, so npcDrops serves it.
 local DROPS = {
-  [5005] = { { npc = 2003, rate = 0.0017 } },
   [5001] = { { npc = 2001, rate = 0.5 }, { npc = 2003, rate = 0.25 } },
 }
 
@@ -152,13 +122,6 @@ function Source:factions()
   local out = {}
   for k, v in pairs(FACTIONS) do out[k] = v end
   return out
-end
-
-function Source:quest_ids()
-  local ids = {}
-  for id in pairs(QUESTS) do ids[#ids + 1] = id end
-  table.sort(ids)
-  return ids
 end
 
 function Source:item_ids()

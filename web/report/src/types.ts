@@ -37,17 +37,8 @@ export interface Finding {
   grind?: { kills: number; to: number; short?: number; point?: number; offset?: number };
   /** below-level: levels short of the quest's level, to a tenth. */
   levels_short?: number;
-  /** level-check, quest-red, quest-orange: the gap in levels from the fractional level, to a tenth. */
+  /** level-check: the gap in levels from the fractional level, to a tenth. */
   gap?: number;
-  /** quest-red / quest-orange: the gap at the accept, to a tenth. */
-  accept_gap?: number;
-  /** quest-grey / quest-green: the nearest follow-up at the character's level that the run accepts, if any. */
-  follow_up?: { qid: number; name: string; level: number; hop: number };
-  /** quest-red / quest-orange / quest-grey / quest-green: the quest's and the character's level. */
-  quest_level?: number;
-  char_level?: number;
-  /** Quest colour: red, orange, yellow, green or grey. */
-  color?: string;
   message?: string;
   stack?: string;
   /** Id of the finding this one follows from. */
