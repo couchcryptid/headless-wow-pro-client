@@ -6,6 +6,7 @@ local home = require("hwc.questie.home")
 local release = require("hwc.questie.release")
 local tocmeta = require("hwc.questie.tocmeta")
 local http = require("hwc.questie.http")
+local store = require("hwc.store")
 
 local M = {}
 
@@ -13,17 +14,7 @@ local TOC = "/QuestieDB/QuestieDB_Forever.toc"
 
 local function exists(path) return lfs.attributes(path, "mode") ~= nil end
 
-local function mkdirs(path)
-  local cur = path:sub(1, 1) == "/" and "" or nil
-  for part in path:gmatch("[^/]+") do
-    cur = cur and (cur .. "/" .. part) or part
-    lfs.mkdir(cur)
-  end
-end
-
-local function rm_rf(path)
-  os.execute("rm -rf " .. http.quote(path))
-end
+local mkdirs, rm_rf = store.mkdirs, store.rm_rf
 
 local function size_error(size, expected)
   return ("hwc: questie: download is %s bytes, expected %s"):format(tostring(size), tostring(expected))
@@ -52,23 +43,7 @@ function M.verify(dir, asset_size, zip_path)
   return header
 end
 
-local function write_file(path, text)
-  local f, err = io.open(path, "wb")
-  if not f then return nil, "hwc: cannot write " .. path .. ": " .. tostring(err) end
-  local ok, werr = f:write(text)
-  local closed, cerr = f:close()
-  if ok and not closed then ok, werr = nil, cerr end
-  if not ok then
-    os.remove(path)
-    return nil, "hwc: cannot write " .. path .. ": " .. tostring(werr)
-  end
-  return true
-end
-
-local function stage_name(tag)
-  local salt = tostring({}):match("0x(%x+)") or "0"
-  return (".stage-%s-%d-%s"):format(tag, os.time(), salt)
-end
+local write_file, stage_name, place = store.write_file, store.stage_name, store.place
 
 -- Fills `stage` with a verified, checksummed copy of the release. Returns
 -- true or nil, err; the caller removes the stage dir on failure.
@@ -95,24 +70,6 @@ local function fill_stage(sel, stage, deps, mode)
   }))
   if not ok then return nil, err end
   os.remove(zip)
-  return true
-end
-
--- Moves the finished stage into place. A broken install may already occupy
--- the target; it is moved aside and restored if the rename fails.
-local function place(stage, target)
-  local aside
-  if exists(target) then
-    aside = stage .. ".old"
-    local moved, merr = os.rename(target, aside)
-    if not moved then return nil, "hwc: cannot replace " .. target .. ": " .. tostring(merr) end
-  end
-  local renamed, rerr = os.rename(stage, target)
-  if not renamed then
-    if aside then os.rename(aside, target) end
-    return nil, "hwc: cannot install " .. target .. ": " .. tostring(rerr)
-  end
-  if aside then rm_rf(aside) end
   return true
 end
 

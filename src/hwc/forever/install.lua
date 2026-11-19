@@ -1,7 +1,7 @@
 -- Downloads the Forever client tables from wago.tools, converts them to JSON
 -- and installs them atomically under the hwc store. `active` only moves after
 -- the new build dir is in place.
-local lfs = require("lfs")
+local store = require("hwc.store")
 local dkjson = require("dkjson")
 local json = require("hwc.json")
 local home = require("hwc.forever.home")
@@ -13,9 +13,7 @@ local M = {}
 M.BUILDS_URL = "https://wago.tools/api/builds"
 M.PRODUCT = "wowf"
 
-local function exists(path) return lfs.attributes(path, "mode") ~= nil end
-
-local function rm_rf(path) os.execute("rm -rf " .. http.quote(path)) end
+local exists, rm_rf = store.exists, store.rm_rf
 
 local function table_url(name, build)
   return ("https://wago.tools/db2/%s/csv?build=%s"):format(name, build)
@@ -29,18 +27,7 @@ local function read_file(path)
   return text
 end
 
-local function write_file(path, text)
-  local f, err = io.open(path, "wb")
-  if not f then return nil, "hwc: cannot write " .. path .. ": " .. tostring(err) end
-  local ok, werr = f:write(text)
-  local closed, cerr = f:close()
-  if ok and not closed then ok, werr = nil, cerr end
-  if not ok then
-    os.remove(path)
-    return nil, "hwc: cannot write " .. path .. ": " .. tostring(werr)
-  end
-  return true
-end
+local write_file = store.write_file
 
 -- Every table's JSON is present and parses, and the release file does.
 function M.verify(dir)
@@ -73,10 +60,7 @@ local function newest_build(deps)
   return version
 end
 
-local function stage_name(build)
-  local salt = tostring({}):match("0x(%x+)") or "0"
-  return (".stage-%s-%d-%s"):format(build, os.time(), salt)
-end
+local stage_name = store.stage_name
 
 -- Fills `stage` with the converted tables and the release file. Returns true
 -- or nil, err; the caller removes the stage dir on failure.
@@ -107,23 +91,7 @@ local function fill_stage(build, stage, deps, mode)
   return true
 end
 
--- Moves the finished stage into place; a broken install already occupying the
--- target is moved aside and restored if the rename fails.
-local function place(stage, target)
-  local aside
-  if exists(target) then
-    aside = stage .. ".old"
-    local moved, merr = os.rename(target, aside)
-    if not moved then return nil, "hwc: cannot replace " .. target .. ": " .. tostring(merr) end
-  end
-  local renamed, rerr = os.rename(stage, target)
-  if not renamed then
-    if aside then os.rename(aside, target) end
-    return nil, "hwc: cannot install " .. target .. ": " .. tostring(rerr)
-  end
-  if aside then rm_rf(aside) end
-  return true
-end
+local place = store.place
 
 local function with_defaults(deps)
   deps = deps or {}

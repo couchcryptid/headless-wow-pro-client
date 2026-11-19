@@ -1,6 +1,6 @@
 -- The Forever client tables in the hwc store: <root>/forever/<build>/ holds one
 -- <Table>.json per table, and <root>/forever/active names the build in use.
-local lfs = require("lfs")
+local store = require("hwc.store")
 
 local M = {}
 
@@ -9,7 +9,7 @@ M.RELEASE_FILE = ".hwc-release.json"
 
 local function set(v) return type(v) == "string" and v ~= "" and v or nil end
 
-local function exists(path) return lfs.attributes(path, "mode") ~= nil end
+local exists = store.exists
 
 function M.check_build(build)
   if type(build) ~= "string" or not build:match(M.BUILD_PATTERN) then
@@ -31,35 +31,12 @@ function M.active(root)
   return set(text:match("^%s*(.-)%s*$"))
 end
 
-local function mkdirs(path)
-  local cur = path:sub(1, 1) == "/" and "" or nil
-  for part in path:gmatch("[^/]+") do
-    cur = cur and (cur .. "/" .. part) or part
-    lfs.mkdir(cur)
-  end
-end
-M.mkdirs = mkdirs
+M.mkdirs = store.mkdirs
 
 function M.set_active(root, build)
   M.check_build(build)
-  mkdirs(root .. "/forever")
-  local target = root .. "/forever/active"
-  local tmp = root .. "/forever/active.tmp"
-  local function fail(err) error("hwc: cannot write " .. target .. ": " .. tostring(err), 0) end
-  local f, err = io.open(tmp, "wb")
-  if not f then fail(err) end
-  local ok, werr = f:write(build, "\n")
-  local closed, cerr = f:close()
-  if ok and not closed then ok, werr = nil, cerr end
-  if not ok then
-    os.remove(tmp)
-    fail(werr)
-  end
-  local renamed, rerr = os.rename(tmp, target)
-  if not renamed then
-    os.remove(tmp)
-    fail(rerr)
-  end
+  store.mkdirs(root .. "/forever")
+  store.write_active(root .. "/forever/active", build)
 end
 
 function M.active_dir(root)
