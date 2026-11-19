@@ -715,14 +715,22 @@ local function perform_level(ctx, step, out)
   local offset = tonumber(tag:match(";%s*(-?%d+)")) or 0
   if step.action ~= "L" and tag:find(";", 1, true) then return end
   local p = w.player
-  local point = offset >= 0 and offset or math.max(0, xp.to_next(math.min(want, xp.CAP_LEVEL)) + offset)
+  -- At the cap there is no next level: the cap itself is the check, so the point is 0.
+  local point = offset
+  if want >= xp.CAP_LEVEL then
+    point = 0
+  elseif offset < 0 then
+    point = math.max(0, xp.to_next(want) + offset)
+  end
   if p.level > want or (p.level == want and p.xp >= point) then return end
   -- Levels short of the check point, from the real XP before the grind, to one decimal.
   local at_point = want + (want < xp.CAP_LEVEL and point / xp.to_next(want) or 0)
   local short = gap.round(at_point - p:fractional_level())
   local n, _, levels = kills.grind_to_point(p, want, point)
+  if n == 0 then return end
   out.kind = "acted"
-  out.grind = { kills = n, to = want, point = point, offset = offset, short = short }
+  -- Kept apart from out.grind: the accept's own grind (below-level) may share this step.
+  out.level_grind = { kills = n, to = want, point = point, offset = offset, short = short }
   out.levels = out.levels + levels
   -- The addon has no XP handler either: an XP-only grind (no ding) still needs the guide
   -- re-evaluated, or the L step's own check never runs.

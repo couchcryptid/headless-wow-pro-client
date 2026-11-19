@@ -857,7 +857,7 @@ describe("driver.run", function()
 
     it("emits level-check with the gap when an L step ground to its check point", function()
       local steps = { { action = "L", name = "Level 2", tags = { level = "2;-650" },
-        outcome = { kind = "acted", grind = { kills = 7, to = 2, point = 250, offset = -650, short = 1.0 } } } }
+        outcome = { kind = "acted", level_grind = { kills = 7, to = 2, point = 250, offset = -650, short = 1.0 } } } }
       local log = play(steps, { G1 = { { complete = { 1 } } } })
       local c = signals(log, "level-check")
       assert.equal(1, #c)
@@ -867,9 +867,17 @@ describe("driver.run", function()
     end)
     it("emits level-check on a non-L step carrying a LVL tag that ground", function()
       local steps = { { action = "R", name = "Go", tags = { level = "3" },
-        outcome = { kind = "acted", grind = { kills = 3, to = 3, point = 0, offset = 0, short = 2.0 } } } }
+        outcome = { kind = "acted", level_grind = { kills = 3, to = 3, point = 0, offset = 0, short = 2.0 } } } }
       local log = play(steps, { G1 = { { complete = { 1 } } } })
       assert.equal(2.0, signals(log, "level-check")[1].gap)
+    end)
+    it("emits both below-level and level-check when an accept and its LVL tag both ground", function()
+      local steps = { { action = "A", name = "Q", qids = { 5 }, tags = { level = "8" },
+        outcome = { kind = "acted", grind = { kills = 9, to = 6, short = 2.0 },
+          level_grind = { kills = 4, to = 8, point = 0, offset = 0, short = 1.5 } } } }
+      local log = play(steps, { G1 = { { complete = { 1 } } } })
+      assert.equal(2.0, signals(log, "below-level")[1].levels_short)
+      assert.equal(1.5, signals(log, "level-check")[1].gap)
     end)
     it("emits no level-check when the step needed no grind", function()
       local steps = { { action = "L", name = "Level 2", tags = { level = "2" }, outcome = { kind = "acted" } } }
