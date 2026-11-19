@@ -159,6 +159,39 @@ function Catalog:npc_position(npc_id)
   return nil
 end
 
+-- Cross-checks first-party arrival facts (hwc.world.arrivals, or the table passed)
+-- against QuestieDB and the Forever tables: an inn npc without the innkeeper flag
+-- (npcFlags bit 128), a start node the tables don't know, an inn whose QuestieDB map
+-- differs. Empty without QuestieDB or the tables. Returns { { key, detail } }.
+function Catalog:arrival_problems(arrivals)
+  local out = {}
+  if not (self.questie and self.forever) then return out end
+  arrivals = arrivals or require("hwc.world.arrivals")
+  local races = {}
+  for race in pairs(arrivals.start_nodes or {}) do races[#races + 1] = race end
+  table.sort(races)
+  for _, race in ipairs(races) do
+    local name = arrivals.start_nodes[race]
+    if not self.forever:node(name) then
+      out[#out + 1] = { key = "start_nodes." .. race,
+        detail = "taxi node " .. tostring(name) .. " is not in the Forever tables" }
+    end
+  end
+  for i, inn in ipairs(arrivals.inns or {}) do
+    local key = "inns[" .. i .. "]"
+    local npc = self.questie:npc(inn.npc)
+    if npc and math.floor((npc.npcFlags or 0) / 128) % 2 ~= 1 then
+      out[#out + 1] = { key = key, detail = "npc " .. tostring(inn.npc) .. " is not an innkeeper in QuestieDB" }
+    end
+    local map_id = self:npc_position(inn.npc)
+    if map_id and map_id ~= inn.map_id then
+      out[#out + 1] = { key = key, detail = "npc " .. tostring(inn.npc) .. " is on map " .. map_id
+        .. " in QuestieDB, not " .. tostring(inn.map_id) }
+    end
+  end
+  return out
+end
+
 -- ---------- objectives ----------
 
 local function name_of(self, kind, id)
