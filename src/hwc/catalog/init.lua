@@ -9,6 +9,7 @@
 local dkjson = require("dkjson")
 local lfs = require("lfs")
 local source = require("hwc.questie.source")
+local forever_db = require("hwc.forever.db")
 
 local Catalog = {}
 Catalog.__index = Catalog
@@ -127,7 +128,35 @@ function Catalog.load(cfg)
     self.sources.questie = { path = c.questie_dir, present = false, reason = reason }
   end
   self.counts = load_counts(self, c.counts)
+
+  -- c.forever_db (a ready DB, used by specs) bypasses opening forever_dir.
+  local db, freason = c.forever_db, nil
+  if not db then db, freason = forever_db.open(c.forever_dir) end
+  if db then
+    self.forever = db
+    self.sources.forever = { path = db.dir or c.forever_dir, present = true, build = db.build }
+  else
+    self.sources.forever = { path = c.forever_dir, present = false, reason = freason }
+  end
   return self
+end
+
+-- A QuestieDB npc's first spawn as map_id, x, y (fractions), or nil without
+-- QuestieDB, the Forever tables, a spawn, or a UI map for its area.
+function Catalog:npc_position(npc_id)
+  if not (self.questie and self.forever) then return nil end
+  local npc = self.questie:npc(npc_id)
+  local spawns = npc and npc.spawns
+  if type(spawns) ~= "table" then return nil end
+  local areas = {}
+  for area in pairs(spawns) do areas[#areas + 1] = area end
+  table.sort(areas)
+  for _, area in ipairs(areas) do
+    local pt = spawns[area][1]
+    local map_id = pt and self.forever:ui_map_of_area(area)
+    if map_id then return map_id, pt[1] / 100, pt[2] / 100 end
+  end
+  return nil
 end
 
 -- ---------- objectives ----------

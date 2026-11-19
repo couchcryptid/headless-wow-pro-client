@@ -78,6 +78,7 @@ local NPCS = {
   [2001] = { name = "Fixture Giver", minLevel = 5, maxLevel = 5, rank = 0, spawns = { [12] = { { 10.5, 20.5 }, { 11, 21 } } },
     zoneID = 12 },
   [2002] = { name = "Fixture Taker", minLevel = 6, maxLevel = 6, rank = 0, zoneID = 12 },
+  [1572] = { name = "Thorgrum Borrelson", minLevel = 0, maxLevel = 0, rank = 0, npcFlags = 11, zoneID = 38, spawns = { [38] = { { 33.94, 50.95 } } } },
   [2003] = { name = "Fixture Boss", minLevel = 11, maxLevel = 11, rank = 1, spawns = { [1] = { { 62.6, 46.1 } } }, zoneID = 1 },
 }
 
