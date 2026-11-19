@@ -239,3 +239,35 @@ User request (2026-11-18): lessen or increase the severity of a low-level quest 
   - Do the real Dwarf run.
   - Paste the per-severity counts for quest-green and quest-grey, and each high one with its gap.
 - [ ] **Step 5: Commit** `feat: Grade low quests by how soon they lead to a quest at your level`.
+
+### Task 6: Grade only whether the character can accept the quest
+
+User decision (2026-11-18): the line is "can this character accept this quest", and the gap gauges how far off they are from being able to. Quest colour (red/orange: too hard; green/grey: too easy) is a routing decision that belongs to the guide, not to this client.
+
+**Remove:**
+- The signals `quest-red`, `quest-orange`, `quest-green` and `quest-grey`: their emission in `run.lua` (accept- and do-step judging, `awaiting_do`, `pre_step`, follow-up attachment), and their severities, titles and sentences in `group.lua`/`text.lua`.
+- The code only they use:
+  - `src/hwc/world/quest_color.lua`
+  - `Catalog:noncombat`, `Catalog:follow_ups` and the reverse prerequisite index (with `Source:quest_ids` if nothing else uses it)
+  - `kills.talk_to`'s export, if nothing else uses it
+  - their specs, fixtures and README text
+- Before deleting anything, `grep` for other users.
+
+**Keep:**
+- `below-level` (accept below the required level), graded on the gap scale: low < 2, medium < 4, high ≥ 4. Its levels-short wording stays, as does the "less than 0.1" case and the margin sentence.
+- `level-check` (the guide's own level checks) on the same scale.
+- `gap.lua`, `Player:fractional_level`, and the Task 3 grind-to-point behaviour, including non-L offset tags not grinding.
+- Older findings files that contain colour signals must still load in the report and in `hwc diff` without errors. Keep a label for each removed signal if the report or diff needs one, and say so in the README.
+
+**README "Level findings":** describe the two checks and the scale. Add one line saying the client doesn't grade quest difficulty or colour, because those are routing decisions for the guide.
+
+- [ ] **Step 1: Failing specs:**
+  - A played accept 5+ levels below the quest's level, at or above its required level, emits no finding.
+  - `below-level` with a gap of 4.5 is high.
+  - An older findings file with a `quest-red` finding still groups and renders without error.
+- [ ] **Step 2: RED.**
+- [ ] **Step 3: Remove and implement.**
+- [ ] **Step 4: GREEN.**
+  - Full suite, slow suite, luacheck and npm test (regenerate the label fixtures).
+  - Real Dwarf run: paste the per-signal and per-severity counts. The `quest-*` signals should be gone; `below-level` and `level-check` are kept.
+- [ ] **Step 5: Commit** `feat!: Grade only whether the character can accept a quest`. The body explains that the quest colour findings were removed.
