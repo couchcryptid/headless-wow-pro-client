@@ -117,8 +117,7 @@ describe("anchor #3535 (Camping 101: Cooking prereq gates) #slow", function()
   end
 
   -- 98321 (Flintfire's Shipment), 96392 (Farsen's Watch) and 96629 (Camping 101: Cooking) are Forever-added:
-  -- the pinned QuestieDB lacks them, so without a local supplement the catalog may
-  -- not know or name them.
+  -- an older QuestieDB may lack them, so the catalog may not know or name them.
   it("the catalog knows the three Red QIDs and names them where a source does", function()
     local w = run_of("main").world
     local want = { [COOKING] = "Camping 101: Cooking" }
@@ -135,7 +134,7 @@ describe("anchor #3535 (Camping 101: Cooking prereq gates) #slow", function()
     end
     if #unnamed > 0 then
       pending("no catalog source names " .. table.concat(unnamed, ", ")
-        .. ": not in the pinned QuestieDB, no local supplement")
+        .. ": not in the installed QuestieDB")
     end
   end)
 

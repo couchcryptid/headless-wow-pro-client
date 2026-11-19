@@ -8,7 +8,7 @@ local function doc(opts)
     format = 2,
     header = {
       addon = { git = true, branch = opts.branch or "main", commit = opts.commit or "aaaaaaa", dirty = opts.dirty or false },
-      catalog = opts.catalog or { questie = { tag = "v1.1.2", build = "e1652ce" }, supplement = { present = false } },
+      catalog = opts.catalog or { questie = { tag = "v1.1.2", build = "e1652ce" }, counts = { present = false } },
       client = { commit = opts.client or "c1" },
       matrix = { combos = opts.combos or { DWARF, GNOME } },
       filters = opts.filters,
@@ -223,9 +223,9 @@ describe("diff.compare", function()
         local r = diff.compare(old or base, new)
         return codes(r)
       end
-      assert.same({ "questie" }, only(doc({ catalog = { questie = { tag = "v1.1.3", build = "9b01f2a" }, supplement = { present = false } } })))
-      assert.same({ "supplement" }, only(doc({ catalog = { questie = { tag = "v1.1.2", build = "e1652ce" }, supplement = { present = true } } })))
-      assert.same({ "questie" }, only(doc({ catalog = { questie = { tag = "v1.1.2", build = "e1652ce", sha256 = "ffff" }, supplement = { present = false } } })))
+      assert.same({ "questie" }, only(doc({ catalog = { questie = { tag = "v1.1.3", build = "9b01f2a" }, counts = { present = false } } })))
+      assert.same({ "counts" }, only(doc({ catalog = { questie = { tag = "v1.1.2", build = "e1652ce" }, counts = { present = true } } })))
+      assert.same({ "questie" }, only(doc({ catalog = { questie = { tag = "v1.1.2", build = "e1652ce", sha256 = "ffff" }, counts = { present = false } } })))
       assert.same({ "filters" }, only(doc({ filters = { { kind = "include", pattern = "x" } } })))
       assert.same({ "relative-to" }, only(doc({ relative_to = "elsewhere" })))
       assert.same({ "client" }, only(doc({ client = "c2" })))

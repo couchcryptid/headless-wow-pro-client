@@ -5,11 +5,24 @@ local World = require("hwc.world")
 
 local FIX = "spec/fixtures/catalog"
 
+-- The fixture QuestieDB Source plus the driver specs' own quests (actions_quests.lua).
 local function new_catalog()
-  return catalog.load({ catalog = {
-    questie_source = dofile(FIX .. "/questie_source.lua"),
-    supplement = FIX .. "/actions_supplement.json",
-  } })
+  local src = dofile(FIX .. "/questie_source.lua")
+  local extra = dofile(FIX .. "/actions_quests.lua")
+  local quest, xp = src.quest, src.xp
+  function src:quest(id)
+    local row = extra.quests[id]
+    if not row then return quest(self, id) end
+    local out = { id = id }
+    for k, v in pairs(row) do out[k] = v end
+    return out
+  end
+  function src:xp(id)
+    local e = extra.xp[id]
+    if e then return { e[1], e[2] } end
+    return xp(self, id)
+  end
+  return catalog.load({ catalog = { questie_source = src } })
 end
 
 -- Fake engine: fire records { event, args... }, settle reports no limit hit,

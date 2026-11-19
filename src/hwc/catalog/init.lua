@@ -1,11 +1,11 @@
 -- The quest catalog: world facts (design spec §6) merged per field from the
 -- installed QuestieDB Forever release (run per character through
--- hwc.questie.source) and a hand-checked supplement.
+-- hwc.questie.source), plus hand-checked objective counts, which QuestieDB lacks.
 -- World facts never come from guide lines; the only guide-derived values are
 -- in `placeholder`, which is marked unverified.
 --
--- No third-party data lives in this repo: every source is read from a path in
--- the config and every source is optional (absent ones are recorded).
+-- No third-party data lives in this repo: each source is read from a path in the
+-- config and is optional (an absent one is recorded).
 local dkjson = require("dkjson")
 local lfs = require("lfs")
 local source = require("hwc.questie.source")
@@ -25,13 +25,6 @@ local CLASS_BITS = { WARRIOR = 1, PALADIN = 2, HUNTER = 4, ROGUE = 8, PRIEST = 1
 -- (77 classic Alliance, 4294967373 Forever Alliance with Skyborne) used to be
 -- here too; they decode now, so a Horde character can't take an Alliance quest.
 local ANY_RACES = { [0] = true, [2047] = true }
-
--- Quest fields a supplement entry may set.
-local SUPPLEMENT_FIELDS = {
-  "name", "level", "required_level", "xp", "races", "classes", "pre_single", "pre_group",
-  "objectives", "starter", "ender", "requires_skill", "completed_by_training", "source_item",
-  "reputation_reward", "min_rep", "max_rep",
-}
 
 -- Python's `a or b` treats 0 as missing; the old simulator's data relies on it.
 local function nz(v)
@@ -78,17 +71,44 @@ local function file_sha256(path)
   return out:match("^(%x+)")
 end
 
-local function read_json(path)
+-- Objective kinds a counts entry can name: the ones whose objectives carry an id.
+local COUNT_KINDS = { npc = true, object = true, item = true }
+
+-- The problem with one counts-file quest entry, or nil when it is valid.
+function Catalog.counts_entry_problem(entry)
+  if type(entry) ~= "table" then return "is not an object" end
+  if type(entry.source) ~= "string" or entry.source == "" then return "has no source" end
+  if type(entry.objectives) ~= "table" or #entry.objectives == 0 then return "has no objectives" end
+  for i, o in ipairs(entry.objectives) do
+    local count = type(o) == "table" and o.count
+    if type(o) ~= "table" or not COUNT_KINDS[o.kind] or type(o.id) ~= "number"
+      or type(count) ~= "number" or count < 1 or count % 1 ~= 0 then
+      return "objective " .. i .. " needs kind npc, object or item, a numeric id and a whole count of at least 1"
+    end
+  end
+  return nil
+end
+
+-- Hand-checked objective counts (QuestieDB has none): { quests = { ["<id>"] = {
+-- source = "how it was checked", objectives = { { kind, id, count }, ... } } } }.
+local function load_counts(self, path)
+  local ok = path ~= nil and lfs.attributes(path, "mode") == "file"
+  self.sources.counts = { path = path, present = ok }
+  if not ok then return {} end
+  self.sources.counts.sha256 = file_sha256(path)
   local f, err = io.open(path, "rb")
   if not f then error("hwc: catalog: cannot read " .. path .. ": " .. tostring(err), 0) end
   local text = f:read("*a")
   f:close()
   local obj, _, jerr = dkjson.decode(text)
-  if jerr then error("hwc: catalog: " .. path .. ": " .. tostring(jerr), 0) end
-  return obj
+  if jerr or type(obj) ~= "table" then error("hwc: catalog: " .. path .. ": " .. tostring(jerr or "not an object"), 0) end
+  local quests = obj.quests or {}
+  for id, entry in pairs(quests) do
+    local problem = Catalog.counts_entry_problem(entry)
+    if problem then error("hwc: catalog: " .. path .. ": quest " .. tostring(id) .. " " .. problem, 0) end
+  end
+  return quests
 end
-
-local function exists(path, mode) return lfs.attributes(path, "mode") == mode end
 
 function Catalog.load(cfg)
   local c = (cfg and cfg.catalog) or {}
@@ -106,21 +126,7 @@ function Catalog.load(cfg)
   else
     self.sources.questie = { path = c.questie_dir, present = false, reason = reason }
   end
-
-  local function json_source(name, path, default)
-    local ok = path ~= nil and exists(path, "file")
-    self.sources[name] = { path = path, present = ok }
-    if not ok then return default end
-    self.sources[name].sha256 = file_sha256(path)
-    return read_json(path)
-  end
-  local sup = json_source("supplement", c.supplement, {})
-  self.supplement = sup.quests or {}
-  for id, entry in pairs(self.supplement) do
-    if type(entry.source) ~= "string" or entry.source == "" then
-      error("hwc: catalog: supplement quest " .. id .. " has no source string", 0)
-    end
-  end
+  self.counts = load_counts(self, c.counts)
   return self
 end
 
@@ -164,11 +170,9 @@ local function questie_objectives(self, ob)
   return out
 end
 
-local function objectives_for(self, qrec, notes)
+local function objectives_for(self, qrec)
   if qrec and type(qrec.objectives) == "table" then
-    local out = questie_objectives(self, qrec.objectives)
-    if #out > 0 then notes[#notes + 1] = "objective counts are not in QuestieDB (assumed 1)" end
-    return out
+    return questie_objectives(self, qrec.objectives)
   end
   return {}
 end
@@ -198,17 +202,107 @@ local function starter_of(list)
   return nil
 end
 
+local NUMBER_WORDS = {
+  one = 1, two = 2, three = 3, four = 4, five = 5, six = 6, seven = 7, eight = 8, nine = 9, ten = 10,
+  eleven = 11, twelve = 12, thirteen = 13, fourteen = 14, fifteen = 15, sixteen = 16, seventeen = 17,
+  eighteen = 18, nineteen = 19, twenty = 20,
+}
+-- Words between a number and the name it counts ("8 pieces of Tough Wolf Meat").
+local MAX_GAP_WORDS = 4
+
+-- Plurals of one word.
+local function plurals(word)
+  local out = { word .. "es", word .. "s" }
+  if word:match("[^aeiou]y$") then out[#out + 1] = word:sub(1, -2) .. "ies" end
+  if word:match("fe?$") then out[#out + 1] = (word:gsub("fe?$", "ves")) end
+  if word:match("man$") then out[#out + 1] = word:sub(1, -4) .. "men" end
+  return out
+end
+
+local function name_forms(name)
+  -- A leading article is the item's, not the text's ("A Sparkling Stone" -> "the Sparkling Stone").
+  name = name:gsub("^an? ", ""):gsub("^the ", "")
+  -- Plurals of the last word ("Mosshide Gnolls"), or of the head word before "of"
+  -- ("Flasks of Oil"), then the name itself (singular last).
+  local forms = plurals(name)
+  local head, rest = name:match("^(%S+)( of .+)$")
+  if head then
+    for _, p in ipairs(plurals(head)) do forms[#forms + 1] = p .. rest end
+  end
+  forms[#forms + 1] = name
+  return forms
+end
+
+-- Words that make the name after them one thing ("the Sparkling Stone", "his head").
+local SINGLE_WORDS = {
+  the = true, a = true, an = true, his = true, her = true, its = true, their = true,
+  my = true, your = true, our = true, this = true, that = true,
+}
+
+-- An objective's count from its quest's objective text: the number just before
+-- the name ("8 pieces of Tough Wolf Meat", "Kill 10 Kobold Vermin"), within the
+-- same clause. With no number, 1 when the name appears unpluralised: "named-single"
+-- when the context makes it one thing (a possessive name, "Pamela's doll", or a
+-- singular word before it, "the Sparkling Stone"), else "named-once", a guess.
+-- Returns count, "number" | "named-single" | "named-once", or nil when the name
+-- isn't in the text or appears only plural without a number.
+function Catalog.count_from_text(text, name)
+  local lt, forms = text:lower(), name_forms(name:lower())
+  local possessive = forms[#forms]:find("'s ", 1, true) ~= nil or forms[#forms]:find("s' ", 1, true) ~= nil
+  local singular, single
+  for i, form in ipairs(forms) do
+    local init = 1
+    while true do
+      local s, e = lt:find(form, init, true)
+      if not s then break end
+      init = e + 1
+      local before, after = lt:sub(s - 1, s - 1), lt:sub(e + 1, e + 1)
+      if not before:match("[%w']") and not after:match("[%w']") then
+        -- The clause this mention sits in: from the last sentence break, comma or "and".
+        local clause = lt:sub(1, s - 1):gsub("^.*[%.;:!?,]", ""):gsub("^.* and ", "")
+        local words = {}
+        for w in clause:gmatch("%S+") do words[#words + 1] = w end
+        for k = #words, math.max(1, #words - MAX_GAP_WORDS), -1 do
+          local w = words[k]:gsub("[^%w]", "")
+          local n = tonumber(w) or NUMBER_WORDS[w]
+          if n then return n, "number" end
+        end
+        if i == #forms then
+          singular = true
+          local prev = (words[#words] or ""):gsub("[^%w']", "")
+          if possessive or SINGLE_WORDS[prev] or prev:match("'s$") or prev:match("s'$") then single = true end
+        end
+      end
+    end
+  end
+  if single then return 1, "named-single" end
+  if singular then return 1, "named-once" end
+  return nil
+end
+
+-- One of its kind in the world: elite, rare elite, boss or rare (QuestieDB rank 1-4),
+-- or one or two spawns in all.
+local function unique_npc(self, npc_id)
+  local rec = self.questie and npc_id and self.questie:npc(npc_id)
+  if not rec then return false end
+  if (rec.rank or 0) ~= 0 then return true end
+  local n = 0
+  for _, list in pairs(rec.spawns or {}) do
+    if type(list) == "table" then n = n + #list end
+  end
+  return n >= 1 and n <= 2
+end
+
 local function build_quest(self, id)
   local src = self.questie
   local q = src and src:quest(id)
-  local sup = self.supplement[tostring(id)]
   local xpr = src and src:xp(id)
-  if not (q or sup or xpr) then return nil end
+  if not (q or xpr) then return nil end
   q = q or {}
 
   local notes = {}
   local function note(s) notes[#notes + 1] = s end
-  local quest = { id = id, name = q.name or (sup and sup.name) }
+  local quest = { id = id, name = q.name }
 
   -- level / required_level: QuestieDB, then QuestXP (sim.py:205-212, no guide data).
   quest.level = nz(q.questLevel) or (xpr and nz(xpr[1]))
@@ -229,7 +323,7 @@ local function build_quest(self, id)
   quest.pre_single = sorted_values(q.preQuestSingle)
   quest.pre_group = sorted_values(q.preQuestGroup)
   quest.next_in_chain = nz(q.nextQuestInChain)
-  quest.objectives = objectives_for(self, q, notes)
+  quest.objectives = objectives_for(self, q)
   quest.starter, quest.starter_kind = starter_of(q.startedBy)
   quest.ender, quest.ender_kind = starter_of(q.finishedBy)
   -- QuestieDB sourceItemId: "item provided by quest starter" (the client puts it in the bags on accept).
@@ -242,39 +336,67 @@ local function build_quest(self, id)
 
   -- Camping 101 profession quests (design spec §3, the user in game 2026-11-11): "Camping 101: <Prof>" ends at the trainer and gates
   -- on knowing <Prof>, except Cooking, whose turn-in is completed by training
-  -- Cooking. The supplement below may override either field, and a
-  -- supplement-set name is taken into account.
-  local final_name = (sup and sup.name) or quest.name
-  local prof = type(final_name) == "string" and final_name:match("^Camping 101: (.+)$")
+  -- Cooking.
+  local prof = type(quest.name) == "string" and quest.name:match("^Camping 101: (.+)$")
   if prof == "Cooking" then
     quest.completed_by_training = "Cooking"
   elseif prof then
     quest.requires_skill = prof
   end
 
-  -- The supplement may override any field for a listed quest.
-  if sup then
-    for _, field in ipairs(SUPPLEMENT_FIELDS) do
-      if sup[field] ~= nil then
-        quest[field] = sup[field]
-        if field == "xp" then xp_known = true end
-        if field == "starter" then quest.starter_kind = nil end
-        if field == "ender" then quest.ender_kind = nil end
-        note("supplement sets " .. field .. " (" .. sup.source .. ")")
+  -- QuestieDB's objective rows have no counts (objectives_for assumes 1). Its quest
+  -- text usually says them ("would like 8 pieces of Tough Wolf Meat"), so they are
+  -- read from there first; the counts file below wins over the text.
+  local text = type(q.objectivesText) == "table" and table.concat(q.objectivesText, " ") or nil
+  if text then
+    for _, o in ipairs(quest.objectives) do
+      if o.count_assumed and o.kind ~= "other" and type(o.text) == "string" then
+        local n, how = Catalog.count_from_text(text, o.text)
+        local why = how == "number" and "a number before its name"
+          or how == "named-single" and "named as one thing: possessive, or after a word like 'the'"
+          or "named with no number"
+        -- A named NPC the world holds one of (elite/rare/boss, or 1-2 spawns) is one to kill or meet.
+        if how == "named-once" and o.kind == "npc" and unique_npc(self, o.ids[1]) then
+          how, why = "named-single", "a named NPC with one or two spawns, or elite"
+        end
+        if n then
+          o.count, o.count_assumed, o.count_from = n, nil, how
+          note(o.kind .. " " .. tostring(o.ids[1]) .. " count " .. n .. " from the quest text (" .. why .. ")")
+        end
       end
     end
   end
 
-  -- A count nobody supplied is assumed 1; the quest cannot be called verified.
-  local assumed = false
-  for i, o in ipairs(quest.objectives) do
-    if o.count == nil then
-      o.count = 1
-      o.count_assumed = true
-      note("objective " .. i .. " has no count (assumed 1)")
+  -- Hand-checked counts, matched by kind and id. An entry that matches nothing is noted.
+  local counted = self.counts[tostring(id)]
+  if counted then
+    for _, e in ipairs(counted.objectives) do
+      local hit = false
+      for _, o in ipairs(quest.objectives) do
+        if o.kind == e.kind then
+          for _, oid in ipairs(o.ids or {}) do
+            if oid == e.id then o.count, o.count_assumed, o.count_from, hit = e.count, nil, "counts file", true end
+          end
+        end
+      end
+      if hit then
+        note(e.kind .. " " .. e.id .. " count " .. e.count .. " from the counts file (" .. counted.source .. ")")
+      else
+        note("counts file: " .. e.kind .. " " .. e.id .. " matches no objective of this quest")
+      end
     end
-    if o.count_assumed then assumed = true end
   end
+
+  -- A quest with a count nobody checked cannot be called verified: one assumed, or
+  -- one read as 1 only because the text names it with no number and nothing in the
+  -- context makes it one thing (a guess).
+  local assumed, guessed = false, false
+  for _, o in ipairs(quest.objectives) do
+    if o.count_assumed then assumed = true end
+    if o.count_from == "named-once" then guessed = true end
+  end
+  if assumed then note("an objective count is in neither the quest text nor the counts file (assumed 1)") end
+  if guessed then note("an objective count is 1 only because the quest text names it with no number") end
 
   -- Ruling AB: rules keyed on the name (Camping 101's requires_skill and
   -- completed_by_training above) cannot apply to a quest no source names, so its
@@ -282,7 +404,8 @@ local function build_quest(self, id)
   local named = type(quest.name) == "string" and quest.name ~= ""
   if not named then note("no name in any source; name-based rules (Camping 101) cannot apply") end
 
-  quest.confidence = (xp_known and quest.level ~= nil and not assumed and named) and "verified" or "unverified"
+  quest.confidence = (xp_known and quest.level ~= nil and not assumed and not guessed and named) and "verified"
+    or "unverified"
   quest.notes = notes
   return quest
 end

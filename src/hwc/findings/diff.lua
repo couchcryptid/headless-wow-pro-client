@@ -100,9 +100,9 @@ local function warnings_for(old, new, shared, shared_list)
       old_sha256 = oq.sha256, new_sha256 = nq.sha256 })
   end
 
-  local os_ = oh.catalog and oh.catalog.supplement or {}
-  local ns = nh.catalog and nh.catalog.supplement or {}
-  if (os_.present or false) ~= (ns.present or false) or os_.sha256 ~= ns.sha256 then warn("supplement") end
+  local ocounts = oh.catalog and oh.catalog.counts or {}
+  local ncounts = nh.catalog and nh.catalog.counts or {}
+  if (ocounts.present or false) ~= (ncounts.present or false) or ocounts.sha256 ~= ncounts.sha256 then warn("counts") end
 
   if json.encode(oh.filters or {}) ~= json.encode(nh.filters or {}) then warn("filters") end
 

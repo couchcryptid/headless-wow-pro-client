@@ -54,18 +54,18 @@ The anchors also need the pinned addon worktrees; see
    - **An engine or guide problem:** that's a finding. Report it; don't work
      around it.
 3. **World facts come from the catalog, never from guide lines.**
-   - The catalog covers QuestieDB and the hand-checked supplement.
+   - The catalog covers QuestieDB and the hand-checked objective counts file.
    - Guide tags may say only where the player goes (`Z`, `M`, `TZ`) and what
      they buy or loot (`L`, `B`).
    - A quest missing from every source gets a placeholder flagged "unverified
      quest data". Its level, rewards and objectives are never taken from the
      guide.
-4. **No third-party data in the repository.** QuestieDB and supplement
+4. **No third-party data in the repository.** QuestieDB and objective counts
    data stay in the git-ignored `local/` directory or at paths in config.
    - Commit only loaders, scripts, structure-only examples and invented test
      fixtures.
-   - Supplement entries must name their source, e.g. an in-game check and the
-     date it was made.
+   - Objective counts entries must name their source, e.g. an in-game check
+     and the date it was made.
 5. **Determinism.** The same addon commit, catalog, config, seed and `--date`
    give byte-identical findings.
    - No wall-clock time inside the sandbox.

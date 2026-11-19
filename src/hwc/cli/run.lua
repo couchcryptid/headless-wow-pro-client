@@ -179,7 +179,7 @@ local function play(ctx)
   -- boot.run's "no QuestieDB installed" goes through ui, so -q silences it.
   cfg.warn = function(msg) ui:warn(msg) end
   ui:detail("catalog questie: " .. tostring(cfg.catalog.questie_dir or "none"))
-  ui:detail("catalog supplement: " .. tostring(cfg.catalog.supplement))
+  ui:detail("catalog counts: " .. tostring(cfg.catalog.counts))
   local label = text.character(string.format("%s %s %s", opts.race, opts.class, professions.token(list)))
   local progress = new_progress(ui, label, ctx.env.clock)
   local log = require("hwc.driver.run").character(cfg, {

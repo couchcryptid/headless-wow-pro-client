@@ -1,0 +1,10 @@
+{
+  "quests": {
+    "179": {
+      "source": "how this was checked (e.g. in game, quest log 0/8, 2026-11-19)",
+      "objectives": [
+        { "kind": "item", "id": 750, "count": 8 }
+      ]
+    }
+  }
+}

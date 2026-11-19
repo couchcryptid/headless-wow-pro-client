@@ -31,6 +31,18 @@ local QUESTS = {
     questLevel = 30, requiredMinRep = { 72 }, requiredMaxRep = { "92", 3000 } },
 }
 
+-- Counts from the objective text (1011: a number, and an item named bare with none) and a
+-- text count the counts file overrides (1012).
+QUESTS[1011] = { name = "Fixture Text Counts", requiredLevel = 1, questLevel = 5,
+  objectives = { nil, nil, { { 5001, "Fixture Pelt" }, { 5002, "Fixture Fang" } } },
+  objectivesText = { "Bring 8 Fixture Pelts and Fixture Fang to the Fixture Taker." } }
+-- Named NPCs with no number: 2003 is elite (one of it), 2002 has no spawns on record (a guess).
+QUESTS[1013] = { name = "Fixture Named Kills", requiredLevel = 1, questLevel = 5,
+  objectives = { { { 2003, "Fixture Boss" }, { 2002, "Fixture Taker" } } },
+  objectivesText = { "Kill Fixture Boss, then speak with Fixture Taker." } }
+QUESTS[1012] = { name = "Fixture Text Overridden", requiredLevel = 1, questLevel = 5,
+  objectives = { nil, nil, { { 5001, "Fixture Pelt" } } }, objectivesText = { "Bring 3 Fixture Pelts." } }
+
 -- Item-started quests (QuestieDB startedBy = { creatures, objects, items }): the starter item is
 -- the item objective (1201), is no objective (1202), comes with a sourceItemId (1203), or the
 -- quest is refused for a Dwarf (1204, Human only).

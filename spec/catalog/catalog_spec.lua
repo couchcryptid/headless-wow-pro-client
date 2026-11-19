@@ -9,7 +9,7 @@ local FIX = "spec/fixtures/catalog"
 local function fixture_cfg(over)
   local c = {
     questie_source = dofile(FIX .. "/questie_source.lua"),
-    supplement = FIX .. "/supplement.json",
+    counts = FIX .. "/counts.json",
   }
   for k, v in pairs(over or {}) do c[k] = v end
   if c.questie_source == false then c.questie_source = nil end
@@ -23,6 +23,45 @@ local function has_note(q, needle)
   return false
 end
 
+describe("catalog.count_from_text", function()
+  local f = catalog.count_from_text
+
+  it("takes the number just before the name, a few words back at most", function()
+    assert.same({ 8, "number" }, { f("Sten Stoutarm would like 8 pieces of Tough Wolf Meat.", "Tough Wolf Meat") })
+    assert.same({ 10, "number" }, { f("Kill 10 Kobold Vermin.", "Kobold Vermin") })
+    assert.same({ 6, "number" }, { f("Bring six Fixture Ribs.", "Fixture Rib") })
+  end)
+
+  it("matches the plural of the last word or of the word before 'of'", function()
+    assert.same({ 15, "number" }, { f("Kill 15 Mosshide Gnolls and 10 Mosshide Mongrels.", "Mosshide Gnoll") })
+    assert.same({ 10, "number" }, { f("Kill 15 Mosshide Gnolls and 10 Mosshide Mongrels.", "Mosshide Mongrel") })
+    assert.same({ 5, "number" }, { f("Bring 5 Flasks of Oil to Captain Grayson.", "Flask of Oil") })
+    assert.same({ 4, "number" }, { f("Collect 4 Wolves.", "Wolf") })
+  end)
+
+  it("never takes a number from another item's clause", function()
+    assert.same({ 1, "named-once" }, { f("Bring 3 Okra, Fixture Malt and a map.", "Fixture Malt") })
+  end)
+
+  it("gives 1 for a name the context makes one thing: possessive, or after a singular word", function()
+    assert.same({ 1, "named-single" }, { f("Find Pamela's doll.", "Pamela's Doll") })
+    assert.same({ 1, "named-single" }, { f("Return Bingles' Wrench.", "Bingles' Wrench") })
+    assert.same({ 1, "named-single" }, { f("Return the Sparkling Stone.", "A Sparkling Stone") })
+    assert.same({ 1, "named-single" }, { f("Kill Gath'Ilzogg and bring his head.", "Head") })
+  end)
+
+  it("calls a bare name with no number and no such context a guess", function()
+    assert.same({ 1, "named-once" }, { f("Bring some Soothing Spices to Chef Jessen.", "Soothing Spices") })
+    assert.same({ 1, "named-once" }, { f("Bring Holy Spring Water to Grimbooze.", "Holy Spring Water") })
+  end)
+
+  it("is nil when the name isn't there or is only plural with no number", function()
+    assert.is_nil(f("Bring 2 Frostmane Bear Pendants.", "Iceclaw Bear Pendant"))
+    assert.is_nil(f("Kill the Snow Leopard Prowlers.", "Snow Leopard Prowler"))
+    assert.is_nil(f("Collect Bloodpetals.", "Bloodpetal"))
+  end)
+end)
+
 describe("catalog (fixtures)", function()
   local cat = catalog.load(fixture_cfg())
 
@@ -31,16 +70,16 @@ describe("catalog (fixtures)", function()
     assert.are.equal("v0.0.0", cat.sources.questie.tag)
     assert.are.equal("fixture", cat.sources.questie.build)
     assert.are.equal(FIX .. "/questie_source.lua", cat.sources.questie.path)
-    assert.is_true(cat.sources.supplement.present)
-    assert.matches("^%x+$", cat.sources.supplement.sha256)
+    assert.is_true(cat.sources.counts.present)
+    assert.matches("^%x+$", cat.sources.counts.sha256)
   end)
 
   it("records missing sources as absent and still loads", function()
     local c = catalog.load(fixture_cfg {
-      questie_source = false, supplement = FIX .. "/nope.json" })
+      questie_source = false, counts = FIX .. "/nope.json" })
     assert.is_false(c.sources.questie.present)
-    assert.are.equal(FIX .. "/nope.json", c.sources.supplement.path)
-    assert.is_false(c.sources.supplement.present)
+    assert.are.equal(FIX .. "/nope.json", c.sources.counts.path)
+    assert.is_false(c.sources.counts.present)
     assert.is_nil(c:quest(1001))
     assert.is_nil(c:item_id("Fixture Pelt"))
     assert.are.same({}, c:quest_rewards(179))
@@ -68,27 +107,74 @@ describe("catalog (fixtures)", function()
     assert.is_nil(c:npc(2001))
   end)
 
-  it("marks a supplement objective without a count as assumed and unverified", function()
+  local function counts_file(body)
     local path = os.tmpname()
     local f = assert(io.open(path, "w"))
-    f:write('{"quests": {"90020": {"name": "Sup Obj", "level": 5, "required_level": 1, "xp": 100, ' ..
-      '"objectives": [{"kind": "item", "ids": [750]}], "source": "fixture"}}}')
+    f:write(body)
     f:close()
-    local c = catalog.load(fixture_cfg { supplement = path })
-    os.remove(path)
-    local q = c:quest(90020)
-    assert.are.equal(1, q.objectives[1].count)
-    assert.is_true(q.objectives[1].count_assumed)
-    assert.are.equal("unverified", q.confidence)
-    assert.is_true(has_note(q, "objective 1"))
+    return path
+  end
+
+  it("takes a hand-checked count from the counts file, matched by kind and id", function()
+    local q = cat:quest(1001)
+    assert.are.equal(4, q.objectives[1].count)
+    assert.is_nil(q.objectives[1].count_assumed)
+    assert.are.equal("counts file", q.objectives[1].count_from)
+    assert.is_true(has_note(q, "item 5001 count 4 from the counts file (fixture hand check)"))
   end)
 
-  it("marks a QuestieDB objective with no count as assumed", function()
+  it("notes a counts entry that matches no objective, and leaves the count assumed", function()
+    local q = cat:quest(1004)
+    assert.is_true(q.objectives[1].count_assumed)
+    assert.is_true(has_note(q, "counts file: npc 9999 matches no objective of this quest"))
+  end)
+
+  it("rejects a counts entry without a source or with a bad count", function()
+    for _, body in ipairs({
+      '{"quests": {"1001": {"objectives": [{"kind": "item", "id": 5001, "count": 4}]}}}',
+      '{"quests": {"1001": {"source": "x", "objectives": [{"kind": "item", "id": 5001, "count": 0}]}}}',
+      '{"quests": {"1001": {"source": "x", "objectives": [{"kind": "spell", "id": 5001, "count": 2}]}}}',
+      '{"quests": {"1001": {"source": "x", "objectives": []}}}',
+    }) do
+      local path = counts_file(body)
+      local ok, err = pcall(catalog.load, fixture_cfg { counts = path })
+      os.remove(path)
+      assert.is_false(ok, body)
+      assert.matches("quest 1001", err)
+    end
+  end)
+
+  it("marks a QuestieDB objective with no count in the text or counts file as assumed", function()
     local q = cat:quest(1004)
     assert.are.equal(1, q.objectives[1].count)
     assert.is_true(q.objectives[1].count_assumed)
     assert.are.equal("unverified", q.confidence)
-    assert.is_true(cat:quest(1001).objectives[1].count_assumed)
+    assert.is_true(has_note(q, "in neither the quest text nor the counts file (assumed 1)"))
+  end)
+
+  it("reads a count from the quest's objective text", function()
+    local q = cat:quest(1011)
+    assert.are.equal(8, q.objectives[1].count)
+    assert.are.equal("number", q.objectives[1].count_from)
+    assert.are.equal(1, q.objectives[2].count)
+    assert.are.equal("named-once", q.objectives[2].count_from)
+    -- A 1 read from a name with no number is a guess: the quest stays unverified.
+    assert.are.equal("unverified", q.confidence)
+    assert.is_true(has_note(q, "is 1 only because the quest text names it with no number"))
+    assert.is_true(has_note(q, "item 5001 count 8 from the quest text (a number before its name)"))
+  end)
+
+  it("counts a named unique NPC with no number as one, verified; another NPC stays a guess", function()
+    local q = cat:quest(1013)
+    assert.are.equal("named-single", q.objectives[1].count_from)
+    assert.is_true(has_note(q, "npc 2003 count 1 from the quest text (a named NPC with one or two spawns, or elite)"))
+    assert.are.equal("named-once", q.objectives[2].count_from)
+  end)
+
+  it("lets the counts file win over the quest text", function()
+    local q = cat:quest(1012)
+    assert.are.equal(5, q.objectives[1].count)
+    assert.are.equal("counts file", q.objectives[1].count_from)
   end)
 
   it("takes level and required level from QuestieDB, xp from QuestXP", function()
@@ -130,7 +216,6 @@ describe("catalog (fixtures)", function()
     assert.is_nil(q.name)
     assert.are.equal("unverified", q.confidence)
     assert.is_true(has_note(q, "no name in any source; name-based rules (Camping 101) cannot apply"))
-    assert.are.equal("verified", cat:quest(90009).confidence) -- named by the supplement
   end)
 
   -- 77 is classic Alliance; 4294967373 adds Skyborne (Alliance), bit 32
@@ -151,22 +236,6 @@ describe("catalog (fixtures)", function()
 
   it("decodes a single-race QuestieDB mask", function()
     assert.are.same({ "Human" }, cat:quest(1007).races)
-  end)
-
-  it("serves a supplement-only Forever quest with its starter and ender", function()
-    local q = cat:quest(90001)
-    assert.is_nil(q.races)
-    assert.are.equal("Fixture Forever Quest", q.name)
-    assert.are.equal(2001, q.starter)
-    assert.are.equal(2002, q.ender)
-  end)
-
-  it("carries requires_skill from the supplement", function()
-    local q = cat:quest(1002)
-    assert.are.equal("Camping 101: First Aid", q.name)
-    assert.are.equal("First Aid", q.requires_skill)
-    assert.is_nil(q.classes)
-    assert.is_nil(cat:quest(1001).requires_skill)
   end)
 
   it("gives a Camping 101: <Prof> quest requires_skill = <Prof> by name (spec §3)", function()
@@ -191,19 +260,6 @@ describe("catalog (fixtures)", function()
     assert.is_nil(q.requires_skill)
   end)
 
-  it("lets the supplement override both Camping 101 fields", function()
-    local path = os.tmpname()
-    local f = assert(io.open(path, "w"))
-    f:write('{"quests": {"1008": {"requires_skill": "Skinning", "source": "fixture"}, ' ..
-      '"1009": {"requires_skill": "Cooking", "completed_by_training": "Fishing", "source": "fixture"}}}')
-    f:close()
-    local c = catalog.load(fixture_cfg { supplement = path })
-    os.remove(path)
-    assert.are.equal("Skinning", c:quest(1008).requires_skill)
-    assert.are.equal("Cooking", c:quest(1009).requires_skill)
-    assert.are.equal("Fishing", c:quest(1009).completed_by_training)
-  end)
-
   it("takes reputation rewards from QuestieDB in its order, an empty array when absent", function()
     assert.same({ { faction = 93, value = -500 }, { faction = 92, value = 100 } }, cat:quest(1382).reputation_reward)
     assert.same({}, cat:quest(1001).reputation_reward)
@@ -222,18 +278,6 @@ describe("catalog (fixtures)", function()
     assert.is_nil(cat:quest(1384).max_rep)
   end)
 
-  it("lets the supplement override the reputation fields", function()
-    local path = os.tmpname()
-    local f = assert(io.open(path, "w"))
-    f:write('{"quests": {"1382": {"reputation_reward": [{"faction": 92, "value": 250}], ' ..
-      '"min_rep": {"faction": 72, "value": 3000}, "source": "fixture"}}}')
-    f:close()
-    local c = catalog.load(fixture_cfg { supplement = path })
-    os.remove(path)
-    assert.same({ { faction = 92, value = 250 } }, c:quest(1382).reputation_reward)
-    assert.same({ faction = 72, value = 3000 }, c:quest(1382).min_rep)
-  end)
-
   it("names a faction from QuestieDB's faction constants, else 'Faction <id>'", function()
     assert.equal("Gelkis Clan Centaur", cat:faction_name(92))
     assert.equal("Stormwind", cat:faction_name(72))
@@ -244,7 +288,8 @@ describe("catalog (fixtures)", function()
   end)
 
   it("takes objectives from QuestieDB, none when it lists none", function()
-    local q = cat:quest(1001)
+    -- Without the counts file, so the row's own shape shows.
+    local q = catalog.load(fixture_cfg { counts = FIX .. "/nope.json" }):quest(1001)
     assert.are.equal(1, #q.objectives)
     assert.are.same({ kind = "item", ids = { 5001 }, count = 1, count_assumed = true, text = "Fixture Pelt" }, q.objectives[1])
     assert.are.same({}, cat:quest(1003).objectives)
@@ -252,14 +297,6 @@ describe("catalog (fixtures)", function()
     assert.are.equal("npc", d.objectives[1].kind)
     assert.are.same({ 2003 }, d.objectives[1].ids)
     assert.are.equal("object", d.objectives[2].kind)
-  end)
-
-  it("serves a quest known only to the supplement", function()
-    local q = cat:quest(90009)
-    assert.are.equal("Supplement Only", q.name)
-    assert.are.equal(12, q.level)
-    assert.are.equal(10, q.required_level)
-    assert.are.equal(600, q.xp)
   end)
 
   it("returns nil for an id in no source, and a marked placeholder on request", function()

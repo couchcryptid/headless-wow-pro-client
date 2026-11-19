@@ -532,8 +532,8 @@ text.DIFF_WARNINGS = {
     return string.format("different QuestieDB: %s (%s) → %s (%s); changes may come from the data, not the guide",
       tostring(a.old_tag), o, tostring(a.new_tag), n)
   end,
-  supplement = function()
-    return "different supplement; changes may come from the data, not the guide"
+  counts = function()
+    return "different objective counts file; changes may come from the data, not the guide"
   end,
   filters = function() return "different guide filters" end,
   combos = function(a)

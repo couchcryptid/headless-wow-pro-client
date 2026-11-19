@@ -342,7 +342,7 @@ describe("hwc diff", function()
   local function doc(findings, header)
     local h = {
       addon = { git = true, branch = "main", commit = "aaaaaaa", dirty = false },
-      catalog = { questie = { tag = "v1.1.2", build = "e1652ce" }, supplement = { present = false } },
+      catalog = { questie = { tag = "v1.1.2", build = "e1652ce" }, counts = { present = false } },
       client = { commit = "c1" },
       matrix = { combos = { DWARF, GNOME } },
       paths_relative_to = "WoW-Pro-Guides",
@@ -495,7 +495,7 @@ describe("hwc diff", function()
   it("warns when the QuestieDB sha256 differs under the same tag and build", function()
     local dir = tmpdir()
     local q = function(sha)
-      return { catalog = { questie = { tag = "v1.1.2", build = "e1652ce", sha256 = sha }, supplement = { present = false } } }
+      return { catalog = { questie = { tag = "v1.1.2", build = "e1652ce", sha256 = sha }, counts = { present = false } } }
     end
     local a = put(dir, "a.json", doc({}, q("1111111aaaa")))
     local b = put(dir, "b.json", doc({}, q("2222222bbbb")))
