@@ -4,6 +4,8 @@
 
 **Goal:** Level findings graded by quest colour (red high, orange medium, grey low), non-combat quests exempt from the too-hard side, below-required-level worded as levels short, and `L` steps completing as the game completes them.
 
+**Superseded in part:** Task 6 supersedes this Goal and the Global Constraints below: quest-colour grading was removed, and the client grades only whether the character can accept a quest plus the guide's own level checks.
+
 **Architecture:**
 - A pure `src/hwc/world/quest_color.lua` computes the colour.
 - The catalog exposes the quest's `zone_or_sort` and a `Catalog:noncombat(qid)` test.
