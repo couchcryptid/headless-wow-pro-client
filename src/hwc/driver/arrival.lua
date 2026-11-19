@@ -41,6 +41,8 @@ local function tz_part(tz)
   return trim((tz:match("^([^;]*)")))
 end
 
+M.tz_part = tz_part
+
 local TIERS = {
   function(a, b) return a == b end,
   function(a, b) return a:sub(1, #b) == b end,

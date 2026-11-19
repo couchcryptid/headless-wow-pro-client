@@ -729,6 +729,25 @@ describe("actions.perform: b and P", function()
     assert.are.equal(1426, w.player.map_id)
   end)
 
+  it("b matches the TZ's first part exactly, and sees every route within reach of the departure", function()
+    local ctx, _, w = setup("Dwarf", nil, { arrivals = TWO })
+    local o = actions.perform(ctx, step("b", {}, { zone = "1432; Loch Modan", map = "50,50", targetzone = "1413; The Barrens" }, "Whatever"))
+    assert.are.equal(1413, w.player.map_id)
+    assert.is_nil(o.resolved_by)
+    assert.are.same({ name = "Whatever", tz = "1413; The Barrens" }, o.expected)
+    local near = facts({
+      { kind = "boat", from = { map_id = 1432, x = 50, y = 50 }, zone = "Dun Morogh", subzone = "Kharanos", map_id = 1426, x = 30, y = 40, checked = "spec" },
+      { kind = "boat", from = { map_id = 1432, x = 51, y = 50.5 }, zone = "The Barrens", subzone = "Ratchet", map_id = 1413, x = 63.2, y = 37.1, checked = "spec" },
+    })
+    ctx, _, w = setup("Dwarf", nil, { arrivals = near })
+    o = actions.perform(ctx, step("b", {}, DOCK_TAGS, "Ratchet"))
+    assert.are.equal(1413, w.player.map_id)
+    assert.is_nil(o.resolved_by)
+    ctx, _, w = setup("Dwarf", nil, { arrivals = near })
+    actions.perform(ctx, step("b", {}, DOCK_TAGS, "Kharanos"))
+    assert.are.equal(1426, w.player.map_id)
+  end)
+
   it("b naming neither route lands by the loose match", function()
     local ctx, _, w = setup("Dwarf", nil, { arrivals = TWO })
     local o = actions.perform(ctx, step("b", {}, DOCK_TAGS, "Rat"))

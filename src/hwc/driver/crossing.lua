@@ -39,22 +39,17 @@ local function step_spell(step)
   return tonumber(id)
 end
 
--- Crossings the step may take: those leaving the departure's dock (every route sharing
--- the nearest dock's position), plus, for P, teleports whose spell is known or named.
+-- Crossings the step may take: those leaving within arrival.RADIUS of the departure, plus, for P, teleports whose spell is known or named.
 local function candidates(ctx, step, p)
   local list = (ctx.world.arrivals or {}).crossings or {}
   local kind = KIND[step.action]
-  local docks = {}
-  for _, c in ipairs(list) do
-    if c.kind == kind and c.from then docks[#docks + 1] = c end
-  end
   local out = {}
-  local near = arrival.nearest(docks, p.map_id, p.x, p.y, from_pos)
-  if near then
-    for _, c in ipairs(docks) do
-      if c.from.map_id == near.from.map_id and c.from.x == near.from.x and c.from.y == near.from.y then
-        out[#out + 1] = c
-      end
+  -- Every route leaving within reach of the departure, not only the nearest dock's: the
+  -- name/TZ then picks among them (pick), so a slightly different captured `from` can't
+  -- silently decide the route.
+  for _, c in ipairs(list) do
+    if c.kind == kind and c.from and arrival.nearest({ c }, p.map_id, p.x, p.y, from_pos) then
+      out[#out + 1] = c
     end
   end
   if step.action == "P" then
@@ -71,7 +66,7 @@ end
 local function pick(cands, name, tz)
   if #cands == 1 then return cands[1] end
   for _, c in ipairs(cands) do
-    if arrival.exact(c, name) or arrival.exact(c, tz) then return c end
+    if arrival.exact(c, name) or arrival.exact(c, arrival.tz_part(tz)) then return c end
   end
   return arrival.loose(cands, name, tz), "loose"
 end
