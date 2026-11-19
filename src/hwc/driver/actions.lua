@@ -26,7 +26,7 @@
 --   TAXIMAP_OPENED              WoWPro_Events.lua:815-826: RecordTaxiLocations (AutoComplete.lua
 --       :9-29) and, on an F/b step with AutoSelect, TakeTaxiClassic (:32-53).
 --   PLAYER_CONTROL_LOST / _GAINED  WoWPro_Events.lua:828-866: the F flight (hwc.driver.flight).
---   HEARTHSTONE_BOUND           WoWPro_Events.lua:861-872 reads GetBindLocation() and runs
+--   HEARTHSTONE_BOUND           WoWPro_Events.lua:868-879 reads GetBindLocation() and runs
 --       AutoCompleteSetHearth.
 --   UI_INFO_MESSAGE(idx, msg)   WoWPro_Events.lua:915-918; AutoCompleteGetFP reads
 --       `_event, _idx, msg` and tests msg == ERR_NEWTAXIPATH (AutoComplete.lua:94-98).
@@ -51,6 +51,8 @@ local xp = require("hwc.world.xp")
 local gap = require("hwc.findings.gap")
 local flight = require("hwc.driver.flight")
 local crossing = require("hwc.driver.crossing")
+local hearth = require("hwc.driver.hearth")
+local arrival = require("hwc.driver.arrival")
 
 local actions = {}
 
@@ -617,35 +619,40 @@ local function credit_arrival(ctx, step, out)
   if #out.arrivals > 0 then fire(ctx, out, "QUEST_LOG_UPDATE") end
 end
 
+-- R: run to Z/M. A numeric-only Z names its zone through DB:zone_of_map (without the
+-- tables the previous zone name stays); the subzone is "" on a zone or map change and
+-- kept otherwise, never the step name. out.arrived/out.classify/out.expected feed the
+-- driver's arrival grading (spec section 8); waypcomplete 1 or 2 cannot be emulated
+-- (waypoint-arrival-not-emulated, key "<gid>:<line>"), otherwise the driver decides from
+-- out.classify. WoWPro_Events.lua:301-316 / WoWPro_AutoComplete.lua:488-530.
 local function perform_travel(ctx, step, out)
   local p = ctx.world.player
   local tags = step.tags or {}
   local zone, map_id = parse_zone(tags.zone)
   local x, y = parse_coords(tags.map)
-  if step.action == "H" then
-    -- The hearth takes the player to the bind location (zone = bind name).
-    local bind = p.bind
-    if bind then
-      zone, map_id = bind.name, bind.map_id
-    elseif not zone and not map_id then
-      out.kind, out.reason = "refused", "no-bind"
-      return
-    end
-  end
-  local subzone = (step.action == "R") and (step.name or "") or ""
-  p:set_zone(zone or p.zone, subzone, map_id or p.map_id, x or p.x, y or p.y)
+  local db = ctx.world.catalog and ctx.world.catalog.forever
+  if not zone and map_id and db then zone = db:zone_of_map(map_id) end
+  local to_zone, to_map = zone or p.zone, map_id or p.map_id
+  local same_area = to_zone == p.zone and to_map == p.map_id
+  local subzone = same_area and p.subzone or ""
+  p:set_zone(to_zone, subzone, to_map, x or p.x, y or p.y)
   out.kind = "acted"
+  out.expected = { name = step.name, tz = tags.targetzone }
+  out.arrived = { zone = p.zone, subzone = p.subzone ~= "" and p.subzone or nil, map_id = p.map_id }
+  out.classify = db and arrival.classify(db, out.arrived, step.name, tags.targetzone) or nil
+  local wc = tags.waypcomplete
+  if wc == 1 or wc == 2 then
+    out.data_gap = { reason = "waypoint-arrival-not-emulated",
+      key = string.format("%s:%s", tostring(step.gid), tostring(step.line or step.index)) }
+  end
   fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
   fire(ctx, out, "ZONE_CHANGED")
-  if step.action == "R" then credit_arrival(ctx, step, out) end
+  credit_arrival(ctx, step, out)
 end
 
-local function perform_bind(ctx, step, out)
-  local _, map_id = parse_zone(step.tags and step.tags.zone)
-  ctx.world.player:set_bind(step.name, map_id or ctx.world.player.map_id)
-  out.kind = "acted"
-  fire(ctx, out, "HEARTHSTONE_BOUND")
-end
+-- h and H (hwc.driver.hearth): bind at, and hearth to, real inns (spec section 7).
+local function perform_bind(ctx, step, out) hearth.bind(ctx, step, out, FLIGHT_HELPERS) end
+local function perform_home(ctx, step, out) hearth.home(ctx, step, out, FLIGHT_HELPERS) end
 
 -- U: the use item is in the bags (added when missing); a quest in the log gets the C
 -- objective rule, then one use item is consumed unless it is also the L item.
@@ -806,7 +813,7 @@ function actions.is_quest_step(step)
   return QUEST_HANDLERS[step.action] ~= nil
 end
 local OTHER_HANDLERS = {
-  R = perform_travel, F = perform_flight, b = perform_crossing, P = perform_crossing, H = perform_travel,
+  R = perform_travel, F = perform_flight, b = perform_crossing, P = perform_crossing, H = perform_home,
   f = perform_flight_point, h = perform_bind, U = perform_use, L = perform_level,
   l = perform_item_step, B = perform_item_step, ["*"] = perform_trash, ["="] = perform_trainer,
 }

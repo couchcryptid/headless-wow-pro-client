@@ -55,8 +55,10 @@ describe("Player behind the stubs", function()
     p:learn_spell(2550)
     assert.is_true(env.IsPlayerSpell(2550))
     assert.is_nil(env.GetBindLocation())
-    p:set_bind("Kharanos", 1426)
+    local inn = { npc = 1, bind = "Kharanos", zone = "Dun Morogh", subzone = "Thunderbrew Distillery", map_id = 1426, x = 46, y = 53 }
+    p:set_bind(inn)
     assert.equal("Kharanos", env.GetBindLocation())
+    assert.same({ name = "Kharanos", map_id = 1426, entry = inn }, p.bind)
     p:learn_flight_point("Thelsamar, Loch Modan")
     assert.is_true(p.flight_points["Thelsamar, Loch Modan"])
     p.level, p.xp = 5, 12
@@ -169,7 +171,8 @@ describe("World.new start node", function()
 
   it("applies start_bind when present", function()
     local w = world("Dwarf", { start_nodes = {}, start_bind = { Dwarf = { bind = "Kharanos", map_id = 1426 } } })
-    assert.same({ name = "Kharanos", map_id = 1426 }, w.player.bind)
+    assert.same({ name = "Kharanos", map_id = 1426 }, { name = w.player.bind.name, map_id = w.player.bind.map_id })
+    assert.equal(w.arrivals.start_bind.Dwarf, w.player.bind.entry)
     assert.same({}, w.events)
   end)
 

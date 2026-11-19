@@ -23,7 +23,7 @@ local function apply_start(self)
     end
   end
   local bind = (facts.start_bind or {})[p.race_key]
-  if bind then p:set_bind(bind.bind, bind.map_id) end
+  if bind then p:set_bind(bind) end
 end
 
 -- catalog may be nil (the catalog arrives in a later task); clock is optional

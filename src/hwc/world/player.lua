@@ -192,9 +192,11 @@ function Player:set_on_taxi(on)
   self._record("taxi", { on = on })
 end
 
-function Player:set_bind(name, map_id)
-  self.bind = { name = name, map_id = map_id }
-  self._record("set_bind", { name = name, map_id = map_id })
+-- entry: an inn or start_bind fact { bind, zone, subzone, map_id, x, y, ... }.
+-- GetBindLocation returns bind.name.
+function Player:set_bind(entry)
+  self.bind = { name = entry.bind, map_id = entry.map_id, entry = entry }
+  self._record("set_bind", { name = entry.bind, map_id = entry.map_id })
 end
 
 return Player
