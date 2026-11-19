@@ -34,6 +34,7 @@ describe("text constants", function()
       ["lua-error"] = "Lua error",
       ["missing-global"] = "Missing global",
       ["rep-faction-unmet"] = "REP faction never met",
+      ["arrival-data-gap"] = "Arrival data missing",
     }, text.SIGNALS)
   end)
   it("labels every early stop reason, and not the normal end", function()
@@ -579,5 +580,47 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     local f = F({ signal = "never-shown-accept", name = "Next", qid = 5, why = "Something odd", caused_by = "F-7F8B32EE" })
     local ctx = { single = "Dwarf Warrior", by_id = { ["F-7F8B32EE"] = parent } }
     assert.equal("The guide tells you to accept this quest, but WoWPro never shows the step.", text.sentence(f, ctx))
+  end)
+end)
+
+describe("arrival finding text (spec section 10)", function()
+  local function dnaf(reason, extra)
+    local f = { signal = "did-not-advance", action = "R", name = "Stormwind", reasons = { reason },
+      named = { name = "Stormwind", tz = "1453; Stormwind City" } }
+    for k, v in pairs(extra or {}) do f[k] = v end
+    return f
+  end
+  local function gapf(reason, extra)
+    local f = { signal = "arrival-data-gap", reasons = { reason }, name = reason .. ": k" }
+    for k, v in pairs(extra or {}) do f[k] = v end
+    return f
+  end
+  it("words each did-not-advance arrival reason", function()
+    assert.equal('"Stormwind" and TZ "1453; Stormwind City" name no area in Forever, so the addon can never complete '
+      .. "this step by zone; the client clicked it off.", text.sentence(dnaf("name-not-an-area"), {}))
+    assert.equal('"Stormwind" name no area in Forever, so the addon can never complete this step by zone; the client '
+      .. "clicked it off.", text.sentence(dnaf("name-not-an-area", { named = { name = "Stormwind" } }), {}))
+    assert.equal('The step names "Stormwind" (TZ "1453; Stormwind City"), but the player arrived in Elwynn Forest / '
+      .. "Goldshire, so the addon didn't complete it and the client clicked it off.",
+      text.sentence(dnaf("arrival-mismatch", { arrived = { zone = "Elwynn Forest", subzone = "Goldshire" } }), {}))
+    assert.equal('The step names "Stormwind" (TZ "1453; Stormwind City"), but the player arrived in Elwynn Forest, '
+      .. "so the addon didn't complete it and the client clicked it off.",
+      text.sentence(dnaf("arrival-mismatch", { arrived = { zone = "Elwynn Forest" } }), {}))
+    assert.equal("The guide flies to a flight point the character hasn't discovered, so the client travelled there "
+      .. "another way.", text.sentence(dnaf("flight-point-undiscovered"), {}))
+    assert.equal('No flight point on the taxi map matches "Stormwind", so the client travelled there another way.',
+      text.sentence(dnaf("no-taxi-node"), {}))
+  end)
+  it("words the gap reasons", function()
+    assert.equal("The Forever client tables aren't installed, so arrival steps aren't judged. Run hwc update.",
+      text.sentence(gapf("tables-missing"), {}))
+    for _, r in ipairs({ "fp-unknown", "start-node-unknown", "destination-unresolved", "arrival-unknown", "inn-unknown",
+      "waypoint-arrival-not-emulated", "subzone-unknown", "taxi-not-taken", "arrival-data-mismatch" }) do
+      assert.matches("^hwc has no arrival data for this: .+%.$", text.sentence(gapf(r), {}))
+    end
+    assert.matches("never took the flight", text.sentence(gapf("taxi-not-taken"), {}), 1, true)
+    assert.matches("(x vs y)", text.sentence(gapf("arrival-data-mismatch", { detail = "x vs y" }), {}), 1, true)
+    assert.equal("Arrival data missing", text.SIGNALS["arrival-data-gap"])
+    assert.equal("No arrival data: subzone-unknown: k", text.title(gapf("subzone-unknown", { name = "subzone-unknown: k" })))
   end)
 end)

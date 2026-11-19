@@ -141,6 +141,11 @@ local function single_signals()
   add({ signal = "lua-error", gid = G2, file = DUN_5_11, line = 99,
     message = "bad argument #1 to 'strsplit' (string expected, got nil)", stack = "WoWPro_Leveling.lua:12: in main chunk" })
   add({ signal = "missing-global", global = "GetNumGroupMembers" })
+  -- Arrival emulation: a data gap (a harness notice) and an arrival did-not-advance.
+  add({ signal = "arrival-data-gap", reason = "start-node-unknown", key = "Gnome" })
+  add(sig("did-not-advance", G3, DUN_11_14, 580, "R", "Stormwind", nil,
+    { reason = "arrival-mismatch", named = { name = "Stormwind", tz = "1453; Stormwind City" },
+      arrived = { zone = "Elwynn Forest", subzone = "Goldshire" }, resolved_by = "zone" }))
   return s
 end
 

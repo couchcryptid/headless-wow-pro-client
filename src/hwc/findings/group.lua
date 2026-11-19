@@ -74,6 +74,9 @@ local function key_of(s)
     return table.concat({ "lua-error", s.reason == "harness" and "harness" or "addon", tostring(s.message) }, "\0")
   elseif s.signal == "missing-global" then
     return table.concat({ "missing-global", tostring(s.global) }, "\0")
+  elseif s.signal == "arrival-data-gap" then
+    -- One finding per (reason, key): step-less gaps with different reasons or keys stay apart.
+    return table.concat({ "arrival-data-gap", tostring(s.reason), tostring(s.key) }, "\0")
   end
   local sig = s.signal
   if sig == "manual-completion" and s.expected then sig = sig .. ":expected" end
@@ -92,6 +95,9 @@ local function new_finding(s, key)
     -- reports that combo's outcomes.
     missing_outcome = s.missing_outcome,
     levels_short = s.levels_short, gap = s.gap,
+    -- Arrival emulation: what the step named, where the player arrived (not `expected`, which
+    -- means an expected manual click), what resolved it, and a data mismatch's detail.
+    named = s.named, arrived = s.arrived, resolved_by = s.resolved_by, detail = s.detail,
     combos = {}, causes = {}, reasons = {},
   }
   if s.signal == "lua-error" then
@@ -99,6 +105,8 @@ local function new_finding(s, key)
     f.harness = s.reason == "harness" or nil
   elseif s.signal == "missing-global" then
     f.name = s.global
+  elseif s.signal == "arrival-data-gap" then
+    f.name = tostring(s.reason) .. ": " .. tostring(s.key)
   elseif s.signal == "manual-completion" and s.expected then
     f.expected = true
   end
