@@ -8,7 +8,7 @@ local function fixture(name)
   return doc
 end
 
-local NOTE = " (gaps in hwc's stubs, not guide bugs)"
+local NOTE = " (gaps in hwc's stubs or arrival data, not guide bugs)"
 
 describe("summary.lines", function()
   it("counts findings and root causes, then severities in rank order, then harness notices", function()

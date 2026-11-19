@@ -262,7 +262,7 @@
     },
     "folds":{
       "expected":"the client clicked off by design (notes, repair-or-restock stops, guide ends)",
-      "harness":"gaps in this client's WoW API stubs, not guide bugs"
+      "harness":"gaps in this client's WoW API stubs or arrival data, not guide bugs"
     },
     "severities":{
       "high":"High",

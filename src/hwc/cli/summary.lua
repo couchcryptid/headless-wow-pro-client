@@ -5,7 +5,7 @@ local report = require("hwc.findings.report")
 
 local summary = {}
 
-local HARNESS_NOTE = " (gaps in hwc's stubs, not guide bugs)"
+local HARNESS_NOTE = " (gaps in hwc's stubs or arrival data, not guide bugs)"
 
 local function plural(n, word, words)
   return n .. " " .. (n == 1 and word or (words or word .. "s"))
