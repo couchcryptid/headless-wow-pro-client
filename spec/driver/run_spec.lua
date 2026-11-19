@@ -1589,6 +1589,34 @@ describe("driver.run: arrival signals", function()
     assert.equal("flight-point-undiscovered", d[1].reason)
   end)
 
+  -- Ruling R14: destination-unresolved only says where the player didn't land; the guide
+  -- reason (spec sections 5.3 and 5.4) is still the guide's finding.
+  for _, reason in ipairs({ "no-taxi-node", "flight-point-undiscovered" }) do
+    it("a stalled F with " .. reason .. " and an unresolved landing records did-not-advance " .. reason, function()
+      local log = stalled({ action = "F", name = "Darnassus", outcome = { kind = "acted", reason = reason,
+        data_gap = { reason = "destination-unresolved", key = "Darnassus" }, named = { name = "Darnassus" } } })
+      assert.same({}, signals(log, "arrival-data-gap"))
+      local d = signals(log, "did-not-advance")
+      assert.equal(1, #d)
+      assert.equal(reason, d[1].reason)
+    end)
+  end
+
+  it("a landing subzone no capture knows doesn't hide a guide reason either", function()
+    local log = stalled({ action = "F", name = "Thelsamar", outcome = { kind = "acted",
+      reason = "flight-point-undiscovered", arrived = { zone = "Loch Modan", map_id = 1432 },
+      classify = "subzone-unknown", resolved_by = "loose" } })
+    assert.same({}, signals(log, "arrival-data-gap"))
+    assert.equal("flight-point-undiscovered", signals(log, "did-not-advance")[1].reason)
+  end)
+
+  it("a gap that explains the stall still wins over a guide reason", function()
+    local log = stalled({ action = "F", name = "Thelsamar", outcome = { kind = "acted",
+      reason = "flight-point-undiscovered", data_gap = { reason = "fp-unknown", key = "1415" } } })
+    assert.same({}, signals(log, "did-not-advance"))
+    assert.equal("fp-unknown", signals(log, "arrival-data-gap")[1].reason)
+  end)
+
   it("subzone-unknown is a notice", function()
     local log = stalled({ action = "R", name = "Amberstill Ranch", outcome = { kind = "acted",
       named = { name = "Amberstill Ranch" }, arrived = { zone = "Dun Morogh", map_id = 1426 },

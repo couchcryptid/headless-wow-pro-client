@@ -51,8 +51,7 @@ function hearth.home(ctx, step, out, h)
   local e = p.bind and p.bind.entry
   if not e then
     -- A bind with no inn entry names itself; with no bind at all, the step is the key.
-    gap(out, p.bind and p.bind.name
-      or string.format("%s:%s", tostring(step.gid), tostring(step.line or step.index)))
+    gap(out, p.bind and p.bind.name or arrival.step_key(step))
     return
   end
   p:set_zone(e.zone, e.subzone, e.map_id, e.x / 100, e.y / 100)

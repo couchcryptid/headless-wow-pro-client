@@ -4,6 +4,16 @@ local M = {}
 
 M.RADIUS = 0.05
 
+-- The arrival-data-gap every travel step records when the Forever tables aren't
+-- installed (spec section 10). Read only.
+M.NO_TABLES = { reason = "tables-missing", key = "no-tables" }
+
+-- A gap key naming the step itself: "<gid>:<line>" (the engine index when the source
+-- line is unknown). gid defaults the step's own.
+function M.step_key(step, gid)
+  return string.format("%s:%s", tostring(step.gid or gid), tostring(step.line or step.index))
+end
+
 local function trim(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
 
 -- Closest item on map_id within RADIUS of (x, y); a tie keeps the earlier item.

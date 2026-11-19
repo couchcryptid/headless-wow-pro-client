@@ -11,6 +11,7 @@
 -- Determinism: the run log holds only ordered data (arrays in loop order, indices
 -- walked 1..n); nothing in it is built from pairs.
 local actions = require("hwc.driver.actions")
+local arrival = require("hwc.driver.arrival")
 local xp = require("hwc.world.xp")
 local findings_text = require("hwc.findings.text")
 
@@ -566,21 +567,25 @@ end
 -- Travel steps (arrival emulation spec section 10): with no Forever tables installed a
 -- stalled one is never judged.
 local ARRIVAL_ACTIONS = { F = true, f = true, b = true, P = true, H = true, h = true, R = true }
-local NO_TABLES = { reason = "tables-missing", key = "no-tables" }
+-- Gaps that only say where the player didn't land (spec section 9): they never hide a
+-- guide reason (ruling R14), since the step had already failed before the landing.
+local LANDING_ONLY = { ["destination-unresolved"] = true }
 
 -- The harness notice for an arrival step that didn't advance, or nil when the step is
 -- the guide's to answer for (arrival emulation spec section 10). The first rule that
--- applies decides: the action's own data gap; no Forever tables at all (nothing can be
+-- applies decides: the action's own data gap (unless it is landing-only and the action
+-- gave a guide reason, ruling R14); no Forever tables at all (nothing can be
 -- judged, so even an R step with no gap is tables-missing); a landing subzone no
 -- capture knows (key "<gid>:<line>").
 function Driver:arrival_gap(step, out)
-  if out.data_gap then return out.data_gap end
+  local g = out.data_gap
+  if g and not (LANDING_ONLY[g.reason] and out.reason) then return g end
   if not ARRIVAL_ACTIONS[step.action] then return nil end
   local catalog = self.W.catalog
-  if not (catalog and catalog.forever) then return NO_TABLES end
+  if not (catalog and catalog.forever) then return arrival.NO_TABLES end
+  if out.reason then return nil end
   if out.classify == "subzone-unknown" then
-    return { reason = "subzone-unknown",
-      key = string.format("%s:%s", tostring(step.gid or self.gid), tostring(step.line or step.index)) }
+    return { reason = "subzone-unknown", key = arrival.step_key(step, self.gid) }
   end
   return nil
 end

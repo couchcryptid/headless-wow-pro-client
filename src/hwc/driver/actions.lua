@@ -643,7 +643,7 @@ local function perform_travel(ctx, step, out)
   local wc = tags.waypcomplete
   if wc == 1 or wc == 2 then
     out.data_gap = { reason = "waypoint-arrival-not-emulated",
-      key = string.format("%s:%s", tostring(step.gid), tostring(step.line or step.index)) }
+      key = arrival.step_key(step) }
   end
   fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
   fire(ctx, out, "ZONE_CHANGED")

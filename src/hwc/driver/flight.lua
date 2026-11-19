@@ -21,7 +21,7 @@ local stubs_core = require("hwc.stubs.core")
 
 local flight = {}
 
-local NO_TABLES = { reason = "tables-missing", key = "no-tables" }
+local NO_TABLES = arrival.NO_TABLES
 
 local function gap(out, reason, key)
   out.data_gap = out.data_gap or { reason = reason, key = key }
@@ -132,7 +132,7 @@ function flight.fly(ctx, step, out, h)
   elseif addon_would_take(listed(w, nodes), step.name) then
     -- A listed node matches, yet the addon took none: its TAXIMAP_OPENED handler never ran
     -- TakeTaxiClassic (the row wasn't active, or AutoSelect is off). Not the guide's fault.
-    gap(out, "taxi-not-taken", string.format("%s:%s", tostring(step.gid), tostring(step.line or step.index)))
+    gap(out, "taxi-not-taken", arrival.step_key(step))
   else
     out.reason = "no-taxi-node"
   end
