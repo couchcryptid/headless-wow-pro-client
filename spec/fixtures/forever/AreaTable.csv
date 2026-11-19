@@ -1,0 +1,9 @@
+ID,ZoneName,AreaName_lang,ContinentID,ParentAreaID,AreaBit,SoundProviderPref,SoundProviderPrefUnderwater,AmbienceID,UwAmbience,ZoneMusic,UwZoneMusic,ExplorationLevel,IntroSound,UwIntroSound,FactionGroupMask,Ambient_multiplier,MountFlags,PvpCombatWorldStateID,WildBattlePetLevelMin,WildBattlePetLevelMax,WindSettingsID,ContentTuningID,Flags_0,Flags_1,LiquidTypeID_0,LiquidTypeID_1,LiquidTypeID_2,LiquidTypeID_3
+1,DunMorogh,Dun Morogh,0,0,119,86,11,3486,2172,8,0,0,0,0,2,0,1,-1,0,0,0,0,65,0,0,0,0,0
+17,TheBarrens,The Barrens,1,0,130,86,11,3049,2172,7,0,0,0,0,4,0,1,-1,0,0,0,0,64,0,0,0,0,0
+38,LochModan,Loch Modan,0,0,145,0,11,3098,2172,1,0,0,0,0,2,0,1,-1,0,0,0,0,64,0,0,0,0,0
+144,Thelsamar,Thelsamar,0,38,223,0,11,0,2172,1,0,10,0,0,0,0,1,-1,0,0,0,0,1073741888,0,0,0,0,0
+380,TheCrossroads,The Crossroads,1,17,104,0,11,0,2172,228,0,15,0,0,0,0,1,-1,0,0,0,0,1073741888,0,0,0,0,0
+1519,StormwindCity,Stormwind City,0,0,688,86,0,43,2172,13,0,10,0,0,2,0,1,-1,0,0,0,0,312,0,0,0,0,0
+1537,Ironforge,Ironforge,0,0,689,0,0,42,2172,0,0,10,0,0,2,0,1,-1,0,0,0,0,312,0,0,0,0,0
+16509,StormwindCityCamelot,Stormwind City,2940,0,688,86,0,43,2172,13,0,10,61,0,2,0,0,-1,0,0,0,0,312,0,0,0,0,0
