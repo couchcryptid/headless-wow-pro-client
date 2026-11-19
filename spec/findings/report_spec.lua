@@ -152,12 +152,13 @@ describe("report.build", function()
   end)
 
   it("carries gaps and warnings in the header", function()
-    local doc = report.build({}, { client = { dirty = true }, catalog = { supplement = { present = false } } })
+    local doc = report.build({}, { client = { dirty = true },
+      catalog = { questie = { present = false }, counts = { present = false } } })
     assert.same(report.GAPS, doc.header.gaps)
+    -- The optional counts file's absence is a gap line, not a warning.
     assert.same({
       "The client checkout had uncommitted changes; this run may not be reproducible from its commit.",
-      "Catalog source supplement was missing. Camping 101 quests aren't recognised, so characters with "
-        .. "professions play like ones with none.",
+      "Catalog source questie was missing.",
     }, doc.header.warnings)
   end)
 

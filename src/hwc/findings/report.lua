@@ -17,8 +17,8 @@ report.GAPS = {
   "Forever Boosted Rest from campfires",
   "party XP for non-elites (spec §5.5)",
   "dungeon runs and instance XP (spec §3)",
-  -- Ruling AB: the Forever-added Camping 101 quests have no name in any catalog source.
-  "Camping 101 quests are recognised only by name from the local supplement (no catalog source names them); without it, characters with professions play like ones with none",
+  -- QuestieDB has no objective counts; only the optional counts file gives them.
+  "objective counts aren't in QuestieDB: each is taken as 1 unless the counts file gives it, so kills and kill XP run short",
   -- Ruling AC: kill vs talk-to is a heuristic (kills.objective_kills).
   "talk-to NPC objectives may be credited as kills",
   -- Catalog:quest_rewards: QuestieDB has no reward counts and no choice/fixed split.
@@ -30,7 +30,6 @@ report.GAPS = {
 }
 
 local NOT_REPRODUCIBLE = "uncommitted changes; this run may not be reproducible from its commit."
-local SUPPLEMENT_NOTE = "Camping 101 quests aren't recognised, so characters with professions play like ones with none."
 
 -- Harness notices are about the client's WoW API stubs, not guides: kept out of
 -- every count and shown only in their own folded section.
@@ -135,10 +134,9 @@ end
 
 local function catalog_warnings(warn, catalog)
   for _, name in ipairs(sorted_keys(catalog or {})) do
-    if catalog[name].present == false then
-      local s = "Catalog source " .. name .. " was missing."
-      if name == "supplement" then s = s .. " " .. SUPPLEMENT_NOTE end
-      warn[#warn + 1] = s
+    -- The counts file is optional: its absence is the "Not modelled" count gap, not a warning.
+    if catalog[name].present == false and name ~= "counts" then
+      warn[#warn + 1] = "Catalog source " .. name .. " was missing."
     end
   end
 end

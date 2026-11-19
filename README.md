@@ -150,7 +150,7 @@ cd ~/Projects/WoW-Pro-Guides && hwc doctor --json   # the same, as JSON
 ```
 
 `hwc doctor` checks LuaJIT, the rocks, the tools, the WoW-Pro folder, QuestieDB
-and the supplement. Its `addon` check loads the addon for a Dwarf Warrior: the
+and the objective counts file. Its `addon` check loads the addon for a Dwarf Warrior: the
 WoW-Pro and Leveling TOCs for the Forever flavor (TOC 16001), then
 `ADDON_LOADED`, `PLAYER_LOGIN` and `PLAYER_ENTERING_WORLD`, then the virtual
 clock until the startup lockdown releases and the timers drain.
@@ -343,7 +343,7 @@ ones), and only on the characters both runs played. A warning line says when
 the comparison may mislead:
 
 - different QuestieDB tag or build
-- different supplement
+- different objective counts file
 - different guide filters
 - characters only in one run (left out), e.g. a file from an older hwc that played several characters
 - a character's run stopped early in one run but not the other (findings past the stop show as fixed)
@@ -463,12 +463,11 @@ skipped, and the `missing-global` list. "Farsen's Watch why names
 
 The stubs answer from a simulated world (`src/hwc/world/`): the player, bags,
 XP and a 40-slot quest log. Quest, NPC and item facts come from a catalog
-(design spec §6) merged from two local sources: QuestieDB and an optional
-hand-checked supplement. The guide lines are never a
-source.
+(design spec §6) from QuestieDB, plus an optional file of hand-checked objective
+counts. The guide lines are never a source.
 
 **Data policy: no third-party data is committed.** QuestieDB lives in
-`~/.hwc`. The repo holds only the loaders and the structure-only `catalog/supplement.example.json`.
+`~/.hwc`. The repo holds only the loaders and the structure-only `catalog/counts.example.json`.
 
 Setup:
 
@@ -543,10 +542,30 @@ root, not the working directory.
 | Key | Default |
 |---|---|
 | `questie_dir` | the active release under `~/.hwc/questie/` |
-| `supplement` | `local/catalog/supplement.json` (format: `catalog/supplement.example.json`) |
+| `counts` | `local/catalog/counts.json` (format: `catalog/counts.example.json`) |
 
-The supplement holds hand-checked facts that QuestieDB lacks. Each entry
-names its source. It is optional and not committed.
+### Objective counts
+
+QuestieDB lists each quest's objectives (what to kill, loot or use) but not how
+many: Questie reads the "0/8" progress from the game. Each count is found, in
+this order:
+
+1. **The counts file**, when it has the quest. Entries are hand-checked, e.g.
+   in game, and each names how it was checked. An entry is matched by
+   objective kind (`npc`, `object` or `item`) and id, as `hwc quest <id>`
+   lists them; one that matches nothing is noted on the quest.
+2. **The quest's objective text** in QuestieDB: the number just before the
+   objective's name, in the same clause ("Sten Stoutarm would like 8 pieces of
+   Tough Wolf Meat"). A name the text gives with no number counts 1. That is
+   taken as checked when the context makes it one thing: a possessive name
+   ("Find Pamela's doll"), a singular word before it ("the Sparkling Stone",
+   "his head"), or a named NPC that is elite or has one or two spawns ("kill
+   Grik'nir the Cold"). A bare name with none of these ("some Soothing
+   Spices") is a guess, so the quest stays unverified.
+3. **Otherwise 1**, assumed, and the quest is unverified.
+
+`hwc quest <id>` shows where each count came from (`count_from`) and why in
+`notes`. The counts file is optional and not committed.
 
 Every source is optional. A missing source is recorded in `sources` with
 `present: false`, never treated as an error; a partial QuestieDB copy is recorded as `present: "partial"` with the missing files listed. The catalog is loaded into

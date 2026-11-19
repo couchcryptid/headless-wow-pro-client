@@ -1,10 +1,10 @@
--- hwc quest <id>: a quest from the catalog, with its sources, as JSON. Needs no
+-- hwc quest <id>: a quest from the catalog (QuestieDB and the counts file), with its sources, as JSON. Needs no
 -- WoW-Pro folder.
 return {
   name = "quest",
   summary = "Print a quest from the catalog, with its sources, as JSON",
   usage = "<id>",
-  description = "Print a quest from the catalog (QuestieDB and the supplement), with its sources, as JSON.",
+  description = "Print a quest from the catalog (QuestieDB and the objective counts file), with its sources, as JSON.",
   positionals = { min = 1, max = 1, noun = "id" },
   check = function(opts)
     if not tonumber(opts.positionals[1]) then return "quest needs a numeric id" end

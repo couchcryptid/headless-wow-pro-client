@@ -1,12 +1,13 @@
--- hwc doctor [--json]: check LuaJIT, rocks, tools, the WoW-Pro folder, QuestieDB
--- and the supplement. Exit 1 when a check failed. Needs no WoW-Pro folder.
+-- hwc doctor [--json]: check LuaJIT, rocks, tools, the WoW-Pro folder, QuestieDB and
+-- the objective counts file.
+-- Exit 1 when a check failed. Needs no WoW-Pro folder.
 local update = require("hwc.cli.update")
 
 return {
   name = "doctor",
-  summary = "Check LuaJIT, rocks, tools, the WoW-Pro folder, that the addon loads, QuestieDB and the supplement",
+  summary = "Check LuaJIT, rocks, tools, the WoW-Pro folder, that the addon loads, QuestieDB and the counts file",
   usage = "[--json]",
-  description = "Check LuaJIT, rocks, tools, the WoW-Pro folder, that the addon loads, QuestieDB and the supplement.",
+  description = "Check LuaJIT, rocks, tools, the WoW-Pro folder, that the addon loads, QuestieDB and the counts file.",
   options = {
     { name = "json", flag = true, help = "Print the report as JSON." },
   },

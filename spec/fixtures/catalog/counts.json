@@ -1,0 +1,5 @@
+{"quests": {
+  "1001": {"source": "fixture hand check", "objectives": [{"kind": "item", "id": 5001, "count": 4}]},
+  "1004": {"source": "fixture hand check", "objectives": [{"kind": "npc", "id": 9999, "count": 2}]},
+  "1012": {"source": "fixture hand check", "objectives": [{"kind": "item", "id": 5001, "count": 5}]}
+}}

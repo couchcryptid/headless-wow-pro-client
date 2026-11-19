@@ -76,15 +76,15 @@ describe("config.load", function()
     local qroot = store.root()
     local tag = store.active(qroot)
     assert.are.equal(tag and store.version_dir(qroot, tag) or nil, c.questie_dir)
-    assert.are.equal(root .. "/local/catalog/supplement.json", c.supplement)
+    assert.are.equal(root .. "/local/catalog/counts.json", c.counts)
     os.execute("rm -rf '" .. dir .. "'")
   end)
 
   it("keeps absolute catalog paths and resolves relative overrides against the repo root", function()
     local dir = fake_addon()
-    local c = config.load({ addon_path = dir, catalog = { questie_dir = "/abs/questie", supplement = "x/s.json" } }).catalog
+    local c = config.load({ addon_path = dir, catalog = { questie_dir = "/abs/questie", counts = "x/c.json" } }).catalog
     assert.are.equal("/abs/questie", c.questie_dir)
-    assert.are.equal(config.repo_root() .. "/x/s.json", c.supplement)
+    assert.are.equal(config.repo_root() .. "/x/c.json", c.counts)
     os.execute("rm -rf '" .. dir .. "'")
   end)
 

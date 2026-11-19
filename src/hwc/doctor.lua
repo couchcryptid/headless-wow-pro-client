@@ -1,6 +1,5 @@
 -- `hwc doctor`: a read-only health report (design spec §4.4). Every check is
 -- {id, status = ok|warn|fail|skip, detail, fix?}; `failed` is true if any fail.
-local dkjson = require("dkjson")
 local json = require("hwc.json")
 local home = require("hwc.questie.home")
 local tocmeta = require("hwc.questie.tocmeta")
@@ -180,37 +179,35 @@ local function questie_checks(env, deps, out)
   end
 end
 
-local function check_supplement(deps)
-  local path = deps.supplement_path or require("hwc.config").load({}).catalog.supplement
+-- The hand-checked objective counts file: optional; every entry must be valid.
+local function check_counts(deps)
+  local path = deps.counts_path or require("hwc.config").load({}).catalog.counts
   local f = io.open(path, "rb")
-  if not f then
-    return check("supplement", "warn", "absent (optional): " .. path)
-  end
+  if not f then return check("counts", "warn", "absent (optional; objective counts assumed 1): " .. path) end
   local text = f:read("*a")
   f:close()
-  local obj, _, jerr = dkjson.decode(text)
+  local obj, _, jerr = require("dkjson").decode(text)
   if jerr or type(obj) ~= "table" then
-    return check("supplement", "fail", path .. ": invalid JSON" .. (jerr and (": " .. jerr) or ""))
+    return check("counts", "fail", path .. ": invalid JSON" .. (jerr and (": " .. jerr) or ""))
   end
-  local quests = obj.quests
-  if quests ~= nil and type(quests) ~= "table" then
-    return check("supplement", "fail", path .. ": quests is not an object")
+  if obj.quests ~= nil and type(obj.quests) ~= "table" then
+    return check("counts", "fail", path .. ": quests is not an object")
   end
+  local problem_of = require("hwc.catalog").counts_entry_problem
   local bad = {}
-  for id, entry in pairs(quests or {}) do
-    if type(entry) ~= "table" or type(entry.source) ~= "string" or entry.source == "" then
-      bad[#bad + 1] = tostring(id)
-    end
+  for id, entry in pairs(obj.quests or {}) do
+    local p = problem_of(entry)
+    if p then bad[#bad + 1] = "quest " .. tostring(id) .. " " .. p end
   end
   if #bad > 0 then
     table.sort(bad)
-    return check("supplement", "fail", path .. ": quest " .. table.concat(bad, ", ") .. " has no source")
+    return check("counts", "fail", path .. ": " .. table.concat(bad, "; "))
   end
-  return check("supplement", "ok", "present, valid: " .. path)
+  return check("counts", "ok", "present, valid: " .. path)
 end
 
 -- env = {pwd, cwd, home, hwc_home}; deps = {get_json, has_tool, require_ok}
--- (plus supplement_path and luajit_version overrides for specs).
+-- (plus counts_path and luajit_version overrides for specs).
 function M.run(env, deps)
   env, deps = env or {}, deps or {}
   deps.has_tool = deps.has_tool or default_has_tool
@@ -223,7 +220,7 @@ function M.run(env, deps)
     check_addon(env, deps),
   }
   questie_checks(env, deps, checks)
-  checks[#checks + 1] = check_supplement(deps)
+  checks[#checks + 1] = check_counts(deps)
   local failed = false
   for _, c in ipairs(checks) do
     if c.status == "fail" then failed = true end

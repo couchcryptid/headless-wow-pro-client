@@ -31,13 +31,13 @@ function M.default_questie_dir()
   return ok and dir or nil
 end
 
--- Catalog sources (design spec §6). All optional; relative paths resolve
--- against the repo root.
+-- Catalog sources (design spec §6): QuestieDB and the hand-checked objective
+-- counts. Both optional; relative paths resolve against the repo root.
 local function catalog_config(c)
   c = c or {}
   return {
     questie_dir = c.questie_dir and resolve(c.questie_dir) or M.default_questie_dir(),
-    supplement = resolve(c.supplement or "local/catalog/supplement.json"),
+    counts = resolve(c.counts or "local/catalog/counts.json"),
   }
 end
 

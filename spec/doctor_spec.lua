@@ -40,7 +40,7 @@ local function fake_github(tag)
 end
 
 describe("doctor", function()
-  local root, cwd, supplement, env, deps
+  local root, cwd, counts, env, deps
 
   local function by_id(report)
     local out = {}
@@ -50,7 +50,7 @@ describe("doctor", function()
 
   before_each(function()
     root, cwd = tmpdir(), tmpdir()
-    supplement = tmpdir() .. "/supplement.json"
+    counts = tmpdir() .. "/counts.json"
     env = { pwd = cwd, cwd = cwd, home = "/nonexistent-home", hwc_home = root }
     write(root .. "/questie/active", "v1.1.2\n")
     write(root .. "/questie/v1.1.2/QuestieDB/QuestieDB_Forever.toc",
@@ -59,7 +59,7 @@ describe("doctor", function()
       get_json = fake_github("v1.1.2"),
       has_tool = function() return true end,
       require_ok = function() return true end,
-      supplement_path = supplement,
+      counts_path = counts,
       luajit_version = "LuaJIT 2.1.1700000000",
     }
   end)
@@ -74,11 +74,11 @@ describe("doctor", function()
     assert.are.equal("contract 4-4 includes 4", c["questie-contract"].detail)
     assert.are.equal("up to date (v1.1.2)", c["questie-upstream"].detail)
     assert.are.equal("warn", c.wowpro.status)
-    assert.are.equal("warn", c.supplement.status)
+    assert.are.equal("warn", c.counts.status)
     local order = {}
     for i, x in ipairs(report.checks) do order[i] = x.id end
     assert.are.same({ "luajit", "rocks", "tools", "wowpro", "addon", "questie", "questie-toc",
-      "questie-contract", "questie-upstream", "supplement" }, order)
+      "questie-contract", "questie-upstream", "counts" }, order)
   end)
 
   it("warns, and still reports everything, when upstream is unreachable", function()
@@ -177,20 +177,23 @@ describe("doctor", function()
     assert.are.equal("ok", by_id(doctor.run(env, deps)).wowpro.status)
   end)
 
-  it("validates the supplement", function()
-    write(supplement, dkjson.encode({ quests = { ["12"] = { name = "x" } } }))
-    assert.are.equal("fail", by_id(doctor.run(env, deps)).supplement.status)
-    write(supplement, dkjson.encode({ quests = { ["12"] = { source = "hand check" } } }))
-    assert.are.equal("ok", by_id(doctor.run(env, deps)).supplement.status)
-    write(supplement, "{nope")
-    assert.are.equal("fail", by_id(doctor.run(env, deps)).supplement.status)
+  it("validates the objective counts file", function()
+    local entry = { kind = "item", id = 750, count = 8 }
+    write(counts, dkjson.encode({ quests = { ["179"] = { objectives = { entry } } } }))
+    local c = by_id(doctor.run(env, deps)).counts
+    assert.are.equal("fail", c.status)
+    assert.is_truthy(c.detail:find("quest 179 has no source", 1, true))
+    write(counts, dkjson.encode({ quests = { ["179"] = { source = "in game", objectives = { entry } } } }))
+    assert.are.equal("ok", by_id(doctor.run(env, deps)).counts.status)
+    write(counts, "{nope")
+    assert.are.equal("fail", by_id(doctor.run(env, deps)).counts.status)
   end)
 
   it("renders text and json", function()
     local report = doctor.run(env, deps)
     local text = doctor.text(report)
     assert.is_truthy(text:find("ok   luajit: ", 1, true))
-    assert.is_truthy(text:find("warn supplement: ", 1, true))
+    assert.is_truthy(text:find("warn counts: ", 1, true))
     local decoded = dkjson.decode(doctor.json(report))
     assert.are.equal(false, decoded.failed)
     assert.are.equal(10, #decoded.checks)

@@ -140,7 +140,7 @@
         "kind":"exclude",
         "pattern":"WoWPro_Leveling/Guides/Alliance/Elw_*"
       }],
-    "gaps":["rested XP","Forever Boosted Rest from campfires","party XP for non-elites (spec §5.5)","dungeon runs and instance XP (spec §3)","Camping 101 quests are recognised only by name from the local supplement (no catalog source names them); without it, characters with professions play like ones with none","talk-to NPC objectives may be credited as kills","quest rewards give one of each item QuestieDB lists, choice rewards included","subzones are known only from R steps; steps gated on a subzone by IZ may stay hidden","reputation is gained from quest rewards only (no kills, item turn-ins or encounters)"],
+    "gaps":["rested XP","Forever Boosted Rest from campfires","party XP for non-elites (spec §5.5)","dungeon runs and instance XP (spec §3)","objective counts aren't in QuestieDB: each is taken as 1 unless the counts file gives it, so kills and kill XP run short","talk-to NPC objectives may be credited as kills","quest rewards give one of each item QuestieDB lists, choice rewards included","subzones are known only from R steps; steps gated on a subzone by IZ may stay hidden","reputation is gained from quest rewards only (no kills, item turn-ins or encounters)"],
     "guides":[{
         "end_level":5,
         "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
