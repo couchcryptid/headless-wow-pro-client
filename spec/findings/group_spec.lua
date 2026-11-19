@@ -330,6 +330,45 @@ describe("group.findings", function()
     }, sev)
   end)
 
+  it("grades below-level and level-check findings on the one gap scale", function()
+    local function sev(sig)
+      sig.gid, sig.file, sig.line, sig.action, sig.name, sig.qid = "G", "f", 1, "A", "q", 9
+      return group.findings({ runlog("Dwarf", "WARRIOR", { sig }) })[1]
+    end
+    assert.equal("high", sev({ signal = "below-level", levels_short = 4.5 }).severity)
+    assert.equal("medium", sev({ signal = "below-level", levels_short = 3.9 }).severity)
+    assert.equal("low", sev({ signal = "level-check", gap = 1.4 }).severity)
+    assert.equal("medium", sev({ signal = "level-check", gap = 2.0 }).severity)
+    assert.equal("high", sev({ signal = "level-check", gap = 4.0 }).severity)
+  end)
+
+  it("grades a group spanning characters by the largest gap, not the first character's", function()
+    local function sig(short)
+      return { signal = "below-level", gid = "G", file = "f", line = 1, action = "A", name = "q", qid = 9,
+        levels_short = short }
+    end
+    local fs = group.findings({
+      runlog("Dwarf", "WARRIOR", { sig(0.9) }),
+      runlog("Gnome", "MAGE", { sig(3.0) }),
+    })
+    assert.equal(1, #fs)
+    assert.equal(3.0, fs[1].levels_short)
+    assert.equal("medium", fs[1].severity)
+  end)
+
+  it("grades below-level by levels_short", function()
+    local function sev(sig)
+      sig.gid, sig.file, sig.line, sig.action, sig.name, sig.qid = "G", "f", 1, "A", "q", 9
+      return group.findings({ runlog("Dwarf", "WARRIOR", { sig }) })[1]
+    end
+    assert.equal("low", sev({ signal = "below-level", levels_short = 0.9 }).severity)
+    assert.equal("low", sev({ signal = "below-level", levels_short = 1.9 }).severity)
+    assert.equal("medium", sev({ signal = "below-level", levels_short = 2.0 }).severity)
+    assert.equal("medium", sev({ signal = "below-level", levels_short = 2.5 }).severity)
+    assert.equal(2.5, sev({ signal = "below-level", levels_short = 2.5 }).levels_short)
+    assert.equal("high", sev({ signal = "below-level", levels_short = 4.5 }).severity)
+  end)
+
   it("carries a rep-faction-unmet signal's faction, name and tag name onto its finding", function()
     local fs = group.findings({ runlog("Dwarf", "WARRIOR", { { signal = "rep-faction-unmet", gid = "G", file = "f",
       line = 6, action = "C", name = "r", qid = 3, faction = 91, faction_name = "Faction 91",

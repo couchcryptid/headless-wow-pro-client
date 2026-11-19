@@ -811,6 +811,89 @@ describe("driver.run", function()
     assert.same({ "G1:1", "G1:2", "G1:3", "G1:5" }, E.manual)
   end)
 
+  describe("quest difficulty", function()
+    -- The client grades whether the character can accept a quest, not how hard it is: a played
+    -- accept far above or below the character's level, at or above its required level, is no finding.
+    local function played(char_level, quest)
+      local steps = { { action = "A", name = "Q", qids = { 5 } }, { action = "C", name = "Q", qids = { 5 } },
+        { action = "T", name = "Q", qids = { 5 } } }
+      local world = fx.fake_world({ [5] = quest })
+      world.player.level = char_level
+      return drive(one_guide(steps), { G1 = { { complete = { 1 } }, { complete = { 2 } }, { complete = { 3 } } } }, {}, world)
+    end
+
+    -- The guide's end-of-guide D step adds an expected manual-completion; it is not a finding about the quest.
+    local function names(log)
+      local o = {}
+      for _, s in ipairs(log.signals) do
+        if s.signal ~= "manual-completion" then o[#o + 1] = s.signal end
+      end
+      return o
+    end
+
+    it("emits no finding for an accept 5 or more levels below the quest's level", function()
+      assert.same({}, names(played(30, { name = "Hard", level = 36, required_level = 1 })))
+    end)
+    it("emits no finding for a quest far below the character", function()
+      assert.same({}, names(played(30, { name = "Old", level = 5, required_level = 1 })))
+    end)
+    it("still emits below-level for an accept below the required level", function()
+      local steps = { { action = "A", name = "Q", qids = { 5 },
+        outcome = { kind = "acted", grind = { kills = 9, to = 33, short = 4.5 } } } }
+      local world = fx.fake_world({ [5] = { name = "Q", level = 33, required_level = 33 } })
+      world.player.level = 30
+      local log = drive(one_guide(steps), { G1 = { { complete = { 1 } } } }, {}, world)
+      assert.same({ "below-level" }, names(log))
+    end)
+  end)
+
+  describe("level gap", function()
+    -- Accept (A), then the do steps. Quest 5 is level 26; the character is level 20 at the accept.
+    local function play(steps, script, quest, level)
+      local world = fx.fake_world({ [5] = quest or { name = "Hard", level = 26 }, [6] = { name = "Other", level = 40 } })
+      world.player.level = level or 20
+      return drive(one_guide(steps), script, {}, world)
+    end
+
+    it("emits level-check with the gap when an L step ground to its check point", function()
+      local steps = { { action = "L", name = "Level 2", tags = { level = "2;-650" },
+        outcome = { kind = "acted", level_grind = { kills = 7, to = 2, point = 250, offset = -650, short = 1.0 } } } }
+      local log = play(steps, { G1 = { { complete = { 1 } } } })
+      local c = signals(log, "level-check")
+      assert.equal(1, #c)
+      assert.equal(1.0, c[1].gap)
+      assert.same({ kills = 7, to = 2, point = 250, offset = -650 }, c[1].grind)
+      assert.same({}, signals(log, "below-level"))
+    end)
+    it("emits level-check on a non-L step carrying a LVL tag that ground", function()
+      local steps = { { action = "R", name = "Go", tags = { level = "3" },
+        outcome = { kind = "acted", level_grind = { kills = 3, to = 3, point = 0, offset = 0, short = 2.0 } } } }
+      local log = play(steps, { G1 = { { complete = { 1 } } } })
+      assert.equal(2.0, signals(log, "level-check")[1].gap)
+    end)
+    it("emits both below-level and level-check when an accept and its LVL tag both ground", function()
+      local steps = { { action = "A", name = "Q", qids = { 5 }, tags = { level = "8" },
+        outcome = { kind = "acted", grind = { kills = 9, to = 6, short = 2.0 },
+          level_grind = { kills = 4, to = 8, point = 0, offset = 0, short = 1.5 } } } }
+      local log = play(steps, { G1 = { { complete = { 1 } } } })
+      assert.equal(2.0, signals(log, "below-level")[1].levels_short)
+      assert.equal(1.5, signals(log, "level-check")[1].gap)
+    end)
+    it("emits no level-check when the step needed no grind", function()
+      local steps = { { action = "L", name = "Level 2", tags = { level = "2" }, outcome = { kind = "acted" } } }
+      assert.same({}, signals(play(steps, { G1 = { { complete = { 1 } } } }), "level-check"))
+    end)
+  end)
+
+  it("records levels_short from the grind on a below-level signal", function()
+    local steps = { { action = "A", name = "Low", qids = { 5 },
+      outcome = { kind = "acted", grind = { kills = 228, to = 32, short = 0.9 } } } }
+    local log = drive(one_guide(steps), {}, {}, fx.fake_world({ [5] = { name = "Low Quest" } }))
+    local b = signals(log, "below-level")
+    assert.equal(0.9, b[1].levels_short)
+    assert.same({ kills = 228, to = 32 }, b[1].grind)
+  end)
+
   it("carries the missing prerequisites and their names on a prerequisite accept-refused", function()
     local steps = {
       { action = "A", name = "The Reports", qids = { 291 },

@@ -190,7 +190,7 @@ Each step action maps to world changes and the events the real game fires. The s
 
 - **When the world refuses an action (user's decision, 2026-11-11):**
   - **Race, class, missing prerequisite or full log:** the world stays truthful. The quest never enters the log or the history. Its later steps become `orphan-turnin`, and anything gated on it stays hidden. Those downstream findings are **linked to their root-cause finding** ("caused by F-…"), so one guide bug reads as one finding with its consequences listed under it, not dozens of separate ones.
-  - **Under-levelled only:** the player grinds to the quest's required level (generic mobs at their own level, mob XP credited), then accepts. A `below-level` finding is recorded at **medium-high severity, tagged for routing triage**. The guide sent the player to a quest they couldn't take yet.
+  - **Under-levelled only:** the player grinds to the quest's required level (generic mobs at their own level, mob XP credited), then accepts. A `below-level` finding is recorded at **medium-high severity, tagged for routing triage** (now graded by levels short; medium-high only for older logs). The guide sent the player to a quest they couldn't take yet.
 - **Camping 101 quests (user's decision, 2026-11-11):**
   - **On accept, the client immediately completes and turns in a Camping 101 quest**, crediting its XP. The real objective is to level the profession to 20, and players do that in many ways: farming materials, the auction house, materials mailed from another character. The client abstracts it.
   - This is the one place the client acts on a quest without a guide step. It's logged as an `abstracted-turnin` event, not a finding.
@@ -249,7 +249,7 @@ A quest is an object: id, name, quest level, required level, races, classes, pre
 | `stuck` | the same step was active past the watchdog limit, or no step could be advanced |
 | `log-full` | an accept was refused because the log was full |
 | `accept-refused` | the catalog says the character can't take the quest (level, race, class, prerequisite) but the guide shows the accept |
-| `below-level` | an accept shown while the character is below the quest's catalog required level; the player grinds, then accepts. **Severity medium-high, tagged `needs-routing-triage`** (user's decision) |
+| `below-level` | an accept shown while the character is below the quest's catalog required level; the player grinds, then accepts. **Severity medium-high, tagged `needs-routing-triage`** (user's decision; now graded by levels short, medium-high only for older logs) |
 | `wrong-race-class` | a quest step (`A`/`C`/`K`/`T`) shown to a race or class the catalog excludes; a non-quest step's QID only drives its skip-when-complete check and isn't checked |
 | `leftover-quests` | checked once, at the end of the run (carrying a quest into the next guide is normal). A quest still in the log is a finding at the turn-in step the run passed for it; or, if it was accepted in an earlier guide than the one the run stopped in and no guide played turns it in, a finding at its accept with reason `not-turned-in` ("not turned in within scope"). A quest taken in the guide the run stopped in is listed in `RunLog.carried` and "About this run", not a finding |
 | `lua-error` | the addon raised an error (with stack) |
@@ -269,7 +269,7 @@ One markdown file per invocation: `findings/YYYY-MM-DD-<scope>.md`, for example 
   - the character matrix;
   - the non-modelled gaps (§5.5).
 - **One finding per suspected defect, not per character:** grouped by guide file, line and signal, with the list of affected race/class combinations. "Only Gnome Warlocks" stands out by contrast.
-- **Each finding:** a severity (my call: high for hidden or unreachable quests and Lua errors, medium-high for `below-level`, medium for `did-not-advance`/`stuck`, low for `leftover-quests` and `missing-global`); root-cause links (`caused by` / `causes`); a stable id; guide file:line; step text; signal; the engine's `why`; affected combinations; the steps just before and after; the quest log and level at that moment; and a data-confidence flag (verified catalog data, or "unverified quest data").
+- **Each finding:** a severity (my call: high for hidden or unreachable quests and Lua errors, medium-high for `below-level` (now graded by levels short; medium-high only for older logs), medium for `did-not-advance`/`stuck`, low for `leftover-quests` and `missing-global`); root-cause links (`caused by` / `causes`); a stable id; guide file:line; step text; signal; the engine's `why`; affected combinations; the steps just before and after; the quest log and level at that moment; and a data-confidence flag (verified catalog data, or "unverified quest data").
 - **Each finding has an empty `Triage:` block** for `/triage` to fill in.
 - **Per-character run logs** (JSON) sit beside it, uncommitted by default, so any finding can be traced step by step.
 

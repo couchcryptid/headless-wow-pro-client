@@ -149,7 +149,7 @@ a { color: var(--accent); }
 .trk-sub { display: flex; flex-direction: column; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .lv.has-tip { position: relative; align-self: flex-start; cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
 
-/* the level flag: same family as below-level, drawn in its colour */
+/* the level flag: a small pill coloured by the finding's severity (--mh) */
 .flag { position: relative; display: inline-flex; flex: none; cursor: help; border-radius: 4px; }
 .flag-mark {
   display: inline-block; padding: 0 5px; border-radius: 4px; font-size: 10px; line-height: 16px; font-weight: 700;

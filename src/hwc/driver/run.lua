@@ -549,9 +549,17 @@ function Driver:refusals(cur, out)
         end
       end
     end
-  elseif out.kind == "acted" and out.grind and cur.action == "A" then
-    self:signal("below-level", cur, { qid = out.qid, reason = "below-level", outcome = out.kind,
-      grind = { kills = out.grind.kills, to = out.grind.to } })
+  elseif out.kind == "acted" then
+    if out.grind and cur.action == "A" then
+      self:signal("below-level", cur, { qid = out.qid, reason = "below-level", outcome = out.kind,
+        grind = { kills = out.grind.kills, to = out.grind.to }, levels_short = out.grind.short })
+    end
+    local lg = out.level_grind
+    if lg then
+      -- A level check (L step, or a plain LVL tag on any other step) the character arrived below.
+      self:signal("level-check", cur, { reason = "level-check", outcome = out.kind, gap = lg.short,
+        grind = { kills = lg.kills, to = lg.to, point = lg.point, offset = lg.offset } })
+    end
   end
 end
 
@@ -564,7 +572,8 @@ function Driver:snapshot(cur, why, rows, out)
     qids = copy_array(cur.qids), line = cur.line, why = why, rows = row_idx,
     outcome = {
       kind = out.kind, reason = out.reason, qid = out.qid, events = copy_array(out.events),
-      levels = out.levels, grind = out.grind and { kills = out.grind.kills, to = out.grind.to } or nil,
+      levels = out.levels, grind = (out.grind or out.level_grind) and { kills = (out.grind or out.level_grind).kills,
+        to = (out.grind or out.level_grind).to } or nil,
       elite = out.elite,
       -- spec §5.2: the Camping 101 abstraction is "logged as an abstracted-turnin event".
       abstracted_turnin = out.abstracted_turnin,

@@ -81,6 +81,7 @@
       "did-not-advance":"Doesn't advance",
       "hidden-use-step":"Use step never shown",
       "leftover-quests":"Left in log",
+      "level-check":"Level check reached short",
       "log-full":"Quest log full",
       "lua-error":"Lua error",
       "manual-completion":"Manual click",

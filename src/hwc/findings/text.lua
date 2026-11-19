@@ -3,6 +3,7 @@
 -- here, so the wording lives in one place and the HTML page holds none.
 local RACES = require("hwc.world.player").RACES
 local reputation = require("hwc.world.reputation")
+local gap = require("hwc.findings.gap")
 
 local text = {}
 
@@ -53,6 +54,7 @@ text.SIGNALS = {
   ["orphan-turnin"] = "Turn-in without the quest",
   ["wrong-race-class"] = "Wrong race or class",
   ["below-level"] = "Offered below level",
+  ["level-check"] = "Level check reached short",
   ["did-not-advance"] = "Doesn't advance",
   ["manual-completion"] = "Manual click",
   ["stuck"] = "Stuck",
@@ -314,7 +316,10 @@ function text.title(f)
   elseif s == "wrong-race-class" then
     return nm .. " is shown to the wrong " .. (kind_of(f) or "race/class")
   elseif s == "below-level" then
+    if f.levels_short then return nm .. " is offered " .. gap.text(f.levels_short) .. " levels below the level it requires" end
     return nm .. " is offered below its level"
+  elseif s == "level-check" and f.gap then
+    return "The guide's level check " .. quoted(f.name or "") .. " is reached " .. gap.text(f.gap) .. " levels short"
   elseif s == "did-not-advance" then
     return nm .. " doesn't advance"
   elseif s == "manual-completion" then
@@ -445,11 +450,29 @@ local function clauses(f, ctx)
     -- The signal fires after the grind, so f.level is the level the client
     -- ground up to, not the level the guide reached the accept at.
     local g = f.grind
-    if g and g.to and g.kills then
+    if f.levels_short and g and g.to and g.kills then
+      local out = "The guide reaches this accept " .. gap.text(f.levels_short) .. " levels below level "
+        .. tostring(g.to) .. ", the level the quest requires (the client ground " .. tostring(g.kills)
+        .. " kills to get there)."
+      if f.levels_short < gap.MEDIUM then out = out .. " " .. gap.MARGIN_SENTENCE end
+      return out
+    elseif g and g.to and g.kills then
       return "The guide reaches this accept below level " .. tostring(g.to) .. ", the level the quest requires; "
         .. "the client ground " .. tostring(g.kills) .. " kills to get there."
     end
     return "The guide reaches this accept below the level the quest requires."
+  elseif s == "level-check" and f.gap then
+    local g = f.grind or {}
+    local point = ""
+    if (g.offset or 0) < 0 then
+      point = ", within " .. tostring(-g.offset) .. " XP of level " .. tostring(g.to + 1)
+    elseif (g.offset or 0) > 0 then
+      point = ", with at least " .. tostring(g.offset) .. " XP"
+    end
+    local out = "The client ground " .. tostring(g.kills) .. " kills to reach the point the guide checks (level "
+      .. tostring(g.to) .. point .. ")."
+    if f.gap < gap.MEDIUM then out = out .. " " .. gap.MARGIN_SENTENCE end
+    return out
   elseif s == "did-not-advance" then
     -- The reason is the refusal of the client's action (driver.actions); none means it acted.
     local r = (f.reasons or {})[1]

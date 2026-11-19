@@ -34,7 +34,11 @@ export interface Finding {
   use?: string;
   /** Item id (as a string) to quantity. */
   loot?: Record<string, number>;
-  grind?: { kills: number; to: number };
+  grind?: { kills: number; to: number; short?: number; point?: number; offset?: number };
+  /** below-level: levels short of the quest's level, to a tenth. */
+  levels_short?: number;
+  /** level-check: the gap in levels from the fractional level, to a tenth. */
+  gap?: number;
   message?: string;
   stack?: string;
   /** Id of the finding this one follows from. */

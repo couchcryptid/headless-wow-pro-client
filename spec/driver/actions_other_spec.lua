@@ -359,7 +359,7 @@ describe("actions.perform: level and training", function()
     assert.are.equal(4, w.player.level)
     assert.are.equal(3, o.levels)
     assert.is_true(E.updates >= 1)
-    assert.are.equal(4, o.grind.to)
+    assert.are.equal(4, o.level_grind.to)
   end)
 
   it("any step with LVL|n above the player's level grinds; at or above is a noop", function()
@@ -370,6 +370,87 @@ describe("actions.perform: level and training", function()
     local o = actions.perform(ctx, step("N", {}, { level = "3" }))
     assert.are.equal("noop", o.kind)
     assert.are.equal(0, E.updates)
+  end)
+
+  it("LVL|2;-650 at level 2 with 900 to go grinds to within 650 of the next level", function()
+    local ctx, _, w = setup()
+    w.player.level, w.player.xp = 2, 0
+    local o = actions.perform(ctx, step("L", {}, { level = "2;-650" }))
+    assert.are.equal("acted", o.kind)
+    assert.is_true(o.level_grind.kills > 0)
+    assert.are.equal(2, o.level_grind.to)
+    assert.are.equal(2, w.player.level)
+    assert.is_true(w.player:xp_max() - w.player.xp <= 650)
+  end)
+
+  it("records the gap in levels, from the real XP before the grind, on a level-check grind", function()
+    local ctx, _, w = setup()
+    w.player.level, w.player.xp = 1, 324 -- level 1.81
+    local o = actions.perform(ctx, step("L", {}, { level = "2;-650" }))
+    -- The check point is level 2 + 250/900 (900 to go minus 650); the gap is 0.47 from 1.81.
+    assert.are.equal(0.5, o.level_grind.short)
+    assert.are.equal(-650, o.level_grind.offset)
+    local ctx2, _, w2 = setup()
+    local o2 = actions.perform(ctx2, step("L", {}, { level = "4" }))
+    assert.are.equal(3.0, o2.level_grind.short)
+    assert.are.equal(0, o2.level_grind.offset)
+    assert.are.equal(4, w2.player.level)
+  end)
+
+  it("LVL|2;-650 with 400 to go does not grind", function()
+    local ctx, _, w = setup()
+    w.player.level = 2
+    w.player.xp = w.player:xp_max() - 400
+    local o = actions.perform(ctx, step("L", {}, { level = "2;-650" }))
+    assert.is_nil(o.level_grind)
+    assert.are.equal("noop", o.kind)
+  end)
+
+  it("LVL|2;-650 at level 3 does not grind", function()
+    local ctx, _, w = setup()
+    w.player.level, w.player.xp = 3, 0
+    local o = actions.perform(ctx, step("L", {}, { level = "2;-650" }))
+    assert.is_nil(o.level_grind)
+    assert.are.equal(3, w.player.level)
+  end)
+
+  it("LVL|5;300 at level 5 with 100 XP grinds to at least 300 XP", function()
+    local ctx, E, w = setup()
+    w.player.level, w.player.xp = 5, 100
+    local o = actions.perform(ctx, step("L", {}, { level = "5;300" }))
+    assert.is_true(o.level_grind.kills > 0)
+    assert.is_true(w.player.level > 5 or w.player.xp >= 300)
+    assert.is_true(E.updates >= 1)
+  end)
+
+  it("a non-L step with an offset LVL tag never grinds (WoWPro completes it at the point)", function()
+    local ctx, _, w = setup()
+    w.player.level, w.player.xp = 2, 0
+    local o = actions.perform(ctx, step("R", {}, { level = "5;-495" }))
+    assert.is_nil(o.level_grind)
+    assert.are.equal(2, w.player.level)
+    assert.are.equal(0, w.player.xp)
+    o = actions.perform(ctx, step("N", {}, { level = "2;-650" }))
+    assert.is_nil(o.level_grind)
+    assert.are.equal(0, w.player.xp)
+  end)
+
+  it("LVL|60;-500 at the cap does not error and grinds nothing", function()
+    local ctx, _, w = setup()
+    w.player.level, w.player.xp = 60, 0
+    local o
+    assert.has_no.errors(function() o = actions.perform(ctx, step("L", {}, { level = "60;-500" })) end)
+    assert.is_nil(o.level_grind)
+    assert.are.equal("noop", o.kind)
+  end)
+
+  it("LVL|60;-500 below the cap grinds to the cap without error", function()
+    local ctx, _, w = setup()
+    w.player.level, w.player.xp = 59, 0
+    local o
+    assert.has_no.errors(function() o = actions.perform(ctx, step("L", {}, { level = "60;-500" })) end)
+    assert.are.equal(60, w.player.level)
+    assert.are.equal(0, o.level_grind.point)
   end)
 
   it("= with a P tag trains the profession, firing SKILL_LINES_CHANGED and SPELLS_CHANGED", function()

@@ -26,6 +26,7 @@ describe("text constants", function()
       ["orphan-turnin"] = "Turn-in without the quest",
       ["wrong-race-class"] = "Wrong race or class",
       ["below-level"] = "Offered below level",
+      ["level-check"] = "Level check reached short",
       ["did-not-advance"] = "Doesn't advance",
       ["manual-completion"] = "Manual click",
       ["stuck"] = "Stuck",
@@ -419,6 +420,52 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     assert.equal('"Low" is offered below its level', t)
     assert.equal("The guide reaches this accept below level 6, the level the quest requires; "
       .. "the client ground 12 kills to get there.", s)
+  end)
+  it("below-level words the levels short, and explains a gap under 2", function()
+    local f = { signal = "below-level", name = "The Haunted Isle", qid = 7, level = 32, levels_short = 0.9,
+      grind = { kills = 228, to = 32 } }
+    local t, s = both(F(f))
+    assert.equal('"The Haunted Isle" is offered 0.9 levels below the level it requires', t)
+    assert.equal("The guide reaches this accept 0.9 levels below level 32, the level the quest requires "
+      .. "(the client ground 228 kills to get there). Gaps under 2 levels are within what the simulation's "
+      .. "missing XP explains (no incidental kills or rested XP).", s)
+    f.levels_short = 2.5
+    t, s = both(F(f))
+    assert.equal('"The Haunted Isle" is offered 2.5 levels below the level it requires', t)
+    assert.equal("The guide reaches this accept 2.5 levels below level 32, the level the quest requires "
+      .. "(the client ground 228 kills to get there).", s)
+  end)
+  it("below-level under 0.1 levels short says less than 0.1", function()
+    local t, s = both(F({ signal = "below-level", name = "Tiny", qid = 7, level = 8, levels_short = 0.04,
+      grind = { kills = 2, to = 8 } }))
+    assert.equal('"Tiny" is offered less than 0.1 levels below the level it requires', t)
+    assert.equal("The guide reaches this accept less than 0.1 levels below level 8, the level the quest requires "
+      .. "(the client ground 2 kills to get there). Gaps under 2 levels are within what the simulation's "
+      .. "missing XP explains (no incidental kills or rested XP).", s)
+    t = both(F({ signal = "below-level", name = "Tiny", qid = 7, levels_short = 0, grind = { kills = 2, to = 8 } }))
+    assert.equal('"Tiny" is offered less than 0.1 levels below the level it requires', t)
+  end)
+  it("words a level check by its gap and its check point", function()
+    local f = { signal = "level-check", name = "Level 2", qid = nil, gap = 1.0,
+      grind = { kills = 40, to = 2, point = 250, offset = -650 } }
+    local t, s = both(F(f))
+    assert.equal('The guide\'s level check "Level 2" is reached 1.0 levels short', t)
+    assert.equal("The client ground 40 kills to reach the point the guide checks "
+      .. "(level 2, within 650 XP of level 3). " .. require("hwc.findings.gap").MARGIN_SENTENCE, s)
+    f.gap, f.grind = 2.5, { kills = 90, to = 5, point = 300, offset = 300 }
+    t, s = both(F(f))
+    assert.equal('The guide\'s level check "Level 2" is reached 2.5 levels short', t)
+    assert.equal("The client ground 90 kills to reach the point the guide checks (level 5, with at least 300 XP).", s)
+    f.gap, f.grind = 0.04, { kills = 1, to = 5, point = 0, offset = 0 }
+    t, s = both(F(f))
+    assert.equal('The guide\'s level check "Level 2" is reached less than 0.1 levels short', t)
+    assert.truthy(s:find("(level 5).", 1, true))
+  end)
+  it("words below-level at 4 levels or more without the margin sentence", function()
+    local _, s = both(F({ signal = "below-level", name = "Low", qid = 7, levels_short = 4.5,
+      grind = { kills = 9, to = 9 } }))
+    assert.equal("The guide reaches this accept 4.5 levels below level 9, the level the quest requires "
+      .. "(the client ground 9 kills to get there).", s)
   end)
   it("below-level without a grind stays neutral", function()
     local _, s = both(F({ signal = "below-level", name = "Low", qid = 7, level = 4 }))

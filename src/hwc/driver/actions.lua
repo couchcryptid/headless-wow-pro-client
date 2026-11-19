@@ -44,6 +44,8 @@
 -- (alternatives such as 5926^5927^5928 are race/class variants); C/K/T act on the
 -- first listed id in the log (qids[1] when none is).
 local kills = require("hwc.world.kills")
+local xp = require("hwc.world.xp")
+local gap = require("hwc.findings.gap")
 local stubs_core = require("hwc.stubs.core")
 
 local actions = {}
@@ -257,8 +259,10 @@ local function perform_accept(ctx, step, out)
     -- Under-levelled only (spec §5.2): grind generic mobs to the required level,
     -- fire nothing until the ding, force the update, then accept.
     local target = w.catalog:quest(qid).required_level
+    -- Levels short of the target, from the real XP before the grind, to one decimal.
+    local short = gap.round(target - w.player:fractional_level())
     local n, _, levels = kills.grind_to(w.player, target)
-    out.grind = { kills = n, to = target }
+    out.grind = { kills = n, to = target, short = short }
     out.levels = out.levels + levels
     after_levels(ctx, levels)
   end
@@ -697,15 +701,40 @@ local function perform_trash(ctx, step, out)
   fire(ctx, out, "BAG_UPDATE", 0)
 end
 
+-- LVL is `level` or `level;offset` (WoWPro_Broker.lua:2597-2645): a positive offset is an XP
+-- point at that level, a negative one is that many XP short of the next level. The character
+-- ends at max(check, actual): grind only when below the check point. On a step that is not an L
+-- step an offset tag never hides it (WoWPro_Broker.lua:2648-2680); the addon just completes it at
+-- the XP point, so grinding there would invent XP the guide never asks for: only a plain
+-- integer LVL grinds (Ruling G).
 local function perform_level(ctx, step, out)
   local w = ctx.world
-  local want = tonumber(tostring(step.tags and step.tags.level or ""):match("%d+"))
-  if not want or w.player.level >= want then return end
-  local n, _, levels = kills.grind_to(w.player, want)
+  local tag = tostring(step.tags and step.tags.level or "")
+  local want = tonumber(tag:match("^%s*(%d+)"))
+  if not want then return end
+  local offset = tonumber(tag:match(";%s*(-?%d+)")) or 0
+  if step.action ~= "L" and tag:find(";", 1, true) then return end
+  local p = w.player
+  -- At the cap there is no next level: the cap itself is the check, so the point is 0.
+  local point = offset
+  if want >= xp.CAP_LEVEL then
+    point = 0
+  elseif offset < 0 then
+    point = math.max(0, xp.to_next(want) + offset)
+  end
+  if p.level > want or (p.level == want and p.xp >= point) then return end
+  -- Levels short of the check point, from the real XP before the grind, to one decimal.
+  local at_point = want + (want < xp.CAP_LEVEL and point / xp.to_next(want) or 0)
+  local short = gap.round(at_point - p:fractional_level())
+  local n, _, levels = kills.grind_to_point(p, want, point)
+  if n == 0 then return end
   out.kind = "acted"
-  out.grind = { kills = n, to = want }
+  -- Kept apart from out.grind: the accept's own grind (below-level) may share this step.
+  out.level_grind = { kills = n, to = want, point = point, offset = offset, short = short }
   out.levels = out.levels + levels
-  after_levels(ctx, levels)
+  -- The addon has no XP handler either: an XP-only grind (no ding) still needs the guide
+  -- re-evaluated, or the L step's own check never runs.
+  ctx.engine:update_guide()
 end
 
 -- The tags every step can carry, applied after the step's own rule.

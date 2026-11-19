@@ -277,6 +277,36 @@ Blizzard's Forever race/class table
 guide tags: the guide is what's under test, and a guide edit must not change
 which characters are played.
 
+## Level findings
+
+Every point where the harness compares the character's level with what the guide
+or a quest expects reports the size of the gap, in levels, on one scale. The gap
+is fractional levels from real XP (`level + xp / xp.to_next(level)`), rounded to
+one decimal:
+
+| Gap | Severity |
+|---|---|
+| under 2 levels | low (within what the simulation's missing XP explains: no incidental kills or rested XP) |
+| 2 to under 4 | medium |
+| 4 or more | high |
+
+Two checks use it:
+
+| Check | Signal | Gap |
+|---|---|---|
+| The guide's level check (an `L` step, or a plain `LVL\|n` on any other step) when the character arrived below the check point and the client ground | `level-check` | check point minus the level before the grind |
+| An accept below the quest's required level (the client grinds to it) | `below-level` | levels short of the required level |
+
+The client grades only whether the character can accept a quest (the required
+level) and the guide's own level checks. It doesn't grade quest difficulty or
+colour (too hard, too easy): those are routing decisions for the guide, not for
+this client.
+
+Level checks (`L` steps) grind to the guide's `level;offset` check point, ending at
+`max(check, actual)`: the client grinds only when below the point and never moves the
+character back. Offset tags on other steps don't grind, since WoWPro never hides those
+steps; it just completes them at the XP point.
+
 ## Comparing runs
 
 `hwc diff` compares two findings files by finding id and tells you what a guide

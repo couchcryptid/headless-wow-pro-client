@@ -106,6 +106,12 @@ function Player:xp_max()
   return xp.to_next(self.level)
 end
 
+-- The level as a fraction from the real XP: level + xp / xp_max (a whole number at the cap).
+function Player:fractional_level()
+  local need = self:xp_max()
+  return self.level + (need > 0 and self.xp / need or 0)
+end
+
 -- Adds n XP, carrying the remainder across levels. XP is discarded once the cap level is reached.
 -- Returns the number of levels gained.
 function Player:add_xp(n)
