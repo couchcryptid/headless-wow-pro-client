@@ -40,22 +40,6 @@ describe("report.build", function()
     end
   end)
 
-  it("builds from an older run log holding retired quest colour signals", function()
-    local old = {}
-    for i, name in ipairs({ "quest-red", "quest-orange", "quest-grey", "quest-green" }) do
-      old[i] = { signal = name, gid = "G1", file = "a.lua", line = i, action = "C", name = "Old", qid = i,
-        quest_level = 40, char_level = 30, color = "red", gap = 3.0 }
-    end
-    local fs = group.findings({ runlog(old) })
-    local doc = dkjson.decode(json.encode(report.build(fs, header()), { indent = true }))
-    assert.equal(4, #doc.findings)
-    for _, f in ipairs(doc.findings) do
-      assert.is_true(#f.title > 0)
-      assert.is_true(#f.sentence > 0)
-      assert.is_string(doc.labels.signals[f.signal])
-    end
-  end)
-
   it("encodes zero findings as an empty array", function()
     local s = json.encode(report.build({}, header()))
     assert.truthy(s:find('"findings"%s*:%s*%[%s*%]'))

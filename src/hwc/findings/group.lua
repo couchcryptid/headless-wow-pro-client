@@ -37,10 +37,6 @@ local SEVERITY = {
   ["rep-faction-unmet"] = "medium",
   ["leftover-quests"] = "low", ["missing-global"] = "low",
 }
--- Retired signals: the client no longer emits them (it grades only whether the character can accept
--- a quest, not its colour), but an older run log may hold them. They keep their old fixed severity.
-local RETIRED = { ["quest-red"] = "high", ["quest-orange"] = "medium", ["quest-grey"] = "low", ["quest-green"] = "low" }
-for signal, severity in pairs(RETIRED) do SEVERITY[signal] = severity end
 local SEVERITY_ORDER = { "high", "medium-high", "medium", "low" }
 local SEVERITY_RANK = {}
 for i, s in ipairs(SEVERITY_ORDER) do SEVERITY_RANK[s] = i end
@@ -64,10 +60,9 @@ local function profs(log)
   return table.concat((log.character or {}).professions or {}, ",")
 end
 
--- The fractional-level gap a signal reports, or nil for one with none (an older log, a retired
--- colour signal, or a signal that is not a level check).
+-- The fractional-level gap a signal reports, or nil for one with none (an older log, or a signal that is
+-- not a level check).
 local function gap_of(s)
-  if RETIRED[s.signal] then return nil end
   if s.signal == "below-level" then return s.levels_short end
   return s.gap
 end

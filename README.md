@@ -294,16 +294,13 @@ Two checks use it:
 
 | Check | Signal | Gap |
 |---|---|---|
-| The guide's level check (`L` step, or the `LVL` tag on any step) when the character arrived below the check point and the client ground | `level-check` | check point minus the level before the grind |
+| The guide's level check (an `L` step, or a plain `LVL|n` on any other step) when the character arrived below the check point and the client ground | `level-check` | check point minus the level before the grind |
 | An accept below the quest's required level (the client grinds to it) | `below-level` | levels short of the required level |
 
 The client grades only whether the character can accept a quest (the required
 level) and the guide's own level checks. It doesn't grade quest difficulty or
 colour (too hard, too easy): those are routing decisions for the guide, not for
-this client. Run logs written by an older hwc may hold `quest-red`, `quest-orange`,
-`quest-grey` and `quest-green` findings; they still load in the report and `hwc diff`,
-keep their old fixed severity (high, medium, low, low) and their label, and are not
-produced any more.
+this client.
 
 Level checks (`L` steps) grind to the guide's `level;offset` check point, ending at
 `max(check, actual)`: the client grinds only when below the point and never moves the

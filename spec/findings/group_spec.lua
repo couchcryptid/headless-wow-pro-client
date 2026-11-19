@@ -369,19 +369,6 @@ describe("group.findings", function()
     assert.equal("high", sev({ signal = "below-level", levels_short = 4.5 }).severity)
   end)
 
-  -- The client no longer emits quest colour signals, but an older run log may hold them: they still
-  -- group, keep their old fixed severity, and ignore the gap fields the colour findings carried.
-  it("still groups an older log's retired quest colour signals at their old severity", function()
-    local function sev(sig)
-      sig.gid, sig.file, sig.line, sig.action, sig.name, sig.qid = "G", "f", 1, "A", "q", 9
-      return group.findings({ runlog("Dwarf", "WARRIOR", { sig }) })[1].severity
-    end
-    assert.equal("high", sev({ signal = "quest-red", gap = 1.0, quest_level = 40, char_level = 30 }))
-    assert.equal("medium", sev({ signal = "quest-orange", gap = 5.0 }))
-    assert.equal("low", sev({ signal = "quest-grey", gap = 20.0 }))
-    assert.equal("low", sev({ signal = "quest-green" }))
-  end)
-
   it("carries a rep-faction-unmet signal's faction, name and tag name onto its finding", function()
     local fs = group.findings({ runlog("Dwarf", "WARRIOR", { { signal = "rep-faction-unmet", gid = "G", file = "f",
       line = 6, action = "C", name = "r", qid = 3, faction = 91, faction_name = "Faction 91",

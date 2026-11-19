@@ -55,12 +55,6 @@ text.SIGNALS = {
   ["wrong-race-class"] = "Wrong race or class",
   ["below-level"] = "Offered below level",
   ["level-check"] = "Level check reached short",
-  -- Retired: the client no longer emits the four quest colour signals; the labels stay so an older
-  -- run log's findings still render.
-  ["quest-red"] = "Quest too hard (red)",
-  ["quest-orange"] = "Quest too hard (orange)",
-  ["quest-grey"] = "Quest grey",
-  ["quest-green"] = "Quest green",
   ["did-not-advance"] = "Doesn't advance",
   ["manual-completion"] = "Manual click",
   ["stuck"] = "Stuck",
@@ -322,7 +316,7 @@ function text.title(f)
   elseif s == "wrong-race-class" then
     return nm .. " is shown to the wrong " .. (kind_of(f) or "race/class")
   elseif s == "below-level" then
-    if f.levels_short then return nm .. " is offered " .. gap.text(f.levels_short) .. " levels below its level" end
+    if f.levels_short then return nm .. " is offered " .. gap.text(f.levels_short) .. " levels below the level it requires" end
     return nm .. " is offered below its level"
   elseif s == "level-check" and f.gap then
     return "The guide's level check " .. quoted(f.name or "") .. " is reached " .. gap.text(f.gap) .. " levels short"
@@ -512,8 +506,6 @@ local function clauses(f, ctx)
       "Reputation from kills and encounters isn't modelled; if the guide meant another faction, the id is wrong."
   elseif s == "lua-error" then
     return "WoWPro raised an error during the run.", "The message and stack are in the detail below."
-  elseif s == "quest-red" or s == "quest-orange" or s == "quest-grey" or s == "quest-green" then
-    return "From an older run log: this client no longer grades quest colour."
   end
   return ""
 end
