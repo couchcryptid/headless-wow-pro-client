@@ -185,3 +185,57 @@ User request (2026-11-18): every point where the harness compares the character'
   - Do the real Dwarf run.
   - Paste the counts per signal and severity, and the high findings with their gaps.
 - [ ] **Step 5: Commit** `feat: Report the level gap at every check on one scale`.
+
+### Task 5: Low quests graded by how soon they lead to a quest at your level
+
+User request (2026-11-18): lessen or increase the severity of a low-level quest by the number of hops to a follow-up at the character's level, never exceeding the severity its gap alone gives.
+
+**Rules:**
+- **A low quest** is one judged green or grey at its accept (`quest_color.of`). Both now give a finding.
+  - Grey keeps the signal `quest-grey`.
+  - Green gets the new signal `quest-green`.
+  - The gap is `fractional character level − quest level` at the accept.
+  - Its base severity is `gap.severity(gap)`, from Task 4.
+- **A follow-up** is a quest reached through QuestieDB's `nextQuestInChain`, or a quest whose `preQuestSingle` or `preQuestGroup` lists this one.
+  - Hop 1 is a direct follow-up; hop 2 is a follow-up of a follow-up. Search no further.
+  - A follow-up counts only if its quest level is at least `character level at the accept − 2` (yellow or higher) **and** the run accepts it. A payoff the guide skips doesn't excuse the low quest.
+- **The cap by nearest hop:**
+
+  | Nearest qualifying follow-up | Severity cap |
+  |---|---|
+  | hop 1 | low |
+  | hop 2 | medium |
+  | none within 2 hops | the base severity |
+
+  Final severity is `min(base, cap)`, which can never exceed the base.
+- **Wording:**
+  - title: `"<name>" is N.N levels below the character (<green|grey>)`
+  - sentence: the base sentence (grey keeps its XP-rate clause), then one of:
+    - ` It leads to "<follow-up name>" (level Q), at your level, H hop(s) on.`
+    - ` Nothing at your level follows within two quests.`
+- **Expected on the Dwarf run** (the controller's offline estimate): 41 low quests; base 15 high and 26 medium; after the cap, 7 high, 17 medium and 17 low.
+
+**Files:**
+- Modify:
+  - `src/hwc/catalog/init.lua`: `Catalog:follow_ups(qid) -> { {qid, level, name, hop}, ... }` up to hop 2, deterministic order
+  - `src/hwc/driver/run.lua`: emit `quest-green` and `quest-grey` with `gap`, plus `follow_up = {qid, name, level, hop}` or nil, decided at `Driver:finish` once the run's accepts are known
+  - `src/hwc/findings/group.lua`
+  - `src/hwc/findings/text.lua`
+  - `README.md`
+  - the report label fixtures
+- Test: `spec/catalog/catalog_spec.lua`, `spec/driver/run_spec.lua`, `spec/findings/group_spec.lua`, `spec/findings/text_spec.lua`
+
+**Review Focus:**
+1. A follow-up the run never accepts doesn't lower the severity.
+2. Chain cycles terminate.
+3. A quest with several hop-1 follow-ups picks the nearest qualifying one, deterministically: lowest hop, then the one accepted first in the run, then the lowest qid.
+4. Older logs keep today's grey wording and low severity.
+
+- [ ] **Step 1: Failing specs** for the hop search, the cap table (base high with hop 1 → low, hop 2 → medium, none → high; base medium with hop 2 → medium) and Review Focus 1-4.
+- [ ] **Step 2: RED.**
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: GREEN.**
+  - Run the full suite, the slow suite, luacheck and npm test.
+  - Do the real Dwarf run.
+  - Paste the per-severity counts for quest-green and quest-grey, and each high one with its gap.
+- [ ] **Step 5: Commit** `feat: Grade low quests by how soon they lead to a quest at your level`.
