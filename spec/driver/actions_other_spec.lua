@@ -383,6 +383,20 @@ describe("actions.perform: level and training", function()
     assert.is_true(w.player:xp_max() - w.player.xp <= 650)
   end)
 
+  it("records the gap in levels, from the real XP before the grind, on a level-check grind", function()
+    local ctx, _, w = setup()
+    w.player.level, w.player.xp = 1, 324 -- level 1.81
+    local o = actions.perform(ctx, step("L", {}, { level = "2;-650" }))
+    -- The check point is level 2 + 250/900 (900 to go minus 650); the gap is 0.47 from 1.81.
+    assert.are.equal(0.5, o.grind.short)
+    assert.are.equal(-650, o.grind.offset)
+    local ctx2, _, w2 = setup()
+    local o2 = actions.perform(ctx2, step("L", {}, { level = "4" }))
+    assert.are.equal(3.0, o2.grind.short)
+    assert.are.equal(0, o2.grind.offset)
+    assert.are.equal(4, w2.player.level)
+  end)
+
   it("LVL|2;-650 with 400 to go does not grind", function()
     local ctx, _, w = setup()
     w.player.level = 2

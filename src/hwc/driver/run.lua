@@ -13,6 +13,7 @@
 local actions = require("hwc.driver.actions")
 local xp = require("hwc.world.xp")
 local quest_color = require("hwc.world.quest_color")
+local gap = require("hwc.findings.gap")
 local findings_text = require("hwc.findings.text")
 
 local run = {}
@@ -550,35 +551,69 @@ function Driver:refusals(cur, out)
         end
       end
     end
+  elseif out.kind == "acted" and out.grind and out.grind.point then
+    -- A level check (L step, or the LVL tag on any step) the character arrived below.
+    self:signal("level-check", cur, { reason = "level-check", outcome = out.kind, gap = out.grind.short,
+      grind = { kills = out.grind.kills, to = out.grind.to, point = out.grind.point, offset = out.grind.offset } })
   elseif out.kind == "acted" and out.grind and cur.action == "A" then
     self:signal("below-level", cur, { qid = out.qid, reason = "below-level", outcome = out.kind,
       grind = { kills = out.grind.kills, to = out.grind.to }, levels_short = out.grind.short })
   end
-  if out.kind == "acted" and cur.action == "A" then self:quest_color(cur, out) end
+  if out.kind == "acted" and cur.action == "A" then self:quest_accepted(cur, out) end
+  if cur.action == "C" or cur.action == "K" or cur.action == "T" then self:quest_color(cur) end
 end
 
--- One colour signal per accept the run plays, at the character's level now (after any
--- grind to the required level). Red and orange only for a quest with combat objectives
--- (Catalog:noncombat); grey for any quest. Yellow and green are not findings.
-function Driver:quest_color(cur, out)
+-- The quest's level less the character's fractional level, to one decimal.
+function Driver:level_gap(quest)
+  return gap.round(quest.level - self.W.player:fractional_level())
+end
+
+-- The colour of an accept the run plays: grey is judged here, at the character's level after
+-- any grind to the required level, for any quest (one finding per accept line). Red and orange
+-- are judged later, at the do step (Driver:quest_color); the accept only notes its gap.
+function Driver:quest_accepted(cur, out)
   local catalog = self.W.catalog
   local quest = out.qid and catalog and catalog:quest(out.qid)
   if not (quest and quest.level) then return end
   local level = self.W.player.level
-  -- One colour finding per guide line: a repeatable accept replayed at another level
-  -- would otherwise give red and orange findings on one line. The first play wins.
-  self.colored = self.colored or {}
+  self.greyed = self.greyed or {}
   local line_key = tostring(cur.gid or self.gid) .. ":" .. tostring(cur.line)
-  if self.colored[line_key] then return end
-  local color = quest_color.of(level, quest.level)
-  local fields = { qid = out.qid, quest_level = quest.level, char_level = level, color = color }
-  if color == "red" or color == "orange" then
-    if catalog:noncombat(out.qid) then return end
-  elseif color ~= "grey" then
+  if quest_color.of(level, quest.level) == "grey" then
+    if not self.greyed[line_key] then
+      self.greyed[line_key] = true
+      self:signal("quest-grey", cur, { qid = out.qid, quest_level = quest.level, char_level = level, color = "grey" })
+    end
     return
   end
-  self.colored[line_key] = true
-  self:signal("quest-" .. color, cur, fields)
+  if catalog:noncombat(out.qid) then return end
+  self.awaiting_do = self.awaiting_do or {}
+  self.awaiting_do[out.qid] = { accept_gap = self:level_gap(quest) }
+end
+
+-- Red and orange, judged at the do step of each quest the step lists that was accepted and not
+-- yet judged: the first C or K step played after its accept, else its T step. The band comes
+-- from the integer levels (quest_color.of); the gap is the fractional one. One finding per
+-- do-step line: the first play wins.
+function Driver:quest_color(cur)
+  local awaiting = self.awaiting_do
+  if not awaiting then return end
+  local catalog = self.W.catalog
+  local level = self.W.player.level
+  self.colored = self.colored or {}
+  local line_key = tostring(cur.gid or self.gid) .. ":" .. tostring(cur.line)
+  for _, qid in ipairs(cur.qids or {}) do
+    local note = awaiting[qid]
+    local quest = note and catalog:quest(qid)
+    if quest then
+      awaiting[qid] = nil
+      local color = quest_color.of(level, quest.level)
+      if (color == "red" or color == "orange") and not self.colored[line_key .. ":" .. qid] then
+        self.colored[line_key .. ":" .. qid] = true
+        self:signal("quest-" .. color, cur, { qid = qid, quest_level = quest.level, char_level = level, color = color,
+          gap = self:level_gap(quest), accept_gap = note.accept_gap, do_action = cur.action })
+      end
+    end
+  end
 end
 
 function Driver:snapshot(cur, why, rows, out)

@@ -330,6 +330,41 @@ describe("group.findings", function()
     }, sev)
   end)
 
+  it("grades below-level, level-check and colour findings on the one gap scale", function()
+    local function sev(sig)
+      sig.gid, sig.file, sig.line, sig.action, sig.name, sig.qid = "G", "f", 1, "A", "q", 9
+      return group.findings({ runlog("Dwarf", "WARRIOR", { sig }) })[1]
+    end
+    assert.equal("high", sev({ signal = "below-level", levels_short = 4.5 }).severity)
+    assert.equal("medium", sev({ signal = "below-level", levels_short = 3.9 }).severity)
+    assert.equal("low", sev({ signal = "level-check", gap = 1.4 }).severity)
+    assert.equal("medium", sev({ signal = "level-check", gap = 2.0 }).severity)
+    assert.equal("high", sev({ signal = "level-check", gap = 4.0 }).severity)
+    -- The colour band picks the signal; the gap picks the severity.
+    assert.equal("medium", sev({ signal = "quest-red", gap = 3.0 }).severity)
+    assert.equal("high", sev({ signal = "quest-orange", gap = 4.3 }).severity)
+    assert.equal("low", sev({ signal = "quest-orange", gap = 1.5 }).severity)
+    local f = sev({ signal = "quest-orange", gap = 2.3, accept_gap = 6.0 })
+    assert.same({ 2.3, 6.0 }, { f.gap, f.accept_gap })
+    -- An older log without a gap keeps the signal's own severity.
+    assert.equal("high", sev({ signal = "quest-red" }).severity)
+    assert.equal("medium", sev({ signal = "quest-orange" }).severity)
+  end)
+
+  it("grades a colour group spanning characters by its largest gap", function()
+    local function sig(gap)
+      return { signal = "quest-orange", gid = "G", file = "f", line = 2, action = "C", name = "q", qid = 9,
+        quest_level = 33, char_level = 30, gap = gap }
+    end
+    local fs = group.findings({
+      runlog("Dwarf", "WARRIOR", { sig(2.5) }),
+      runlog("Gnome", "MAGE", { sig(4.2) }),
+    })
+    assert.equal(1, #fs)
+    assert.equal(4.2, fs[1].gap)
+    assert.equal("high", fs[1].severity)
+  end)
+
   it("grades a group spanning characters by the largest gap, not the first character's", function()
     local function sig(short)
       return { signal = "below-level", gid = "G", file = "f", line = 1, action = "A", name = "q", qid = 9,

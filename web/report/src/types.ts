@@ -34,13 +34,17 @@ export interface Finding {
   use?: string;
   /** Item id (as a string) to quantity. */
   loot?: Record<string, number>;
-  grind?: { kills: number; to: number; short?: number; point?: number };
+  grind?: { kills: number; to: number; short?: number; point?: number; offset?: number };
   /** below-level: levels short of the quest's level, to a tenth. */
   levels_short?: number;
+  /** level-check, quest-red, quest-orange: the gap in levels from the fractional level, to a tenth. */
+  gap?: number;
+  /** quest-red / quest-orange: the gap at the accept, to a tenth. */
+  accept_gap?: number;
   /** quest-red / quest-orange / quest-grey: the quest's and the character's level. */
   quest_level?: number;
   char_level?: number;
-  /** Quest colour at accept: red, orange, yellow, green or grey. */
+  /** Quest colour: red, orange, yellow, green or grey. */
   color?: string;
   message?: string;
   stack?: string;

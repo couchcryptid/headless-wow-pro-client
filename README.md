@@ -279,23 +279,42 @@ which characters are played.
 
 ## Level findings
 
-Three signals grade a quest by the character's level when the run accepts it
-(Classic `GetQuestDifficultyColor`; **unverified for Forever**, the bands are
-Classic's and not checked in game):
+Every point where the harness compares the character's level with what the guide
+or a quest expects reports the size of the gap, in levels, on one scale. The gap
+is fractional levels from real XP (`level + xp / xp.to_next(level)`), rounded to
+one decimal:
+
+| Gap | Severity |
+|---|---|
+| under 2 levels | low (within what the simulation's missing XP explains: no incidental kills or rested XP) |
+| 2 to under 4 | medium |
+| 4 or more | high |
+
+Three checks use it:
+
+| Check | Signal | Gap |
+|---|---|---|
+| The guide's level check (`L` step, or the `LVL` tag on any step) when the character arrived below the check point and the client ground | `level-check` | check point minus the level before the grind |
+| An accept below the quest's required level (the client grinds to it) | `below-level` | levels short of the required level |
+| A quest above the character, judged at the do step: the first `C` or `K` step played after its accept, else its `T` step | `quest-red`, `quest-orange` | quest level minus the character's level at the do step |
+
+The colour band decides whether a quest finding exists (Classic
+`GetQuestDifficultyColor`; **unverified for Forever**, the bands are Classic's and
+not checked in game); the gap decides its severity. The bands use whole levels:
 
 | Colour | Quest level minus character level | Finding |
 |---|---|---|
-| red | 5 or more | `quest-red`, high |
-| orange | 3 to 4 | `quest-orange`, medium |
+| red | 5 or more | `quest-red` |
+| orange | 3 to 4 | `quest-orange` |
 | yellow, green | -2 to 2, then below | none |
-| grey | at or below the grey line (`xp.gray_level`) | `quest-grey`, low |
+| grey | at or below the grey line (`xp.gray_level`) | `quest-grey`, low, judged at the accept |
 
-Red and orange skip quests with no combat objective and the Azeroth Commerce
-Authority and Darkmoon Faire quests. Grey applies to every quest.
-
-`below-level` says how many levels short the character was before the harness
-ground to the required level: low under 2 levels (within what the missing
-incidental XP explains), medium from 2.
+Red and orange skip quests with no combat objective (including quests the
+harness buys items for) and the Azeroth Commerce Authority and Darkmoon Faire
+quests. Grey applies to every quest. A quest accepted but never done (no `C`,
+`K` or `T` step played) gets no red or orange finding; there is one per guide
+line of the do step, and its sentence says how far above the character the quest
+was at the accept too.
 
 Level checks (`L` steps) grind to the guide's `level;offset` check point, ending at
 `max(check, actual)`: the client grinds only when below the point and never moves the

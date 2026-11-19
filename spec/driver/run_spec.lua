@@ -813,10 +813,12 @@ describe("driver.run", function()
 
   describe("quest colour", function()
     local function accept(level, quest, grind)
-      local steps = { { action = "A", name = "Q", qids = { 5 }, outcome = { kind = "acted", grind = grind } } }
+      -- The colour is judged at the do step: here the quest's T step.
+      local steps = { { action = "A", name = "Q", qids = { 5 }, outcome = { kind = "acted", grind = grind } },
+        { action = "T", name = "Q", qids = { 5 } } }
       local world = fx.fake_world({ [5] = quest })
       world.player.level = level
-      return drive(one_guide(steps), { G1 = { { complete = { 1 } } } }, {}, world)
+      return drive(one_guide(steps), { G1 = { { complete = { 1 } }, { complete = { 2 } } } }, {}, world)
     end
     local function colours(log)
       local out = {}
@@ -850,9 +852,11 @@ describe("driver.run", function()
       assert.same({}, colours(accept(1, { level = 60, noncombat = "commerce" })))
       assert.same({}, colours(accept(30, { level = 33, noncombat = "no-combat-objective" })))
     end)
-    it("emits one colour signal per guide line: the first play wins", function()
-      local steps = { { action = "A", name = "Q", qids = { 5 } }, { action = "R", name = "Back" } }
-      local script = { G1 = { { complete = { 1 } }, { complete = { 2 }, uncomplete = { 1 }, level = 33 } } }
+    it("emits one colour signal per do-step line: the first play wins", function()
+      local steps = { { action = "A", name = "Q", qids = { 5 } }, { action = "T", name = "Q", qids = { 5 } },
+        { action = "R", name = "Back" } }
+      local script = { G1 = { { complete = { 1 } }, { complete = { 2 } },
+        { complete = { 3 }, uncomplete = { 1, 2 }, level = 33 } } }
       local world = fx.fake_world({ [5] = { name = "Hard", level = 36 } })
       world.player.level = 30
       local log, E = drive(one_guide(steps), script, {}, world)
@@ -882,6 +886,126 @@ describe("driver.run", function()
     it("emits nothing for a refused accept", function()
       local steps = { { action = "A", name = "Q", qids = { 5 }, outcome = { kind = "refused", reason = "class" } } }
       local log = drive(one_guide(steps), {}, {}, fx.fake_world({ [5] = { level = 60 } }))
+      assert.same({}, colours(log))
+    end)
+  end)
+
+  describe("level gap", function()
+    local function colours(log)
+      local out = {}
+      for _, s in ipairs(log.signals) do
+        if s.signal:match("^quest%-") and s.signal ~= "quest-grey" then out[#out + 1] = s end
+      end
+      return out
+    end
+    -- Accept (A), then the do steps. Quest 5 is level 26; the character is level 20 at the accept.
+    local function play(steps, script, quest, level)
+      local world = fx.fake_world({ [5] = quest or { name = "Hard", level = 26 }, [6] = { name = "Other", level = 40 } })
+      world.player.level = level or 20
+      return drive(one_guide(steps), script, {}, world)
+    end
+
+    it("emits level-check with the gap when an L step ground to its check point", function()
+      local steps = { { action = "L", name = "Level 2", tags = { level = "2;-650" },
+        outcome = { kind = "acted", grind = { kills = 7, to = 2, point = 250, offset = -650, short = 1.0 } } } }
+      local log = play(steps, { G1 = { { complete = { 1 } } } })
+      local c = signals(log, "level-check")
+      assert.equal(1, #c)
+      assert.equal(1.0, c[1].gap)
+      assert.same({ kills = 7, to = 2, point = 250, offset = -650 }, c[1].grind)
+      assert.same({}, signals(log, "below-level"))
+    end)
+    it("emits level-check on a non-L step carrying a LVL tag that ground", function()
+      local steps = { { action = "R", name = "Go", tags = { level = "3" },
+        outcome = { kind = "acted", grind = { kills = 3, to = 3, point = 0, offset = 0, short = 2.0 } } } }
+      local log = play(steps, { G1 = { { complete = { 1 } } } })
+      assert.equal(2.0, signals(log, "level-check")[1].gap)
+    end)
+    it("emits no level-check when the step needed no grind", function()
+      local steps = { { action = "L", name = "Level 2", tags = { level = "2" }, outcome = { kind = "acted" } } }
+      assert.same({}, signals(play(steps, { G1 = { { complete = { 1 } } } }), "level-check"))
+    end)
+
+    it("judges the colour at the C step, not the accept", function()
+      -- Red/orange at the accept (level 20 vs 26) would be red; at the C step the character
+      -- is 23.7, so the gap is 2.3 and the band orange (26 - 23 = 3).
+      local steps = {
+        { action = "A", name = "Hard", qids = { 5 } },
+        { action = "C", name = "Kill things", qids = { 5 }, outcome = { kind = "acted", level = 23, xp = 700 } },
+      }
+      local script = { G1 = { { complete = { 1 } }, { complete = { 2 } } } }
+      local world = fx.fake_world({ [5] = { name = "Hard", level = 26 } })
+      world.player.level = 20
+      -- level 23 needs xp_max(23) to give .7
+      local xp = require("hwc.world.xp")
+      steps[2].outcome.xp = math.floor(xp.to_next(23) * 0.7)
+      local log = drive(one_guide(steps), script, {}, world)
+      local c = colours(log)
+      assert.equal(1, #c)
+      assert.equal("quest-orange", c[1].signal)
+      assert.equal("C", c[1].action)
+      assert.equal(2.3, c[1].gap)
+      assert.equal(23, c[1].char_level)
+      assert.equal(5, c[1].qid)
+      assert.equal(6.0, c[1].accept_gap)
+    end)
+    it("judges a quest at its T step when no C or K step is played", function()
+      local steps = {
+        { action = "A", name = "Hard", qids = { 5 } },
+        { action = "T", name = "Hard", qids = { 5 } },
+      }
+      local log = play(steps, { G1 = { { complete = { 1 } }, { complete = { 2 } } } })
+      local c = colours(log)
+      assert.equal(1, #c)
+      assert.equal("quest-red", c[1].signal)
+      assert.equal("T", c[1].action)
+      assert.equal(6.0, c[1].gap)
+    end)
+    it("gives no colour finding for a quest accepted but never done", function()
+      local steps = { { action = "A", name = "Hard", qids = { 5 } }, { action = "R", name = "Away" } }
+      assert.same({}, colours(play(steps, { G1 = { { complete = { 1 } }, { complete = { 2 } } } })))
+    end)
+    it("judges once, at the first do step, even when a T step follows", function()
+      local steps = {
+        { action = "A", name = "Hard", qids = { 5 } },
+        { action = "C", name = "Kill", qids = { 5 } },
+        { action = "T", name = "Hard", qids = { 5 } },
+      }
+      local c = colours(play(steps, { G1 = { { complete = { 1 } }, { complete = { 2 } }, { complete = { 3 } } } }))
+      assert.equal(1, #c)
+      assert.equal("C", c[1].action)
+    end)
+    it("judges each quest of a do step that lists several", function()
+      local steps = {
+        { action = "A", name = "Hard", qids = { 5 } },
+        { action = "A", name = "Other", qids = { 6 } },
+        { action = "C", name = "Kill", qids = { 5, 6 } },
+      }
+      local c = colours(play(steps, { G1 = { { complete = { 1 } }, { complete = { 2 } }, { complete = { 3 } } } }))
+      table.sort(c, function(a, b) return a.qid < b.qid end)
+      assert.same({ 5, 6 }, { c[1].qid, c[2].qid })
+      assert.same({ 6.0, 20.0 }, { c[1].gap, c[2].gap })
+    end)
+    it("keeps one colour finding per do-step line", function()
+      local steps = {
+        { action = "A", name = "Hard", qids = { 5 } },
+        { action = "C", name = "Kill", qids = { 5 } },
+      }
+      local script = { G1 = { { complete = { 1 } }, { complete = { 2 } } } }
+      local log = play(steps, script)
+      assert.equal(1, #colours(log))
+    end)
+    it("keeps grey at the accept", function()
+      local steps = { { action = "A", name = "Old", qids = { 5 } } }
+      local log = play(steps, { G1 = { { complete = { 1 } } } }, { name = "Old", level = 5 }, 30)
+      local g = signals(log, "quest-grey")
+      assert.equal(1, #g)
+      assert.equal("A", g[1].action)
+    end)
+    it("skips a non-combat quest at the do step", function()
+      local steps = { { action = "A", name = "Buy", qids = { 5 } }, { action = "T", name = "Buy", qids = { 5 } } }
+      local log = play(steps, { G1 = { { complete = { 1 } }, { complete = { 2 } } } },
+        { name = "Buy", level = 40, noncombat = "commerce" })
       assert.same({}, colours(log))
     end)
   end)

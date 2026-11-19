@@ -32,7 +32,7 @@ end
 local SEVERITY = {
   ["never-shown-accept"] = "high", ["hidden-use-step"] = "high", ["orphan-turnin"] = "high", ["accept-refused"] = "high",
   ["wrong-race-class"] = "high", ["log-full"] = "high",
-  ["lua-error"] = "high", ["below-level"] = "medium-high",
+  ["lua-error"] = "high", ["below-level"] = "medium-high", ["level-check"] = "low",
   ["did-not-advance"] = "medium", stuck = "medium", ["manual-completion"] = "medium",
   ["rep-faction-unmet"] = "medium",
   ["quest-red"] = "high", ["quest-orange"] = "medium", ["quest-grey"] = "low",
@@ -45,6 +45,7 @@ local REFUSALS = { ["accept-refused"] = true, ["log-full"] = true }
 local FOLLOWS_REFUSAL = { ["orphan-turnin"] = true, ["did-not-advance"] = true, ["leftover-quests"] = true }
 
 local professions = require("hwc.world.professions")
+local gap = require("hwc.findings.gap")
 
 function group.combo(log)
   local c = log.character or {}
@@ -58,6 +59,13 @@ end
 -- Second sort key when two RunLogs share a combo: their professions, joined.
 local function profs(log)
   return table.concat((log.character or {}).professions or {}, ",")
+end
+
+-- The fractional-level gap a signal reports, or nil for one with none (an older log, or a
+-- signal that is not a level check).
+local function gap_of(s)
+  if s.signal == "below-level" then return s.levels_short end
+  return s.gap
 end
 
 local function key_of(s)
@@ -82,7 +90,7 @@ local function new_finding(s, key)
     -- Like missing: new_finding copies the first combo's signal, so a group spanning characters
     -- reports that combo's outcomes.
     missing_outcome = s.missing_outcome,
-    levels_short = s.levels_short, quest_level = s.quest_level, char_level = s.char_level, color = s.color,
+    levels_short = s.levels_short, gap = s.gap, accept_gap = s.accept_gap, quest_level = s.quest_level, char_level = s.char_level, color = s.color,
     combos = {}, causes = {}, reasons = {},
   }
   if s.signal == "lua-error" then
@@ -95,11 +103,10 @@ local function new_finding(s, key)
   end
   if not f.expected then
     f.severity = SEVERITY[s.signal] or error("findings: unknown signal " .. tostring(s.signal))
-    -- below-level is graded by how far short: under 2 levels is within what the simulation's
-    -- missing XP explains. A run log without levels_short keeps the fixed severity.
-    if s.signal == "below-level" and s.levels_short then
-      f.severity = s.levels_short < 2 and "low" or "medium"
-    end
+    -- Every level check is graded on the one gap scale (findings.gap). A run log without the
+    -- gap keeps the signal's fixed severity.
+    local g = gap_of(s)
+    if g then f.severity = gap.severity(g) end
   end
   return f
 end
@@ -225,17 +232,15 @@ function group.findings(runlogs)
       if a.idx ~= b.idx then return a.idx < b.idx end
       return tostring(a.sig.why) < tostring(b.sig.why)
     end)
-    -- A group spanning characters is graded and worded by its worst entry: the largest
-    -- levels_short (below-level) or quest_level - char_level (colour findings).
+    -- A group spanning characters is graded and worded by its worst entry: the largest gap
+    -- (below-level levels_short, level-check and colour gap). Older colour entries without a
+    -- gap fall back to quest_level - char_level.
     local worst = g.entries[1].sig
     for _, e in ipairs(g.entries) do
       local sg = e.sig
-      if sg.signal == "below-level" and sg.levels_short and (worst.levels_short or -1) < sg.levels_short then
-        worst = sg
-      elseif sg.quest_level and sg.char_level and worst.quest_level and worst.char_level
-        and sg.quest_level - sg.char_level > worst.quest_level - worst.char_level then
-        worst = sg
-      end
+      local a, b = gap_of(sg) or sg.quest_level and sg.char_level and sg.quest_level - sg.char_level,
+        gap_of(worst) or worst.quest_level and worst.char_level and worst.quest_level - worst.char_level
+      if a and (not b or a > b) then worst = sg end
     end
     local f = new_finding(worst, g.key)
     local combos, reasons = {}, {}

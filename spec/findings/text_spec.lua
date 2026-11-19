@@ -26,6 +26,7 @@ describe("text constants", function()
       ["orphan-turnin"] = "Turn-in without the quest",
       ["wrong-race-class"] = "Wrong race or class",
       ["below-level"] = "Offered below level",
+      ["level-check"] = "Level check reached short",
       ["quest-red"] = "Quest too hard (red)",
       ["quest-orange"] = "Quest too hard (orange)",
       ["quest-grey"] = "Quest grey",
@@ -446,6 +447,39 @@ describe("text.title and text.sentence (design spec §4.7)", function()
       .. "missing XP explains (no incidental kills or rested XP).", s)
     t = both(F({ signal = "below-level", name = "Tiny", qid = 7, levels_short = 0, grind = { kills = 2, to = 8 } }))
     assert.equal('"Tiny" is offered less than 0.1 levels below its level', t)
+  end)
+  it("words a level check by its gap and its check point", function()
+    local f = { signal = "level-check", name = "Level 2", qid = nil, gap = 1.0,
+      grind = { kills = 40, to = 2, point = 250, offset = -650 } }
+    local t, s = both(F(f))
+    assert.equal('The guide\'s level check "Level 2" is reached 1.0 levels short', t)
+    assert.equal("The client ground 40 kills to reach the point the guide checks "
+      .. "(level 2, within 650 XP of level 3). " .. require("hwc.findings.gap").MARGIN_SENTENCE, s)
+    f.gap, f.grind = 2.5, { kills = 90, to = 5, point = 300, offset = 300 }
+    t, s = both(F(f))
+    assert.equal('The guide\'s level check "Level 2" is reached 2.5 levels short', t)
+    assert.equal("The client ground 90 kills to reach the point the guide checks (level 5, with at least 300 XP).", s)
+    f.gap, f.grind = 0.04, { kills = 1, to = 5, point = 0, offset = 0 }
+    t, s = both(F(f))
+    assert.equal('The guide\'s level check "Level 2" is reached less than 0.1 levels short', t)
+    assert.truthy(s:find("(level 5).", 1, true))
+  end)
+  it("words a red or orange quest judged at the do step by its gap", function()
+    local f = { signal = "quest-orange", name = "Kill things", qname = "Hard Quest", qid = 7, quest_level = 26,
+      char_level = 23, gap = 2.3, accept_gap = 6.0, color = "orange", action = "C" }
+    local t, s = both(F(f))
+    assert.equal('"Hard Quest" is 2.3 levels above the character when the guide has you do it (orange)', t)
+    assert.equal("The guide has a level 23.7 character do a level 26 quest with combat objectives at this step; "
+      .. "it was 6.0 levels above at the accept.", s)
+    f.accept_gap = nil
+    local _, s2 = both(F(f))
+    assert.equal("The guide has a level 23.7 character do a level 26 quest with combat objectives at this step.", s2)
+  end)
+  it("words below-level at 4 levels or more without the margin sentence", function()
+    local _, s = both(F({ signal = "below-level", name = "Low", qid = 7, levels_short = 4.5,
+      grind = { kills = 9, to = 9 } }))
+    assert.equal("The guide reaches this accept 4.5 levels below level 9, the level the quest requires "
+      .. "(the client ground 9 kills to get there).", s)
   end)
   it("words a red, orange and grey quest", function()
     local f = { signal = "quest-red", name = "Hard", qid = 7, quest_level = 40, char_level = 30, color = "red" }

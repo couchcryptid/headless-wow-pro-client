@@ -4,6 +4,7 @@
 local RACES = require("hwc.world.player").RACES
 local reputation = require("hwc.world.reputation")
 local xp = require("hwc.world.xp")
+local gap = require("hwc.findings.gap")
 
 local text = {}
 
@@ -54,6 +55,7 @@ text.SIGNALS = {
   ["orphan-turnin"] = "Turn-in without the quest",
   ["wrong-race-class"] = "Wrong race or class",
   ["below-level"] = "Offered below level",
+  ["level-check"] = "Level check reached short",
   ["quest-red"] = "Quest too hard (red)",
   ["quest-orange"] = "Quest too hard (orange)",
   ["quest-grey"] = "Quest grey",
@@ -222,13 +224,6 @@ function text.quest_ref(id, name, chain)
   return out
 end
 
--- "0.9", or "less than 0.1" for a shortfall that rounds to 0.0.
-local function levels_short_text(n)
-  local out = string.format("%.1f", n)
-  if out == "0.0" then return "less than 0.1" end
-  return out
-end
-
 local function name_of(f)
   if f.name and f.name ~= "" then return text.with_part(f.name, f.chain) end
   if f.qid then return text.quest_ref(f.qid, f.qname, f.chain) end
@@ -325,8 +320,14 @@ function text.title(f)
   elseif s == "wrong-race-class" then
     return nm .. " is shown to the wrong " .. (kind_of(f) or "race/class")
   elseif s == "below-level" then
-    if f.levels_short then return nm .. " is offered " .. levels_short_text(f.levels_short) .. " levels below its level" end
+    if f.levels_short then return nm .. " is offered " .. gap.text(f.levels_short) .. " levels below its level" end
     return nm .. " is offered below its level"
+  elseif s == "level-check" and f.gap then
+    return "The guide's level check " .. quoted(f.name or "") .. " is reached " .. gap.text(f.gap) .. " levels short"
+  elseif (s == "quest-red" or s == "quest-orange") and f.gap then
+    local quest = (f.qname and f.qname ~= "") and text.with_part(f.qname, f.chain) or nm
+    return quest .. " is " .. gap.text(f.gap) .. " levels above the character when the guide has you do it ("
+      .. tostring(f.color) .. ")"
   elseif s == "quest-red" or s == "quest-orange" or s == "quest-grey" then
     return nm .. " is " .. tostring(f.color) .. " for this character (quest level " .. tostring(f.quest_level)
       .. ", character level " .. tostring(f.char_level) .. ")"
@@ -461,19 +462,35 @@ local function clauses(f, ctx)
     -- ground up to, not the level the guide reached the accept at.
     local g = f.grind
     if f.levels_short and g and g.to and g.kills then
-      local out = "The guide reaches this accept " .. levels_short_text(f.levels_short) .. " levels below level "
+      local out = "The guide reaches this accept " .. gap.text(f.levels_short) .. " levels below level "
         .. tostring(g.to) .. ", the level the quest requires (the client ground " .. tostring(g.kills)
         .. " kills to get there)."
-      if f.levels_short < 2 then
-        out = out .. " Gaps under 2 levels are within what the simulation's missing XP explains "
-          .. "(no incidental kills or rested XP)."
-      end
+      if f.levels_short < gap.MEDIUM then out = out .. " " .. gap.MARGIN_SENTENCE end
       return out
     elseif g and g.to and g.kills then
       return "The guide reaches this accept below level " .. tostring(g.to) .. ", the level the quest requires; "
         .. "the client ground " .. tostring(g.kills) .. " kills to get there."
     end
     return "The guide reaches this accept below the level the quest requires."
+  elseif s == "level-check" and f.gap then
+    local g = f.grind or {}
+    local point = ""
+    if (g.offset or 0) < 0 then
+      point = ", within " .. tostring(-g.offset) .. " XP of level " .. tostring(g.to + 1)
+    elseif (g.offset or 0) > 0 then
+      point = ", with at least " .. tostring(g.offset) .. " XP"
+    end
+    local out = "The client ground " .. tostring(g.kills) .. " kills to reach the point the guide checks (level "
+      .. tostring(g.to) .. point .. ")."
+    if f.gap < gap.MEDIUM then out = out .. " " .. gap.MARGIN_SENTENCE end
+    return out
+  elseif (s == "quest-red" or s == "quest-orange") and f.gap then
+    local out = "The guide has a level " .. string.format("%.1f", f.quest_level - f.gap) .. " character do a level "
+      .. tostring(f.quest_level) .. " quest with combat objectives at this step"
+    if f.accept_gap then out = out .. "; it was " .. gap.text(f.accept_gap) .. " levels above at the accept" end
+    out = out .. "."
+    if f.gap < gap.MEDIUM then out = out .. " " .. gap.MARGIN_SENTENCE end
+    return out
   elseif s == "quest-red" or s == "quest-orange" then
     return "The guide sends a level " .. tostring(f.char_level) .. " character to a level " .. tostring(f.quest_level)
       .. " quest with combat objectives."

@@ -127,6 +127,7 @@ local function scripted_engine(guides, script, start, world)
         for _, i in ipairs(entry.complete or {}) do self.comp[p.gid][i] = true end
         for _, i in ipairs(entry.uncomplete or {}) do self.comp[p.gid][i] = nil end
         if entry.level and self.world then self.world.player.level = entry.level end
+        if entry.xp and self.world then self.world.player.xp = entry.xp end
         if entry.done then self.done[p.gid] = true end
         if entry.switch then self.cur_gid = entry.switch end
         hit = entry.hit_limit == true
@@ -146,6 +147,7 @@ local function scripted_engine(guides, script, start, world)
       missing_any = o.missing_any, arrivals = o.arrivals }
     -- o.level: the level the action leaves the player at (a grind during the step).
     if o.level then ctx.world.player.level = o.level end
+    if o.xp then ctx.world.player.xp = o.xp end
     -- o.records: world events this step's action leaves behind (quest_accept / quest_turn_in).
     for _, rec in ipairs(o.records or {}) do ctx.world.events[#ctx.world.events + 1] = rec end
     out.settle = E:settle()

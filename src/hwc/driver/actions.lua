@@ -45,6 +45,7 @@
 -- first listed id in the log (qids[1] when none is).
 local kills = require("hwc.world.kills")
 local xp = require("hwc.world.xp")
+local gap = require("hwc.findings.gap")
 local stubs_core = require("hwc.stubs.core")
 
 local actions = {}
@@ -259,9 +260,7 @@ local function perform_accept(ctx, step, out)
     -- fire nothing until the ding, force the update, then accept.
     local target = w.catalog:quest(qid).required_level
     -- Levels short of the target, from the real XP before the grind, to one decimal.
-    local p = w.player
-    local progress = p.level + (p:xp_max() > 0 and p.xp / p:xp_max() or 0)
-    local short = math.floor((target - progress) * 10 + 0.5) / 10
+    local short = gap.round(target - w.player:fractional_level())
     local n, _, levels = kills.grind_to(w.player, target)
     out.grind = { kills = n, to = target, short = short }
     out.levels = out.levels + levels
@@ -718,9 +717,12 @@ local function perform_level(ctx, step, out)
   local p = w.player
   local point = offset >= 0 and offset or math.max(0, xp.to_next(math.min(want, xp.CAP_LEVEL)) + offset)
   if p.level > want or (p.level == want and p.xp >= point) then return end
+  -- Levels short of the check point, from the real XP before the grind, to one decimal.
+  local at_point = want + (want < xp.CAP_LEVEL and point / xp.to_next(want) or 0)
+  local short = gap.round(at_point - p:fractional_level())
   local n, _, levels = kills.grind_to_point(p, want, point)
   out.kind = "acted"
-  out.grind = { kills = n, to = want, point = point }
+  out.grind = { kills = n, to = want, point = point, offset = offset, short = short }
   out.levels = out.levels + levels
   -- The addon has no XP handler either: an XP-only grind (no ding) still needs the guide
   -- re-evaluated, or the L step's own check never runs.
