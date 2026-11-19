@@ -71,6 +71,10 @@ QUESTS[1303] = { name = "Follow Two", questLevel = 12, preQuestSingle = { 1302 }
 QUESTS[1304] = { name = "Follow Group", questLevel = 9, preQuestGroup = { 1301, 1399 } }
 QUESTS[1305] = { name = "Follow Loop", questLevel = 10, nextQuestInChain = 1306 }
 QUESTS[1306] = { name = "Follow Loop Back", questLevel = 10, preQuestSingle = { 1305 }, nextQuestInChain = 1305 }
+-- Supplement prerequisites: 1312 lists 1311 in QuestieDB, the supplement moves it behind 1313.
+QUESTS[1311] = { name = "Sup Start", questLevel = 10 }
+QUESTS[1312] = { name = "Sup Moved", questLevel = 10, preQuestSingle = { 1311 } }
+QUESTS[1313] = { name = "Sup Other", questLevel = 10 }
 QUESTS[1131] = { name = "Fixture Solo" }
 QUESTS[1132] = { name = "Fixture Solo", preQuestSingle = { 1105 } }
 

@@ -1,5 +1,7 @@
 {"quests": {
   "1002": {"requires_skill": "First Aid", "source": "fixture hand check"},
   "90001": {"name": "Fixture Forever Quest", "starter": 2001, "ender": 2002, "source": "fixture hand check"},
+  "1312": {"pre_single": [1313], "source": "fixture hand check"},
+  "90010": {"name": "Supplement Follower", "level": 13, "pre_single": [1311], "source": "fixture hand check"},
   "90009": {"name": "Supplement Only", "level": 12, "required_level": 10, "xp": 600, "source": "fixture hand check"}
  }}

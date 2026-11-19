@@ -375,17 +375,35 @@ function Catalog:chain_part(qid)
   return part, total
 end
 
--- Quest id -> the sorted ids of the quests whose pre-quest lists name it, from QuestieDB's raw
--- records over every quest id. Built once per Catalog: it reads the whole quest table.
+-- Quest id -> the sorted ids of the quests whose pre-quest lists name it: QuestieDB's raw records
+-- over every quest id, except that a quest whose supplement entry sets pre_single or pre_group
+-- uses the merged lists (as Catalog:quest does), and supplement-only quests are included.
+-- Built once per Catalog: it reads the whole quest table.
 local function pre_quest_index(self)
   if not self._followers then
     local index = {}
     local src = self.questie
+    local ids, listed = {}, {}
     for _, id in ipairs(src and src.quest_ids and src:quest_ids() or {}) do
-      local q = src:quest(id)
+      ids[#ids + 1], listed[id] = id, true
+    end
+    for key in pairs(self.supplement) do
+      local id = tonumber(key)
+      if id and not listed[id] then ids[#ids + 1], listed[id] = id, true end
+    end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+      local sup = self.supplement[tostring(id)]
+      local lists
+      if sup and (sup.pre_single ~= nil or sup.pre_group ~= nil) then
+        local merged = self:quest(id)
+        lists = { merged.pre_single, merged.pre_group }
+      else
+        local q = src and src:quest(id) or {}
+        lists = { q.preQuestSingle or {}, q.preQuestGroup or {} }
+      end
       local seen = {}
-      q = q or {}
-      for _, list in ipairs({ q.preQuestSingle or {}, q.preQuestGroup or {} }) do
+      for _, list in ipairs(lists) do
         for _, pre in ipairs(type(list) == "table" and list or {}) do
           if not seen[pre] then
             seen[pre] = true
@@ -395,7 +413,7 @@ local function pre_quest_index(self)
         end
       end
     end
-    -- quest_ids is ascending, so each list is already sorted by id.
+    -- ids is ascending, so each list is already sorted by id.
     self._followers = index
   end
   return self._followers

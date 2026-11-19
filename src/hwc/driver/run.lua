@@ -620,8 +620,8 @@ function Driver:attach_follow_ups()
     local best
     for _, f in ipairs(catalog:follow_ups(sig.qid)) do
       if order[f.qid] and f.level >= sig.char_level - 2 then
-        if not best or f.hop < best.hop or (f.hop == best.hop and
-          (order[f.qid] < order[best.qid] or (order[f.qid] == order[best.qid] and f.qid < best.qid))) then
+        -- Accepted order is unique per quest, so hop then order is a total order.
+        if not best or f.hop < best.hop or (f.hop == best.hop and order[f.qid] < order[best.qid]) then
           best = f
         end
       end
