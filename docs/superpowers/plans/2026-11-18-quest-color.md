@@ -174,7 +174,7 @@ User request (2026-11-18): every point where the harness compares the character'
 
 - [ ] **Step 1: Failing specs:**
   - `gap.severity(1.9)=='low'`, `(2)=='medium'`, `(3.9)=='medium'`, `(4)=='high'`; `gap.text(0.04)=='less than 0.1'`.
-  - `level-check` emitted with gap 1.0 for a `LVL|2;-650` grind from level 1.81.
+  - `level-check` emitted with gap 0.5 for a `LVL|2;-650` grind from level 1.81 (check point 2 + 250/900 ≈ 2.28).
   - Colour judged at the C step, not the accept: accepted at char 20 (quest 26 is red there), done at 23.7, so the gap is 2.3, severity medium, signal `quest-orange`.
   - `below-level` gap 4.5 is high.
   - Review Focus 1-4.
