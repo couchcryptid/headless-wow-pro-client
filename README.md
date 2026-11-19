@@ -294,7 +294,7 @@ Two checks use it:
 
 | Check | Signal | Gap |
 |---|---|---|
-| The guide's level check (an `L` step, or a plain `LVL|n` on any other step) when the character arrived below the check point and the client ground | `level-check` | check point minus the level before the grind |
+| The guide's level check (an `L` step, or a plain `LVL\|n` on any other step) when the character arrived below the check point and the client ground | `level-check` | check point minus the level before the grind |
 | An accept below the quest's required level (the client grinds to it) | `below-level` | levels short of the required level |
 
 The client grades only whether the character can accept a quest (the required
