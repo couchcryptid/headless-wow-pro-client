@@ -172,7 +172,8 @@ function Catalog:arrival_problems(arrivals)
   table.sort(races)
   for _, race in ipairs(races) do
     local name = arrivals.start_nodes[race]
-    if not self.forever:node(name) then
+    -- false: the race starts with no node (hwc.world.arrivals), nothing to check.
+    if name ~= false and not self.forever:node(name) then
       out[#out + 1] = { key = "start_nodes." .. race,
         detail = "taxi node " .. tostring(name) .. " is not in the Forever tables" }
     end

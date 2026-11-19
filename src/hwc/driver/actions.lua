@@ -3,7 +3,8 @@
 --
 -- Fidelity: nothing here writes engine state. The engine is touched only by
 -- firing events, settling the virtual clock and the player-equivalent
--- E:update_guide() after a level-up (the addon has no level-up handler).
+-- E:update_guide() after a level-up (the addon has no level-up handler). F and f
+-- live in hwc.driver.flight under the same rule.
 --
 -- Event sequences, checked against the handlers in ~/Projects/WoW-Pro-Guides:
 --   QUEST_ACCEPTED(qlidx, qid)  WoWPro_Events.lua:783-793 (args read at :784); with
@@ -22,10 +23,12 @@
 --   ZONE_CHANGED / ZONE_CHANGED_NEW_AREA  WoWPro_Events.lua:301-316 (also _INDOORS): the
 --       handler runs AutoCompleteZone (AutoComplete.lua:488-530), which matches the
 --       step name or TZ against GetZoneText / GetSubZoneText and the map id.
---   TAXIMAP_OPENED              WoWPro_Events.lua:806-815 (F/b: RecordTaxiLocations).
+--   TAXIMAP_OPENED              WoWPro_Events.lua:815-826: RecordTaxiLocations (AutoComplete.lua
+--       :9-29) and, on an F/b step with AutoSelect, TakeTaxiClassic (:32-53).
+--   PLAYER_CONTROL_LOST / _GAINED  WoWPro_Events.lua:828-866: the F flight (hwc.driver.flight).
 --   HEARTHSTONE_BOUND           WoWPro_Events.lua:861-872 reads GetBindLocation() and runs
 --       AutoCompleteSetHearth.
---   UI_INFO_MESSAGE(idx, msg)   WoWPro_Events.lua:908-911; AutoCompleteGetFP reads
+--   UI_INFO_MESSAGE(idx, msg)   WoWPro_Events.lua:915-918; AutoCompleteGetFP reads
 --       `_event, _idx, msg` and tests msg == ERR_NEWTAXIPATH (AutoComplete.lua:94-98).
 --
 -- Tag value forms (WoWPro_Parser.lua DefineTag, 416-620; the engine stores the parsed
@@ -46,7 +49,7 @@
 local kills = require("hwc.world.kills")
 local xp = require("hwc.world.xp")
 local gap = require("hwc.findings.gap")
-local stubs_core = require("hwc.stubs.core")
+local flight = require("hwc.driver.flight")
 
 local actions = {}
 
@@ -60,6 +63,19 @@ end
 local function fire(ctx, out, event, ...)
   ctx.engine:fire(event, ...)
   out.events[#out.events + 1] = event
+end
+
+-- Settles the virtual clock. out.settle keeps the last result, with hit_limit OR-ed across
+-- every settle of the step (an F flight settles mid-action, hwc.driver.flight).
+local function settle(ctx, out)
+  local r = ctx.engine:settle()
+  if out.settle and out.settle.hit_limit and type(r) == "table" and not r.hit_limit then
+    local copy = {}
+    for k, v in pairs(r) do copy[k] = v end
+    copy.hit_limit = true
+    r = copy
+  end
+  out.settle = r
 end
 
 -- Forces the engine to re-evaluate after a ding (spec §5.2 "Level-up"). An addon
@@ -483,22 +499,20 @@ end
 
 -- Rules ---------------------------------------------------------------------
 
--- Ruling Y: F, b and P land the player at the destination. Their Z and M tags say
--- where the player departs from (the flight master, the boat dock), so they are not
--- used. AutoCompleteZone completes F/H/b/P/R when the step name or the TZ tag's
--- first ";" part equals GetZoneText() or GetSubZoneText(), or a numeric TZ equals
--- the map id (WoWPro_AutoComplete.lua:499-526; TZ is DefineTag("TZ","targetzone")
--- at WoWPro_Parser.lua:484). An F step completes there only while
--- UnitOnTaxi("player") is false (:507-512; the stub returns false). TZ joins the
--- Global Constraints' Z/M exception: it says where the player goes.
+-- Ruling Y (b and P only; F flies on real taxi nodes, hwc.driver.flight): b and P land
+-- the player at the destination. Their Z and M tags say where the player departs from
+-- (the boat dock), so they are not used. AutoCompleteZone completes F/H/b/P/R when the
+-- step name or the TZ tag's first ";" part equals GetZoneText() or GetSubZoneText(), or a
+-- numeric TZ equals the map id (WoWPro_AutoComplete.lua:513-526; TZ is
+-- DefineTag("TZ","targetzone") at WoWPro_Parser.lua:484). TZ joins the Global Constraints'
+-- Z/M exception: it says where the player goes.
 -- subzone = step name; zone = TZ when it names one, else the current zone; map id
--- = TZ when it is numeric, else the current one; x/y are kept.
+-- = TZ when it is numeric, else the current one; x/y are kept. Task 7 replaces this.
 local function perform_arrival(ctx, step, out)
   local p = ctx.world.player
   local tz_name, tz_map = parse_zone(step.tags and step.tags.targetzone)
   p:set_zone(tz_name or p.zone, step.name or "", tz_map or p.map_id, p.x, p.y)
   out.kind = "acted"
-  if step.action == "F" then fire(ctx, out, "TAXIMAP_OPENED") end
   fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
   fire(ctx, out, "ZONE_CHANGED")
 end
@@ -510,9 +524,9 @@ end
 -- on the engine's "already there" check (WoWPro_Broker.lua:2531-2537,
 -- AutoCompleteZone at WoWPro_AutoComplete.lua:499-526) without being acted on.
 -- No Z, no usable M, or the current spot: no move and no zone events.
-local TRAVEL = { R = true, F = true, b = true, P = true, H = true }
-local function walk_to_step(ctx, step, out)
-  if TRAVEL[step.action] then return end
+-- depart is the same move for a travel step whose Z/M say where it leaves from
+-- (spec section 8: F and f call it from hwc.driver.flight).
+local function depart(ctx, step, out)
   local tags = step.tags or {}
   local zone, map_id = parse_zone(tags.zone)
   local x, y = parse_coords(tags.map)
@@ -529,6 +543,18 @@ local function walk_to_step(ctx, step, out)
   fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
   fire(ctx, out, "ZONE_CHANGED")
 end
+
+-- R, b, P and H land somewhere else; F and f depart from their handler (depart).
+local TRAVEL = { R = true, F = true, f = true, b = true, P = true, H = true }
+local function walk_to_step(ctx, step, out)
+  if TRAVEL[step.action] then return end
+  depart(ctx, step, out)
+end
+
+-- F and f (hwc.driver.flight), with this module's helpers.
+local FLIGHT_HELPERS = { fire = fire, depart = depart, settle = settle }
+local function perform_flight(ctx, step, out) flight.fly(ctx, step, out, FLIGHT_HELPERS) end
+local function perform_flight_point(ctx, step, out) flight.learn(ctx, step, out, FLIGHT_HELPERS) end
 
 -- The actions that work on their quest's objectives: a C, K, U, l or B step with the
 -- quest's QID (its qids, ACTIVE included for the fallback actions, Engine.qids_of).
@@ -627,12 +653,6 @@ local function perform_travel(ctx, step, out)
   fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
   fire(ctx, out, "ZONE_CHANGED")
   if step.action == "R" then credit_arrival(ctx, step, out) end
-end
-
-local function perform_flight_point(ctx, step, out)
-  ctx.world.player:learn_flight_point(step.name)
-  out.kind = "acted"
-  fire(ctx, out, "UI_INFO_MESSAGE", 0, stubs_core.ERR_NEWTAXIPATH)
 end
 
 local function perform_bind(ctx, step, out)
@@ -801,7 +821,7 @@ function actions.is_quest_step(step)
   return QUEST_HANDLERS[step.action] ~= nil
 end
 local OTHER_HANDLERS = {
-  R = perform_travel, F = perform_arrival, b = perform_arrival, P = perform_arrival, H = perform_travel,
+  R = perform_travel, F = perform_flight, b = perform_arrival, P = perform_arrival, H = perform_travel,
   f = perform_flight_point, h = perform_bind, U = perform_use, L = perform_level,
   l = perform_item_step, B = perform_item_step, ["*"] = perform_trash, ["="] = perform_trainer,
 }
@@ -826,8 +846,11 @@ end
 
 -- ctx = { engine = E, world = W, cfg = cfg }; step is an Engine:step() record.
 -- Returns { kind = "acted"|"refused"|"noop", reason, qid, events = {names...},
--- levels, grind = {kills, to}|nil, elite, settle = <E:settle() result> }.
--- Every call settles exactly once at the end and leaves world.dialog nil.
+-- levels, grind = {kills, to}|nil, elite, settle = <E:settle() result> }; travel steps add
+-- the arrival fields (hwc.driver.flight header: data_gap, expected, arrived, resolved_by,
+-- classify). Every call settles once at the end and leaves world.dialog nil; an F step also
+-- settles mid-flight (after TAXIMAP_OPENED, and past PLAYER_CONTROL_LOST when it flies), and
+-- out.settle keeps the last result with hit_limit OR-ed across them.
 function actions.perform(ctx, step)
   local qids = step.qids or {}
   local out = new_outcome(qids[1])
@@ -854,7 +877,7 @@ function actions.perform(ctx, step)
   end
   finish_bags(ctx, out)
   out.elite = out.elite or (step.tags ~= nil and step.tags.elite ~= nil and step.tags.elite ~= false)
-  out.settle = ctx.engine:settle()
+  settle(ctx, out)
   ctx.world.dialog = nil
   return out
 end

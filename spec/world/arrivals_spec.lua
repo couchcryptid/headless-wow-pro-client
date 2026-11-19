@@ -24,10 +24,12 @@ local function inn(over)
 end
 
 describe("arrivals data", function()
-  it("names a capital node for every non-Skyborne race, and leaves Skyborne out", function()
+  -- false = known to start with no node (user, 2026-11-19: Skyborne's hub Valanaar has
+  -- no flight master); nil would be unknown (start-node-unknown).
+  it("names a capital node for every race but Skyborne, which start with none", function()
     for key in pairs(Player.RACES) do
       if key:find("^Skyborne") then
-        assert.is_nil(arrivals.start_nodes[key])
+        assert.is_false(arrivals.start_nodes[key], key)
       else
         assert.is_string(arrivals.start_nodes[key], key)
       end
@@ -80,6 +82,10 @@ describe("Catalog:arrival_problems", function()
   it("is empty when everything agrees", function()
     local cat = cat_with({ [9001] = { name = "Innkeeper", npcFlags = 128 + 1, spawns = { [38] = { { 34, 51 } } } } })
     assert.same({}, cat:arrival_problems({ start_nodes = good.start_nodes, inns = { inn { npc = 9001 } } }))
+  end)
+
+  it("skips a race that starts with no node (false)", function()
+    assert.same({}, cat_with():arrival_problems({ start_nodes = { SkyborneHorde = false, Human = "Stormwind, Elwynn" }, inns = {} }))
   end)
 
   it("flags an unknown start node", function()

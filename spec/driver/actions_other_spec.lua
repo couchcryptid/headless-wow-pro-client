@@ -37,11 +37,8 @@ describe("actions.perform: travel", function()
     assert.are.same({ x, y }, { w.player.x, w.player.y })
   end)
 
-  it("F fires TAXIMAP_OPENED first; b and P fire only the zone events", function()
+  it("b and P fire only the zone events", function()
     local ctx, E = setup()
-    actions.perform(ctx, step("F", {}, { zone = "1455; Ironforge" }, "Ironforge"))
-    assert.are.same({ "TAXIMAP_OPENED", "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
-    E.fired = {}
     actions.perform(ctx, step("b", {}, { zone = "1455; Ironforge" }))
     assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
     E.fired = {}
@@ -49,27 +46,10 @@ describe("actions.perform: travel", function()
     assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
   end)
 
-  -- Ruling Y: F/b/P land at the destination. Z and M on these steps say where the
-  -- player departs from; AutoCompleteZone matches the step name or TZ against
+  -- Ruling Y (b and P until Task 7): they land at the destination. Z and M on these steps
+  -- say where the player departs from; AutoCompleteZone matches the step name or TZ against
   -- GetZoneText / GetSubZoneText (WoWPro_AutoComplete.lua:513-526).
-  it("F lands at the destination: subzone = step name, zone = TZ, map and x/y kept", function()
-    local ctx, E, w = setup()
-    local p = w.player
-    local map_id, x, y = p.map_id, p.x, p.y
-    local o = actions.perform(ctx, step("F", {}, { zone = "1436; Westfall", map = "56.55,52.65",
-      targetzone = "Stormwind City" }, "Stormwind"))
-    assert.are.equal("acted", o.kind)
-    assert.are.same({ "Stormwind City", "Stormwind", map_id, x, y }, { p.zone, p.subzone, p.map_id, p.x, p.y })
-  end)
-
-  it("F without TZ keeps the current zone and lands in the step-name subzone", function()
-    local ctx, E, w = setup()
-    local p = w.player
-    actions.perform(ctx, step("F", {}, { zone = "1426; Dun Morogh", map = "55.5,47.7" }, "Ironforge"))
-    assert.are.same({ "Dun Morogh", "Ironforge", 1426 }, { p.zone, p.subzone, p.map_id })
-  end)
-
-  it("b and P land at the destination like F", function()
+  it("b and P land at the destination: subzone = step name, zone = TZ", function()
     local ctx, E, w = setup()
     local p = w.player
     actions.perform(ctx, step("b", {}, { zone = "1437; Wetlands", targetzone = "Darkshore" }, "Auberdine"))
@@ -80,7 +60,7 @@ describe("actions.perform: travel", function()
 
   it("a numeric TZ is a map id: the player lands on that map", function()
     local ctx, E, w = setup()
-    actions.perform(ctx, step("F", {}, { zone = "1436; Westfall", targetzone = "1453" }, "Stormwind"))
+    actions.perform(ctx, step("b", {}, { zone = "1436; Westfall", targetzone = "1453" }, "Stormwind"))
     assert.are.same({ "Dun Morogh", "Stormwind", 1453 }, { w.player.zone, w.player.subzone, w.player.map_id })
   end)
 
@@ -91,14 +71,6 @@ describe("actions.perform: travel", function()
     assert.are.equal("acted", o.kind)
     assert.are.same({ "Kharanos", 1426 }, { w.player.zone, w.player.map_id })
     assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
-  end)
-
-  it("f learns the flight point and fires UI_INFO_MESSAGE(0, ERR_NEWTAXIPATH)", function()
-    local ctx, E, w = setup()
-    local o = actions.perform(ctx, step("f", {}, {}, "Ironforge"))
-    assert.are.equal("acted", o.kind)
-    assert.is_true(w.player.flight_points["Ironforge"])
-    assert.are.same({ "UI_INFO_MESSAGE", 0, core.ERR_NEWTAXIPATH }, E.fired[1])
   end)
 
   it("h sets the bind and fires HEARTHSTONE_BOUND", function()
@@ -240,13 +212,13 @@ describe("actions.perform: walking to each step", function()
     assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "QUEST_ACCEPTED", "QUEST_LOG_UPDATE" }, names(E))
   end)
 
-  it("a later F to the same place is not already there after walking elsewhere", function()
+  it("a later b to the same place is not already there after walking elsewhere", function()
     local ctx, E, w = setup()
-    actions.perform(ctx, step("F", {}, { zone = "1455; Ironforge", targetzone = "1453; Stormwind City" }, "Stormwind"))
+    actions.perform(ctx, step("b", {}, { zone = "1455; Ironforge", targetzone = "1453; Stormwind City" }, "Stormwind"))
     assert.are.equal("Stormwind", w.player.subzone)
     actions.perform(ctx, step("N", {}, { zone = "1426; Dun Morogh", map = "30,70" }))
     -- AutoCompleteZone matches the step name or TZ against zone/subzone text, or TZ's map id
-    -- (WoWPro_AutoComplete.lua:499-526): none of them matches the F step any more.
+    -- (WoWPro_AutoComplete.lua:513-526): none of them matches the b step any more.
     local p = w.player
     assert.are_not.equal("Stormwind", p.subzone)
     assert.are_not.equal("Stormwind City", p.zone)
@@ -552,5 +524,185 @@ describe("actions.perform: multi-QID A (Ruling J)", function()
     assert.are.equal("noop", o.kind)
     assert.are.equal("already-completed", o.reason)
     assert.is_nil(w.log:get(180))
+  end)
+end)
+
+-- F and f on the Forever tables (arrival emulation spec sections 4, 5, 8, 9). The fixture
+-- tables put Stormwind (1453), Ironforge (1455) and Thelsamar (1432) on Eastern Kingdoms;
+-- a Dwarf starts knowing Ironforge.
+describe("actions.perform: flights", function()
+  local IRONFORGE = { zone = "1455; Ironforge", map = "55.9,47.9" }
+
+  -- The fake engine runs no addon: on TAXIMAP_OPENED, take the node AutoSelect would, as
+  -- WoWPro.TakeTaxiClassic does (WoWPro_AutoComplete.lua:32-53): the first listed node
+  -- whose location (text before the comma) contains the step name, or whose name equals it.
+  -- It also notes UnitOnTaxi at each event.
+  local function autoselect(E, w, dest)
+    local fire = E.fire
+    E.on_taxi = {}
+    function E:fire(event, ...)
+      fire(self, event, ...)
+      E.on_taxi[#E.on_taxi + 1] = w.player.on_taxi
+      if event ~= "TAXIMAP_OPENED" then return end
+      local db, p = w.catalog.forever, w.player
+      for _, n in ipairs(db:taxi_nodes(db:continent_of(p.map_id), p.faction)) do
+        local location = n.name:match("^([^,]*)")
+        if location:find(dest, 1, true) or n.name == dest then
+          self.sb.taxi_taken[#self.sb.taxi_taken + 1] = n.name
+          return
+        end
+      end
+    end
+  end
+
+  local function fly(dest, tags, opts)
+    local ctx, E, w = setup("Dwarf", nil, opts)
+    if not (opts and opts.forever == false) then autoselect(E, w, dest) end
+    local t = {}
+    for k, v in pairs(IRONFORGE) do t[k] = v end
+    for k, v in pairs(tags or {}) do t[k] = v end
+    return ctx, E, w, t
+  end
+
+  it("F Stormwind with a learned node flies: control lost, on taxi, lands in Stormwind City, control gained; subzone is not 'Stormwind'", function()
+    local ctx, E, w, tags = fly("Stormwind")
+    local p = w.player
+    p:learn_flight_point("Stormwind, Elwynn")
+    local node = w.catalog.forever:node("Stormwind, Elwynn")
+    local o = actions.perform(ctx, step("F", {}, tags, "Stormwind"))
+    assert.are.equal("acted", o.kind)
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", -- the departure (spec section 8)
+      "TAXIMAP_OPENED", "PLAYER_CONTROL_LOST",
+      "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "PLAYER_CONTROL_GAINED" }, names(E))
+    assert.are.same(names(E), o.events)
+    -- On the taxi from the control loss until the landing.
+    assert.are.same({ false, false, false, true, false, false, false }, E.on_taxi)
+    assert.are.same({ "Stormwind City", "", 1453, node.x, node.y }, { p.zone, p.subzone, p.map_id, p.x, p.y })
+    assert.is_false(p.on_taxi)
+    assert.are.same({ name = "Stormwind", tz = nil }, o.expected)
+    assert.are.same({ zone = "Stormwind City", map_id = 1453 }, o.arrived) -- subzone not captured
+    assert.are.equal("name-not-an-area", o.classify)
+    assert.is_nil(o.reason)
+    assert.is_nil(o.data_gap)
+    assert.is_nil(o.resolved_by)
+    -- TAXIMAP_OPENED, past PLAYER_CONTROL_LOST, then the end of perform.
+    assert.are.equal(3, E.settles)
+  end)
+
+  it("F lands in the node's captured subzone, and out.settle ORs hit_limit across settles", function()
+    local arrivals = { start_nodes = { Dwarf = "Ironforge, Dun Morogh" }, start_bind = {}, subzones = {
+      ["Stormwind, Elwynn"] = { subzone = "Trade District", checked = "spec" } } }
+    local ctx, E, w, tags = fly("Stormwind", { targetzone = "Trade District" }, { arrivals = arrivals })
+    w.player:learn_flight_point("Stormwind, Elwynn")
+    local n = 0
+    function E:settle()
+      n = n + 1
+      self.settles = n
+      return { ran = 0, now = n, hit_limit = n == 1 }
+    end
+    local o = actions.perform(ctx, step("F", {}, tags, "Stormwind"))
+    assert.are.equal("Trade District", w.player.subzone)
+    assert.are.same({ zone = "Stormwind City", subzone = "Trade District", map_id = 1453 }, o.arrived)
+    assert.are.equal("advances", o.classify)
+    assert.are.same({ ran = 0, now = 3, hit_limit = true }, o.settle)
+  end)
+
+  it("F to an undiscovered node is flight-point-undiscovered and lands by the loose match without learning it", function()
+    local ctx, E, w, tags = fly("Thelsamar")
+    local p = w.player
+    local o = actions.perform(ctx, step("F", {}, tags, "Thelsamar"))
+    assert.are.equal("acted", o.kind)
+    assert.are.equal("flight-point-undiscovered", o.reason)
+    assert.is_nil(o.data_gap)
+    assert.are.same({ "Thelsamar, Loch Modan" }, E.sb.taxi_taken)
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "TAXIMAP_OPENED",
+      "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
+    assert.are.same({ "Loch Modan", "", 1432 }, { p.zone, p.subzone, p.map_id })
+    assert.is_nil(p.flight_points["Thelsamar, Loch Modan"])
+    assert.are.equal("loose", o.resolved_by)
+    assert.are.same({ zone = "Loch Modan", map_id = 1432 }, o.arrived)
+    assert.are.equal("subzone-unknown", o.classify) -- Thelsamar is an area; the subzone isn't captured
+    assert.are.equal(2, E.settles)
+  end)
+
+  it("F to an undiscovered node is a notice when hwc's knowledge is incomplete", function()
+    local ctx, _, w, tags = fly("Thelsamar")
+    w.start_node_unknown = true
+    w.fp_unknown[1415] = true
+    local o = actions.perform(ctx, step("F", {}, tags, "Thelsamar"))
+    assert.are.same({ reason = "start-node-unknown", key = "Dwarf" }, o.data_gap)
+    ctx, _, w, tags = fly("Thelsamar")
+    w.fp_unknown[1415] = true
+    o = actions.perform(ctx, step("F", {}, tags, "Thelsamar"))
+    assert.are.same({ reason = "fp-unknown", key = "1415" }, o.data_gap)
+    assert.are.equal("flight-point-undiscovered", o.reason)
+    assert.are.equal("Loch Modan", w.player.zone) -- still arrives (spec section 9)
+  end)
+
+  it("F naming no node is no-taxi-node", function()
+    -- The loose match still finds the zone: the player arrives there.
+    local ctx, E, w, tags = fly("Loch Modan")
+    local o = actions.perform(ctx, step("F", {}, tags, "Loch Modan"))
+    assert.are.equal("no-taxi-node", o.reason)
+    assert.are.same({}, E.sb.taxi_taken)
+    assert.are.equal("loose", o.resolved_by)
+    assert.are.same({ "Loch Modan", 1432 }, { w.player.zone, w.player.map_id })
+    assert.are.equal("advances", o.classify)
+    -- Nothing matches: destination-unresolved, and the player stays at the departure.
+    ctx, E, w, tags = fly("Darnassus")
+    o = actions.perform(ctx, step("F", {}, tags, "Darnassus"))
+    assert.are.equal("no-taxi-node", o.reason)
+    assert.are.same({}, E.sb.taxi_taken)
+    assert.are.same({ reason = "destination-unresolved", key = "Darnassus" }, o.data_gap)
+    assert.are.same({ "Ironforge", 1455 }, { w.player.zone, w.player.map_id })
+    assert.is_nil(o.arrived)
+    assert.is_nil(o.classify)
+    assert.are.same({ name = "Darnassus" }, o.expected)
+  end)
+
+  it("F with no tables is tables-missing and fires no taxi events", function()
+    local ctx, E, w, tags = fly("Stormwind", nil, { forever = false })
+    local o = actions.perform(ctx, step("F", {}, tags, "Stormwind"))
+    assert.are.same({ reason = "tables-missing", key = "no-tables" }, o.data_gap)
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E)) -- the departure only
+    assert.are.same({ "Ironforge", 1455 }, { w.player.zone, w.player.map_id })
+    assert.are.same({ name = "Stormwind" }, o.expected)
+    assert.are.equal(1, E.settles)
+  end)
+
+  it("f learns the real node name nearest the departure and fires the discovery once", function()
+    local ctx, E, w = setup("Dwarf")
+    local o = actions.perform(ctx, step("f", {}, { zone = "1432; Loch Modan", map = "33.5,51" }, "Thelsamar"))
+    assert.are.equal("acted", o.kind)
+    assert.is_true(w.player.flight_points["Thelsamar, Loch Modan"])
+    assert.is_nil(w.player.flight_points["Thelsamar"])
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "UI_INFO_MESSAGE", "TAXIMAP_OPENED" }, names(E))
+    assert.are.same({ "UI_INFO_MESSAGE", 0, core.ERR_NEWTAXIPATH }, E.fired[3])
+    assert.is_nil(o.data_gap)
+  end)
+
+  it("f for a known node fires TAXIMAP_OPENED but no ERR_NEWTAXIPATH", function()
+    local ctx, E, w = setup("Dwarf")
+    local o = actions.perform(ctx, step("f", {}, IRONFORGE, "Ironforge"))
+    assert.are.equal("acted", o.kind)
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "TAXIMAP_OPENED" }, names(E))
+    assert.is_true(w.player.flight_points["Ironforge, Dun Morogh"])
+  end)
+
+  it("f with no node nearby is fp-unknown", function()
+    local ctx, E, w = setup("Dwarf")
+    local o = actions.perform(ctx, step("f", {}, { zone = "1432; Loch Modan", map = "80,80" }, "Thelsamar"))
+    assert.are.same({ reason = "fp-unknown", key = "1432:80.0,80.0" }, o.data_gap)
+    assert.is_true(w.fp_unknown[1415])
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
+    assert.is_nil(w.player.flight_points["Thelsamar, Loch Modan"])
+  end)
+
+  it("f with no tables is tables-missing and learns nothing", function()
+    local ctx, E, w = setup("Dwarf", nil, { forever = false })
+    local o = actions.perform(ctx, step("f", {}, { zone = "1432; Loch Modan", map = "33.5,51" }, "Thelsamar"))
+    assert.are.same({ reason = "tables-missing", key = "no-tables" }, o.data_gap)
+    assert.are.same({}, w.player.flight_points)
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
   end)
 end)

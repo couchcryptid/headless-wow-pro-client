@@ -51,18 +51,21 @@ end
 -- limited to that scope with the guide filter: Dun Morogh -> 12_20 -> 19_25, then
 -- the excluded 25_30 ends it (no-next-guide) with 19_25 still loaded.
 local ANCHOR_GUIDES = { ClassicDunMorogh0112 = true, ClassicEasternKingdom1220 = true, ClassicAlliance1925 = true }
+-- forever_dir: Forever client tables for the run (default: hwc.config's, the active install).
 local runs = {}
-local function run_of(slug)
-  if runs[slug] then return runs[slug] end
-  local cfg = config.load({ addon_path = ROOT .. slug, race = "Dwarf", class = "WARRIOR" })
+local function run_of(slug, forever_dir)
+  local key = slug .. "|" .. tostring(forever_dir)
+  if runs[key] then return runs[key] end
+  local cfg = config.load({ addon_path = ROOT .. slug, race = "Dwarf", class = "WARRIOR",
+    catalog = forever_dir and { forever_dir = forever_dir } or nil })
   local result = require("hwc.boot").run(cfg)
   local E = require("hwc.driver.engine").new(result)
   local log = require("hwc.driver.run").drive({
     engine = E, world = result.world, cfg = cfg,
     errors = result.sb.errors, missing_order = result.sb.missing_order, addon = result.addon,
   }, { included = ANCHOR_GUIDES })
-  runs[slug] = { log = log, engine = E, world = result.world, findings = group.findings({ log }) }
-  return runs[slug]
+  runs[key] = { log = log, engine = E, world = result.world, findings = group.findings({ log }) }
+  return runs[key]
 end
 
 local function findings_where(r, pred)
@@ -217,17 +220,23 @@ describe("anchor #3554 (U step gated on its L result) #slow", function()
   end)
 end)
 
--- Ruling Y (final review C1): F/b steps land at the destination, so the engine's own
--- AutoCompleteZone (WoWPro_AutoComplete.lua:513-526) completes them with no click.
-describe("travel arrival on main (F/b with TZ) #slow", function()
+-- F steps fly on real taxi nodes (arrival emulation spec section 5), so the run uses the
+-- fixture Forever tables (spec/fixtures/forever: Dun Morogh, Loch Modan, Ironforge and
+-- Stormwind City on Eastern Kingdoms), pinned so the result doesn't depend on what this
+-- machine has installed. An F step with a TZ that departs from a map those tables place
+-- lands at a real node, so the engine's own AutoCompleteZone (WoWPro_AutoComplete.lua
+-- :513-526) completes it with no click. F steps departing elsewhere have no listed nodes
+-- (destination-unresolved): not checked here.
+describe("travel arrival on main (F with TZ, fixture tables) #slow", function()
   local why = absent("main")
   if why then
     pending(why)
     return
   end
+  local FIXTURE_MAPS = { [1426] = true, [1432] = true, [1453] = true, [1455] = true }
 
-  it("every acted F/b step with a TZ tag completes without a manual click", function()
-    local r = run_of("main")
+  it("every acted F step with a TZ tag departing from a fixture map completes without a manual click", function()
+    local r = run_of("main", "spec/fixtures/forever/installed")
     local guide_source = require("hwc.driver.guide_source")
     local manual = {}
     for _, s in ipairs(r.log.signals) do
@@ -237,18 +246,19 @@ describe("travel arrival on main (F/b with TZ) #slow", function()
     end
     local checked, clicked = {}, {}
     for _, snap in ipairs(r.log.steps) do
-      if (snap.action == "F" or snap.action == "b") and snap.line then
+      if snap.action == "F" and snap.line then
         local file = r.engine:guide(snap.gid).file
         local text = file and guide_source.line_text(ROOT .. "main", file, snap.line) or ""
-        if text:find("|TZ|", 1, true) then
+        local map_id = tonumber(text:match("|Z|%s*(%d+)"))
+        if text:find("|TZ|", 1, true) and FIXTURE_MAPS[map_id] then
           local where = file .. ":" .. snap.line .. " " .. snap.action .. " " .. snap.name
           checked[#checked + 1] = where
           if manual[snap.gid .. ":" .. snap.line] then clicked[#clicked + 1] = where end
         end
       end
     end
-    print("F/b steps with TZ acted on: " .. table.concat(checked, "; "))
-    assert.is_true(#checked > 0, "the run acted on no F/b step with a TZ tag")
+    print("F steps with TZ from fixture maps acted on: " .. table.concat(checked, "; "))
+    assert.is_true(#checked > 0, "the run acted on no F step with a TZ tag from a fixture map")
     assert.same({}, clicked)
   end)
 end)
