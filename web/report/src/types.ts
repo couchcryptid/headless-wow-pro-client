@@ -89,7 +89,7 @@ export interface CatalogSource {
 }
 
 /** The run facts About this run lists, each a finished sentence written by report.lua. */
-export type NoteKey = "filters" | "played" | "unreached" | "skipped_races" | "rank" | "dungeons" | "jumped" | "carried";
+export type NoteKey = "unverified" | "filters" | "played" | "unreached" | "skipped_races" | "rank" | "dungeons" | "jumped" | "carried";
 
 export interface Header {
   addon: {

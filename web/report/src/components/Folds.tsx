@@ -123,7 +123,7 @@ function About({ doc }: { doc: ReportDoc }) {
   if (h.client.commit) client.push(`commit ${h.client.commit}`);
   const cst = state(h.client.dirty);
   if (cst) client.push(cst);
-  const keys: NoteKey[] = ["filters", "played", "unreached", "skipped_races", "rank", "dungeons", "jumped", "carried"];
+  const keys: NoteKey[] = ["unverified", "filters", "played", "unreached", "skipped_races", "rank", "dungeons", "jumped", "carried"];
   const notes = keys
     .map((k) => h.notes[k])
     .filter((n): n is string => typeof n === "string" && n !== "");
