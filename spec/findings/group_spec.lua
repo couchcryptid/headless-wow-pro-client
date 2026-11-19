@@ -318,13 +318,15 @@ describe("group.findings", function()
       { signal = "lua-error", message = "boom", stack = "x.lua:1" },
       { signal = "missing-global", global = "FooBar" },
       { signal = "rep-faction-unmet", gid = "G", file = "f", line = 6, action = "C", name = "r", qid = 3, faction = 91 },
+      { signal = "arrival-data-gap", gid = "G", file = "f", line = 7, action = "R", name = "x", reason = "subzone-unknown",
+        key = "G:7" },
     }
     local fs = group.findings({ runlog("Dwarf", "WARRIOR", sigs) })
     local sev = {}
     for _, f in ipairs(fs) do sev[#sev + 1] = f.signal .. ":" .. tostring(f.severity) .. ":" .. tostring(f.expected) end
     table.sort(sev)
     assert.same({
-      "below-level:medium-high:nil", "leftover-quests:low:nil", "lua-error:high:nil",
+      "arrival-data-gap:low:nil", "below-level:medium-high:nil", "leftover-quests:low:nil", "lua-error:high:nil",
       "manual-completion:medium:nil", "manual-completion:nil:true", "missing-global:low:nil",
       "rep-faction-unmet:medium:nil", "stuck:medium:nil",
     }, sev)

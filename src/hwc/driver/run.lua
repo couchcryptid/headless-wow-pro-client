@@ -563,6 +563,52 @@ function Driver:refusals(cur, out)
   end
 end
 
+-- Travel steps (arrival emulation spec section 10): with no Forever tables installed a
+-- stalled one is never judged.
+local ARRIVAL_ACTIONS = { F = true, f = true, b = true, P = true, H = true, h = true, R = true }
+local NO_TABLES = { reason = "tables-missing", key = "no-tables" }
+
+-- The harness notice for an arrival step that didn't advance, or nil when the step is
+-- the guide's to answer for (arrival emulation spec section 10). The first rule that
+-- applies decides: the action's own data gap; no Forever tables at all (nothing can be
+-- judged, so even an R step with no gap is tables-missing); a landing subzone no
+-- capture knows (key "<gid>:<line>").
+function Driver:arrival_gap(step, out)
+  if out.data_gap then return out.data_gap end
+  if not ARRIVAL_ACTIONS[step.action] then return nil end
+  local catalog = self.W.catalog
+  if not (catalog and catalog.forever) then return NO_TABLES end
+  if out.classify == "subzone-unknown" then
+    return { reason = "subzone-unknown",
+      key = string.format("%s:%s", tostring(step.gid or self.gid), tostring(step.line or step.index)) }
+  end
+  return nil
+end
+
+-- A did-not-advance's reason for a step with no gap: the action's own (a guide reason
+-- such as no-taxi-node, or a refusal), else what the arrival classification says.
+local function stall_reason(out)
+  if out.reason then return out.reason end
+  if out.classify == "name-not-an-area" then return "name-not-an-area" end
+  if out.arrived then return "arrival-mismatch" end
+  return nil
+end
+
+-- Once per run, before the first step: what hwc's arrival data itself is missing or gets
+-- wrong. start-node-unknown only with the tables present (without them every arrival is
+-- tables-missing anyway); each catalog:arrival_problems() row as arrival-data-mismatch.
+function Driver:arrival_notices()
+  local W = self.W
+  local catalog = W.catalog
+  if catalog and catalog.forever and W.start_node_unknown then
+    self:signal("arrival-data-gap", nil, { reason = "start-node-unknown", key = W.player.race_key })
+  end
+  if not (catalog and catalog.arrival_problems) then return end
+  for _, row in ipairs(catalog:arrival_problems(W.arrivals)) do
+    self:signal("arrival-data-gap", nil, { reason = "arrival-data-mismatch", key = row.key, detail = row.detail })
+  end
+end
+
 function Driver:snapshot(cur, why, rows, out)
   local p = self.W.player
   local row_idx = {}
@@ -776,14 +822,21 @@ function Driver:iterate()
     -- same click made every did-not-advance show up twice in the report. A step that
     -- comes back even after the click is the stuck watchdog's job, not a separate signal.
     -- A refused step whose refusal is already a signal (accept-refused, log-full,
-    -- orphan-turnin) gets no second one for the same click.
+    -- orphan-turnin) gets no second one for the same click. An arrival step whose stall
+    -- is hwc's own missing data is an arrival-data-gap notice instead (spec section 10).
     local expected = actions.expects_manual(cur)
+    local gap = not expected and not out.explained and self:arrival_gap(cur, out)
     local sig
     if expected then
       sig = self:signal("manual-completion", cur,
         { qid = out.qid, reason = out.reason, outcome = out.kind, expected = true })
+    elseif gap then
+      self:signal("arrival-data-gap", cur, { qid = out.qid, reason = gap.reason, key = gap.key, outcome = out.kind,
+        expected = out.expected, arrived = out.arrived, resolved_by = out.resolved_by })
+      out.explained = true
     elseif not out.explained then
-      sig = self:signal("did-not-advance", cur, { qid = out.qid, reason = out.reason, outcome = out.kind })
+      sig = self:signal("did-not-advance", cur, { qid = out.qid, reason = stall_reason(out), outcome = out.kind,
+        expected = out.expected, arrived = out.arrived, resolved_by = out.resolved_by })
     end
     -- An addon error inside the right-click is in sb.errors (a lua-error at the end)
     -- and becomes this signal's reason.
@@ -921,6 +974,7 @@ function run.drive(ctx, opts)
   }, Driver)
 
   d.last_level = W.player.level -- the starting level: recorded, not emitted
+  d:arrival_notices()
   local gid = d.E:gid()
   if gid == nil then
     d:signal("stuck", nil, { reason = "no-guide-loaded" })

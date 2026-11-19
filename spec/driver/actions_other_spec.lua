@@ -102,11 +102,13 @@ describe("actions.perform: h and H", function()
     assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
   end)
 
-  it("H with no inn entry is inn-unknown", function()
+  it("H with no inn entry is inn-unknown, keyed by the step when there is no bind", function()
     local ctx, E, w = setup("Dwarf", nil, { arrivals = inn_facts({}) })
     w.player:set_zone("Ironforge", "", 1455, 0.2, 0.5)
-    local o = actions.perform(ctx, step("H", {}, { zone = "1426; Dun Morogh" }, "Kharanos"))
-    assert.are.equal("inn-unknown", o.data_gap.reason)
+    local s = step("H", {}, { zone = "1426; Dun Morogh" }, "Kharanos")
+    s.gid, s.line = "G1", 9
+    local o = actions.perform(ctx, s)
+    assert.are.same({ reason = "inn-unknown", key = "G1:9" }, o.data_gap)
     assert.are.same({ "Ironforge", 1455 }, { w.player.zone, w.player.map_id })
     assert.are.same({}, names(E))
   end)
@@ -723,6 +725,31 @@ describe("actions.perform: flights", function()
     assert.is_nil(o.arrived)
     assert.is_nil(o.classify)
     assert.are.same({ name = "Darnassus" }, o.expected)
+  end)
+
+  -- Ruling R12: a listed node whose location contains the step name is one the addon's
+  -- TakeTaxiClassic would have taken; nothing taken means the addon never tried (the row
+  -- wasn't active, or AutoSelect is off), which is no guide finding.
+  it("F with a matching listed node that nothing took is taxi-not-taken, not no-taxi-node", function()
+    local ctx, E, w, tags = fly("Thelsamar")
+    E.fire = function(self, event, ...) self.fired[#self.fired + 1] = { event, ... } end -- no AutoSelect
+    local s = step("F", {}, tags, "Thelsamar")
+    s.gid, s.line = "G1", 42
+    local o = actions.perform(ctx, s)
+    assert.is_nil(o.reason)
+    assert.are.same({ reason = "taxi-not-taken", key = "G1:42" }, o.data_gap)
+    assert.are.same({}, E.sb.taxi_taken)
+    assert.are.equal("Loch Modan", w.player.zone) -- still arrives (spec section 9)
+  end)
+
+  it("F with a matching node the taxi map doesn't list is no-taxi-node", function()
+    local arrivals = { start_nodes = { Dwarf = "Ironforge, Dun Morogh" }, start_bind = {}, subzones = {},
+      taxi_map = { lists_undiscovered = false } }
+    local ctx, E, w, tags = fly("Thelsamar", nil, { arrivals = arrivals })
+    E.fire = function(self, event, ...) self.fired[#self.fired + 1] = { event, ... } end
+    local o = actions.perform(ctx, step("F", {}, tags, "Thelsamar"))
+    assert.are.equal("no-taxi-node", o.reason)
+    assert.is_nil(o.data_gap)
   end)
 
   it("F with no tables is tables-missing and fires no taxi events", function()

@@ -1521,3 +1521,134 @@ describe("driver.run", function()
     end)
   end)
 end)
+
+-- Arrival emulation spec section 10: a travel step that didn't advance is a harness notice
+-- (arrival-data-gap) when hwc's own data is missing, else a guide did-not-advance that
+-- carries what the step asked for and where the player arrived.
+describe("driver.run: arrival signals", function()
+  -- A world with the Forever tables (catalog.forever) unless no_tables; problems are the
+  -- catalog's arrival_problems() rows.
+  local function arrival_world(opts)
+    opts = opts or {}
+    local w = fx.fake_world()
+    if not opts.no_tables then w.catalog.forever = {} end
+    w.catalog.arrival_problems = function() return opts.problems or {} end
+    w.player.race_key = "Dwarf"
+    w.start_node_unknown = opts.start_node_unknown
+    return w
+  end
+
+  local function stalled(step, opts)
+    return drive(one_guide({ step }), {}, nil, arrival_world(opts))
+  end
+
+  it("a stalled arrival with a data gap records arrival-data-gap, not did-not-advance", function()
+    local log, E = stalled({ action = "F", name = "Stormwind", outcome = { kind = "acted",
+      data_gap = { reason = "destination-unresolved", key = "Stormwind" }, expected = { name = "Stormwind" } } })
+    assert.same({}, signals(log, "did-not-advance"))
+    local g = signals(log, "arrival-data-gap")
+    assert.equal(1, #g)
+    assert.equal("destination-unresolved", g[1].reason)
+    assert.equal("Stormwind", g[1].key)
+    assert.equal("F", g[1].action)
+    assert.equal(101, g[1].line)
+    assert.same({ "G1:1", "G1:2" }, E.manual) -- still clicked off once
+  end)
+
+  it("a stalled F named Stormwind records did-not-advance name-not-an-area with expected and arrived", function()
+    local arrived = { zone = "Stormwind City", map_id = 1453 }
+    local log = stalled({ action = "F", name = "Stormwind", outcome = { kind = "acted",
+      expected = { name = "Stormwind" }, arrived = arrived, classify = "name-not-an-area" } })
+    local d = signals(log, "did-not-advance")
+    assert.equal(1, #d)
+    assert.equal("name-not-an-area", d[1].reason)
+    assert.same({ name = "Stormwind" }, d[1].expected)
+    assert.same(arrived, d[1].arrived)
+    assert.same({}, signals(log, "arrival-data-gap"))
+  end)
+
+  it("a stalled F named after a real area records arrival-mismatch", function()
+    local arrived = { zone = "Loch Modan", subzone = "Thelsamar", map_id = 1432 }
+    local log = stalled({ action = "F", name = "Sentinel Hill", outcome = { kind = "acted",
+      expected = { name = "Sentinel Hill", tz = "Westfall" }, arrived = arrived, classify = "subzone-known",
+      resolved_by = "loose" } })
+    local d = signals(log, "did-not-advance")
+    assert.equal(1, #d)
+    assert.equal("arrival-mismatch", d[1].reason)
+    assert.same({ name = "Sentinel Hill", tz = "Westfall" }, d[1].expected)
+    assert.same(arrived, d[1].arrived)
+    assert.equal("loose", d[1].resolved_by)
+  end)
+
+  it("a guide reason wins over the arrival classification", function()
+    local log = stalled({ action = "F", name = "Thelsamar", outcome = { kind = "acted",
+      reason = "flight-point-undiscovered", expected = { name = "Thelsamar" },
+      arrived = { zone = "Loch Modan", map_id = 1432 }, classify = "advances", resolved_by = "loose" } })
+    local d = signals(log, "did-not-advance")
+    assert.equal(1, #d)
+    assert.equal("flight-point-undiscovered", d[1].reason)
+  end)
+
+  it("subzone-unknown is a notice", function()
+    local log = stalled({ action = "R", name = "Amberstill Ranch", outcome = { kind = "acted",
+      expected = { name = "Amberstill Ranch" }, arrived = { zone = "Dun Morogh", map_id = 1426 },
+      classify = "subzone-unknown" } })
+    assert.same({}, signals(log, "did-not-advance"))
+    local g = signals(log, "arrival-data-gap")
+    assert.equal(1, #g)
+    assert.equal("subzone-unknown", g[1].reason)
+    assert.equal("G1:101", g[1].key)
+  end)
+
+  it("an advanced step records nothing", function()
+    local log = drive(one_guide({ { action = "F", name = "Stormwind", outcome = { kind = "acted",
+      data_gap = { reason = "tables-missing", key = "no-tables" }, classify = "subzone-unknown" } } }),
+      { G1 = completes(1) }, nil, arrival_world())
+    assert.same({ "manual-completion" }, kinds(log)) -- only the closing D
+  end)
+
+  it("without the Forever tables a stalled R step is tables-missing, not did-not-advance", function()
+    local log = stalled({ action = "R", name = "Amberstill Ranch", qids = { 314 }, outcome = { kind = "acted",
+      expected = { name = "Amberstill Ranch" }, arrived = { zone = "Dun Morogh", map_id = 1426 } } },
+      { no_tables = true })
+    assert.same({}, signals(log, "did-not-advance"))
+    local g = signals(log, "arrival-data-gap")
+    assert.equal(1, #g)
+    assert.same({ "tables-missing", "no-tables", 314 }, { g[1].reason, g[1].key, g[1].qid })
+  end)
+
+  it("with the tables a stalled R step without a classification stays did-not-advance", function()
+    local log = stalled({ action = "R", name = "Go", outcome = { kind = "acted" } })
+    assert.equal(1, #signals(log, "did-not-advance"))
+    assert.same({}, signals(log, "arrival-data-gap"))
+  end)
+
+  it("arrival_problems rows become arrival-data-mismatch once", function()
+    local problems = { { key = "inns[1]", detail = "npc 1 is not an innkeeper in QuestieDB" },
+      { key = "start_nodes.Gnome", detail = "taxi node X is not in the Forever tables" } }
+    local log = drive(one_guide({ { action = "R", name = "a" }, { action = "R", name = "b" } }),
+      { G1 = completes(2) }, nil, arrival_world({ problems = problems }))
+    local g = signals(log, "arrival-data-gap")
+    assert.equal(2, #g)
+    for i, row in ipairs(problems) do
+      assert.same({ "arrival-data-mismatch", row.key, row.detail }, { g[i].reason, g[i].key, g[i].detail })
+      assert.is_nil(g[i].gid)
+    end
+  end)
+
+  it("records start-node-unknown once at run start only when the tables are present", function()
+    local steps = { { action = "R", name = "a" }, { action = "R", name = "b" } }
+    local log = drive(one_guide(steps), { G1 = completes(2) }, nil, arrival_world({ start_node_unknown = true }))
+    local g = signals(log, "arrival-data-gap")
+    assert.equal(1, #g)
+    assert.same({ "start-node-unknown", "Dwarf" }, { g[1].reason, g[1].key })
+    log = drive(one_guide(steps), { G1 = completes(2) }, nil,
+      arrival_world({ start_node_unknown = true, no_tables = true }))
+    assert.same({}, signals(log, "arrival-data-gap"))
+  end)
+
+  it("passes actions the step with its gid and line", function()
+    local _, E = drive(one_guide({ { action = "R", name = "a" } }), { G1 = completes(1) }, nil, arrival_world())
+    assert.same({ "G1", 101 }, { E.performed[1].gid, E.performed[1].line })
+  end)
+end)

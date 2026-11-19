@@ -307,6 +307,38 @@ describe("boat arrival on main (b, fixture crossings) #slow", function()
   end)
 end)
 
+-- Arrival emulation spec section 10, Review Focus 1: with no Forever tables installed no
+-- arrival step is judged. forever_dir names a path that doesn't exist (ruling R5), so a
+-- dev machine's installed tables can't leak into the run.
+describe("a run with no Forever tables on main #slow", function()
+  local why = absent("main")
+  if why then
+    pending(why)
+    return
+  end
+  local NO_TABLES = config.repo_root() .. "/local/no-forever-tables-here"
+  local ARRIVAL = { F = true, f = true, b = true, P = true, H = true, h = true, R = true }
+
+  it("a Dwarf Warrior run with no Forever tables has no did-not-advance on F/f/b/P/H/h steps", function()
+    assert.is_nil(lfs.attributes(NO_TABLES), NO_TABLES .. " exists")
+    local r = run_of("main", NO_TABLES)
+    assert.is_nil(r.world.catalog.forever)
+    local judged, gaps = {}, 0
+    for _, s in ipairs(r.log.signals) do
+      if s.signal == "did-not-advance" and ARRIVAL[s.action] then
+        judged[#judged + 1] = tostring(s.file) .. ":" .. tostring(s.line) .. " " .. s.action .. " " .. tostring(s.name)
+      elseif s.signal == "arrival-data-gap" then
+        gaps = gaps + 1
+        assert.is_truthy(ARRIVAL[s.action], "arrival-data-gap on a " .. tostring(s.action) .. " step")
+        assert.is_nil(tostring(s.key):find("nil", 1, true), "gap key names no step: " .. tostring(s.key))
+      end
+    end
+    print(string.format("no tables: %d arrival-data-gap notices", gaps))
+    assert.same({}, judged)
+    assert.is_true(gaps > 0)
+  end)
+end)
+
 -- Ruling Z (final review C2): an item objective's progress is the bag count, so the
 -- ACTIVE-only `K Vagash|ACTIVE|314|L|3627|` and `l Hops|ACTIVE|116|L|1274 5|` (the
 -- hops quest 117 asks for) complete their quests and the T steps turn them in.

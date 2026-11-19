@@ -166,7 +166,12 @@ local function scripted_engine(guides, script, start, world)
     local o = s.outcome or { kind = "acted" }
     local out = { kind = o.kind, reason = o.reason, qid = (step.qids or {})[1], events = {}, levels = 0,
       grind = o.grind, level_grind = o.level_grind, elite = false, abstracted_turnin = o.abstracted_turnin, missing = o.missing,
-      missing_any = o.missing_any, arrivals = o.arrivals }
+      missing_any = o.missing_any, arrivals = o.arrivals,
+      -- Travel steps' arrival fields (hwc.driver.flight header).
+      data_gap = o.data_gap, expected = o.expected, arrived = o.arrived, resolved_by = o.resolved_by,
+      classify = o.classify }
+    E.performed = E.performed or {}
+    E.performed[#E.performed + 1] = step
     -- o.records: world events this step's action leaves behind (quest_accept / quest_turn_in).
     for _, rec in ipairs(o.records or {}) do ctx.world.events[#ctx.world.events + 1] = rec end
     out.settle = E:settle()

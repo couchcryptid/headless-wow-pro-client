@@ -36,6 +36,8 @@ local SEVERITY = {
   ["did-not-advance"] = "medium", stuck = "medium", ["manual-completion"] = "medium",
   ["rep-faction-unmet"] = "medium",
   ["leftover-quests"] = "low", ["missing-global"] = "low",
+  -- Arrival emulation spec section 10: a harness notice (hwc's own arrival data is missing).
+  ["arrival-data-gap"] = "low",
 }
 local SEVERITY_ORDER = { "high", "medium-high", "medium", "low" }
 local SEVERITY_RANK = {}

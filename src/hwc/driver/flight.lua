@@ -8,7 +8,9 @@
 -- Outcome fields set here (read by the driver):
 --   out.reason    guide reason: "no-taxi-node" | "flight-point-undiscovered"
 --   out.data_gap  { reason, key }: hwc's own data is missing ("tables-missing", "fp-unknown",
---                 "start-node-unknown", "destination-unresolved")
+--                 "start-node-unknown", "destination-unresolved"), or "taxi-not-taken": the
+--                 addon never tried to pick a node it would have matched (ruling R12). The
+--                 first gap recorded wins.
 --   out.expected  { name, tz }: what the step asks for (F)
 --   out.arrived   { zone, subzone, map_id }: where the player landed; subzone nil when no
 --                 capture says what it is (ruling R4)
@@ -32,6 +34,30 @@ end
 local function captured_subzone(world, name)
   local e = (world.arrivals.subzones or {})[name]
   return e and e.subzone or nil
+end
+
+-- The nodes the taxi stub lists (hwc.stubs.core taxi_nodes): `nodes`, less the undiscovered
+-- ones when the taxi_map facts say the map doesn't show them.
+local function listed(w, nodes)
+  local tm = w.arrivals and w.arrivals.taxi_map
+  if not (tm and tm.lists_undiscovered == false) then return nodes end
+  local out = {}
+  for _, n in ipairs(nodes) do
+    if w.player.flight_points[n.name] then out[#out + 1] = n end
+  end
+  return out
+end
+
+-- Whether WoWPro.TakeTaxiClassic(name) would pick one of `nodes`: a location (the text
+-- before the first comma) containing the name as plain text, or the whole node name equal
+-- to it (WoWPro_AutoComplete.lua:32-53).
+local function addon_would_take(nodes, name)
+  if type(name) ~= "string" then return false end
+  for _, n in ipairs(nodes) do
+    local location = n.name:match("^([^,]*)")
+    if location:find(name, 1, true) or n.name == name then return true end
+  end
+  return false
 end
 
 -- The continent's taxi nodes for the player's faction (spec section 5's listing, before
@@ -103,11 +129,15 @@ function flight.fly(ctx, step, out, h)
     elseif continent and w.fp_unknown[continent] then
       gap(out, "fp-unknown", tostring(continent))
     end
+  elseif addon_would_take(listed(w, nodes), step.name) then
+    -- A listed node matches, yet the addon took none: its TAXIMAP_OPENED handler never ran
+    -- TakeTaxiClassic (the row wasn't active, or AutoSelect is off). Not the guide's fault.
+    gap(out, "taxi-not-taken", string.format("%s:%s", tostring(step.gid), tostring(step.line or step.index)))
   else
     out.reason = "no-taxi-node"
   end
   -- The player still arrives (spec section 9): the step only picks which real node it
-  -- means, by the loose match over the listed nodes (with their captured subzones).
+  -- means, by the loose match over the continent's nodes (with their captured subzones).
   local candidates = {}
   for i, n in ipairs(nodes) do
     candidates[i] = { name = n.name, zone = n.zone, subzone = captured_subzone(w, n.name), node = n }
