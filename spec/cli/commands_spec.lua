@@ -241,25 +241,39 @@ describe("hwc init, doctor and update", function()
     end
   end)
 
-  it("update passes --tag through to the installer", function()
-    local seen
+  local forever = require("hwc.forever.install")
+  local FOREVER_RES = { from = "1.16.0.64000", to = "1.16.1.64321" }
+
+  it("update passes --tag and --build through to the installers", function()
+    local seen, fseen
     local code = with_stub(install, "sync", function(_, opts)
       seen = opts
       return { to = "v1.1.3", build = "e1652ce0123", skipped = {} }
-    end, function() return (store_run({ "update", "--tag", "v1.1.3" })) end)
+    end, function()
+      return with_stub(forever, "sync", function(_, opts)
+        fseen = opts
+        return FOREVER_RES
+      end, function() return (store_run({ "update", "--tag", "v1.1.3", "--build", "1.16.1.64321" })) end)
+    end)
     assert.equal(0, code)
     assert.equal("v1.1.3", seen.tag)
+    assert.equal("1.16.1.64321", fseen.build)
   end)
 
-  it("update prints the change, the skipped releases and the already line", function()
-    local r = with_stub(install, "sync", function()
-      return { to = "v1.1.2", build = "e1652ce0123", skipped = { "v1.1.3" } }
-    end, function() local c, o = store_run({ "update" }); return { c, o } end)
+  it("update prints both result lines, the skipped releases and the already lines", function()
+    local function go(qres, fres)
+      return with_stub(install, "sync", function() return qres end, function()
+        return with_stub(forever, "sync", function() return fres end,
+          function() local c, o = store_run({ "update" }); return { c, o } end)
+      end)
+    end
+    local r = go({ to = "v1.1.2", build = "e1652ce0123", skipped = { "v1.1.3" } }, FOREVER_RES)
     assert.equal(0, r[1])
-    assert.equal("QuestieDB none \226\134\146 v1.1.2 (build e1652ce)\nskipped v1.1.3: no Forever build\n", r[2])
-    r = with_stub(install, "sync", function() return { to = "v1.1.2", already = true, skipped = {} } end,
-      function() local c, o = store_run({ "update" }); return { c, o } end)
-    assert.equal("QuestieDB v1.1.2 already installed; active\n", r[2])
+    assert.equal("QuestieDB none \226\134\146 v1.1.2 (build e1652ce)\nskipped v1.1.3: no Forever build\n"
+      .. "Forever tables 1.16.0.64000 \226\134\146 1.16.1.64321\n", r[2])
+    r = go({ to = "v1.1.2", already = true, skipped = {} }, { to = "1.16.1.64321", already = true })
+    assert.equal("QuestieDB v1.1.2 already installed; active\n"
+      .. "Forever tables 1.16.1.64321 already installed; active\n", r[2])
   end)
 
   it("update failure exits 1 with the error", function()
@@ -267,6 +281,16 @@ describe("hwc init, doctor and update", function()
       function() local c, _, e = store_run({ "update" }); return { c, e } end)
     assert.equal(1, r[1])
     assert.equal("hwc: no network\n", r[2])
+  end)
+
+  it("update exits 1 with the Forever error when the tables fail", function()
+    local r = with_stub(install, "sync", function() return { to = "v1.1.2", already = true, skipped = {} } end,
+      function()
+        return with_stub(forever, "sync", function() return nil, "hwc: forever: UiMap: missing column ID" end,
+          function() local c, _, e = store_run({ "update" }); return { c, e } end)
+      end)
+    assert.equal(1, r[1])
+    assert.equal("hwc: forever: UiMap: missing column ID\n", r[2])
   end)
 
   it("doctor exits 1 when the report failed, 0 otherwise", function()
@@ -287,12 +311,17 @@ describe("hwc init, doctor and update", function()
     local r = with_stub(install, "init", function()
       return { already = false, sync_result = { to = "v1.1.2", build = "e1652ce0123", skipped = {} } }
     end, function()
-      return with_stub(doctor, "run", function()
-        return { checks = { { id = "luajit", status = "ok", detail = "fine" } }, failed = false }
-      end, function() local c, o = store_run({ "init" }); return { c, o } end)
+      return with_stub(forever, "init", function()
+        return { already = false, sync_result = FOREVER_RES }
+      end, function()
+        return with_stub(doctor, "run", function()
+          return { checks = { { id = "luajit", status = "ok", detail = "fine" } }, failed = false }
+        end, function() local c, o = store_run({ "init" }); return { c, o } end)
+      end)
     end)
     assert.equal(0, r[1])
-    assert.equal("QuestieDB none \226\134\146 v1.1.2 (build e1652ce)\nok   luajit: fine\n", r[2])
+    assert.equal("QuestieDB none \226\134\146 v1.1.2 (build e1652ce)\n"
+      .. "Forever tables 1.16.0.64000 \226\134\146 1.16.1.64321\nok   luajit: fine\n", r[2])
   end)
 end)
 

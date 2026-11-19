@@ -39,6 +39,16 @@ local function fake_github(tag)
   end
 end
 
+-- A minimal valid Forever table install under root/forever/<build>.
+local function write_forever(root, build)
+  local convert = require("hwc.forever.convert")
+  for _, spec in ipairs(convert.TABLES) do
+    write(root .. "/forever/" .. build .. "/" .. spec.name .. ".json", '{"columns":[],"rows":[]}')
+  end
+  write(root .. "/forever/" .. build .. "/.hwc-release.json", '{"build":"' .. build .. '","tables":{}}')
+  write(root .. "/forever/active", build .. "\n")
+end
+
 describe("doctor", function()
   local root, cwd, counts, env, deps
 
@@ -55,6 +65,7 @@ describe("doctor", function()
     write(root .. "/questie/active", "v1.1.2\n")
     write(root .. "/questie/v1.1.2/QuestieDB/QuestieDB_Forever.toc",
       "## X-Flavor: Forever\n## X-Mode: baked\n## X-BUILD-COMMIT: abcdef1234567\n## X-Contract-Version: 4\nfile.lua\n")
+    write_forever(root, "1.16.1.64321")
     deps = {
       get_json = fake_github("v1.1.2"),
       has_tool = function() return true end,
@@ -78,7 +89,7 @@ describe("doctor", function()
     local order = {}
     for i, x in ipairs(report.checks) do order[i] = x.id end
     assert.are.same({ "luajit", "rocks", "tools", "wowpro", "addon", "questie", "questie-toc",
-      "questie-contract", "questie-upstream", "counts" }, order)
+      "questie-contract", "questie-upstream", "forever", "counts" }, order)
   end)
 
   it("warns, and still reports everything, when upstream is unreachable", function()
@@ -87,7 +98,7 @@ describe("doctor", function()
     local c = by_id(report)
     assert.are.equal("warn", c["questie-upstream"].status)
     assert.is_truthy(c["questie-upstream"].detail:find("could not check upstream", 1, true))
-    assert.are.equal(10, #report.checks)
+    assert.are.equal(11, #report.checks)
     assert.is_false(report.failed)
   end)
 
@@ -101,6 +112,30 @@ describe("doctor", function()
     assert.is_nil(c["questie-contract"])
     assert.is_nil(c["questie-upstream"])
     assert.is_true(report.failed)
+  end)
+
+  it("forever ok shows the build", function()
+    local c = by_id(doctor.run(env, deps))
+    assert.are.equal("ok", c.forever.status)
+    assert.is_truthy(c.forever.detail:find("1.16.1.64321", 1, true))
+  end)
+
+  it("forever missing fails with fix hwc update", function()
+    os.remove(root .. "/forever/active")
+    local report = doctor.run(env, deps)
+    local c = by_id(report)
+    assert.are.equal("fail", c.forever.status)
+    assert.are.equal("none installed", c.forever.detail)
+    assert.are.equal("hwc update", c.forever.fix)
+    assert.is_true(report.failed)
+  end)
+
+  it("forever fails a build with a missing table", function()
+    os.remove(root .. "/forever/1.16.1.64321/UiMap.json")
+    local c = by_id(doctor.run(env, deps))
+    assert.are.equal("fail", c.forever.status)
+    assert.is_truthy(c.forever.detail:find("UiMap.json", 1, true))
+    assert.are.equal("hwc update", c.forever.fix)
   end)
 
   it("fails with hwc init when nothing is installed", function()
@@ -196,7 +231,7 @@ describe("doctor", function()
     assert.is_truthy(text:find("warn counts: ", 1, true))
     local decoded = dkjson.decode(doctor.json(report))
     assert.are.equal(false, decoded.failed)
-    assert.are.equal(10, #decoded.checks)
+    assert.are.equal(11, #decoded.checks)
   end)
 
   describe("addon check", function()

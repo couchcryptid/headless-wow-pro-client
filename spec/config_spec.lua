@@ -129,6 +129,44 @@ describe("config.load", function()
     end)
   end)
 
+  describe("default forever_dir", function()
+    local fhome = require("hwc.forever.home")
+    local real_root = store.root
+    local froot
+    before_each(function()
+      froot = os.tmpname()
+      os.remove(froot)
+      os.execute("mkdir -p '" .. froot .. "/forever'")
+      store.root = function() return froot end
+    end)
+    after_each(function()
+      store.root = real_root
+      os.execute("rm -rf '" .. froot .. "'")
+    end)
+
+    it("is nil with no active build", function()
+      assert.is_nil(config.load({}).catalog.forever_dir)
+    end)
+
+    it("is the active build dir under HWC_HOME", function()
+      local f = assert(io.open(froot .. "/forever/active", "w"))
+      f:write("1.16.1.64321\n")
+      f:close()
+      assert.are.equal(fhome.dir(froot, "1.16.1.64321"), config.load({}).catalog.forever_dir)
+    end)
+
+    it("is nil when the active build is not a build string", function()
+      local f = assert(io.open(froot .. "/forever/active", "w"))
+      f:write("../elsewhere\n")
+      f:close()
+      assert.is_nil(config.load({}).catalog.forever_dir)
+    end)
+
+    it("yields to an explicit catalog.forever_dir", function()
+      assert.are.equal("/abs/f", config.load({ catalog = { forever_dir = "/abs/f" } }).catalog.forever_dir)
+    end)
+  end)
+
   it("missing addon path errors", function()
     assert.has_error(function()
       config.load { addon_path = "/nonexistent" }

@@ -60,7 +60,7 @@ come from a catalog built from QuestieDB, never from the guide lines.
   `Interface/AddOns` folder. `hwc` must be run from inside it (see
   [Choosing guides](#choosing-guides)).
 - **`curl`, `unzip`, and `shasum` or `sha256sum`**, which `hwc init` and
-  `hwc update` use to download and verify QuestieDB.
+  `hwc update` use to download and verify QuestieDB and the Forever client tables.
 - **Optional:** `python3`.
 
 ## Install
@@ -83,7 +83,7 @@ LuaRocks modules from `~/.luarocks`.
 Run `hwc` from inside a WoW-Pro folder (a git checkout or `Interface/AddOns`):
 
 ```sh
-hwc init                                                       # download QuestieDB into ~/.hwc, check the setup (any folder)
+hwc init                                                       # download QuestieDB and the Forever client tables into ~/.hwc, check the setup (any folder)
 cd ~/Projects/WoW-Pro-Guides
 hwc run --race Dwarf --class WARRIOR                           # play one character along the chain
 hwc diff OLD.json NEW.json                                     # compare two runs (see "Comparing runs")
@@ -136,6 +136,9 @@ when it is stale. The dev server fills the page from `spec/fixtures/findings/<na
     checked against the engine.
 - **QuestieDB** is GPL-3.0. It is downloaded to `~/.hwc` on your machine and
   never committed. See [World and catalog](#world-and-catalog).
+- **The Forever client tables** (taxi nodes, maps, areas) are Blizzard game data,
+  downloaded from wago.tools to `~/.hwc/forever` on your machine, converted to JSON
+  and never committed. See [World and catalog](#world-and-catalog).
 - **LibDeflate** is vendored under the zlib licence at `src/hwc/vendor/`.
 - **Not affiliated with Blizzard Entertainment.** World of Warcraft is a
   trademark of Blizzard Entertainment, Inc.
@@ -467,7 +470,8 @@ XP and a 40-slot quest log. Quest, NPC and item facts come from a catalog
 counts. The guide lines are never a source.
 
 **Data policy: no third-party data is committed.** QuestieDB lives in
-`~/.hwc`. The repo holds only the loaders and the structure-only `catalog/counts.example.json`.
+`~/.hwc`, and so do the Forever client tables (taxi nodes, maps, areas), downloaded
+from wago.tools. The repo holds only the loaders and the structure-only `catalog/counts.example.json`.
 
 Setup:
 
@@ -476,7 +480,10 @@ hwc init      # from any folder
 ```
 
 This downloads the latest QuestieDB Forever release into `~/.hwc/questie/<tag>/`,
-makes it the active one, then runs the health check. `HWC_HOME` moves the QuestieDB store (`~/.hwc/questie`); findings still default to `~/.hwc/findings` unless `--out` is given.
+makes it the active one. It also downloads the newest Forever client build of five
+tables from wago.tools, converts them to JSON in `~/.hwc/forever/<build>/` and makes
+that the active build, then runs the health check. `hwc update` refreshes both
+(`--tag TAG` pins QuestieDB, `--build VERSION` pins the client tables). `HWC_HOME` moves the store (`~/.hwc/questie`, `~/.hwc/forever`); findings still default to `~/.hwc/findings` unless `--out` is given.
 
 ### Reputation
 

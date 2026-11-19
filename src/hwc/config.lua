@@ -31,12 +31,24 @@ function M.default_questie_dir()
   return ok and dir or nil
 end
 
+-- The active Forever tables build dir, even when broken (doctor reports it);
+-- nil with no store, no active build or a build string that is not a build.
+function M.default_forever_dir()
+  local fhome = require("hwc.forever.home")
+  local root = home.root()
+  local build = fhome.active(root)
+  if not build then return nil end
+  local ok, dir = pcall(fhome.dir, root, build)
+  return ok and dir or nil
+end
+
 -- Catalog sources (design spec §6): QuestieDB and the hand-checked objective
 -- counts. Both optional; relative paths resolve against the repo root.
 local function catalog_config(c)
   c = c or {}
   return {
     questie_dir = c.questie_dir and resolve(c.questie_dir) or M.default_questie_dir(),
+    forever_dir = c.forever_dir and resolve(c.forever_dir) or M.default_forever_dir(),
     counts = resolve(c.counts or "local/catalog/counts.json"),
   }
 end
