@@ -2,404 +2,440 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Travel steps (`F f b P H h R`) run on real arrival data, never on the step's own
+**Goal:** Travel steps (`F f b P H h R`) run on real Forever data, never on the step's own
 text. A step that doesn't advance in the addon's own checks becomes a guide finding. A gap
 in hwc's data becomes a harness notice.
 
 **Architecture:**
-- **Data:** a local, optional arrivals file (`local/catalog/arrivals.json`), loaded by
-  `hwc.catalog.arrivals` and hung on the catalog as `catalog.arrivals`.
-- **Matching:** a pure helper module, `hwc.driver.arrival`, does the matching (nearest
-  departure, exact route choice, loose destination resolution).
-- **Actions and stubs:** `hwc.driver.actions` performs each step with world changes and
-  addon events only. The taxi stubs replay the captured taxi map.
-- **Driver and report:** the driver turns `out.data_gap` into a harness signal,
-  `arrival-data-gap`, and the findings and report layers treat that signal as harness.
+- `hwc update` also installs Forever client tables from wago.tools as converted JSON under
+  `~/.hwc/forever/<build>/` (`hwc.forever.*`), the way it installs QuestieDB.
+- `hwc.forever.db` derives taxi nodes, map and continent links and area names from them.
+- A committed first-party file, `hwc.world.arrivals`, holds the in-game captures.
+- `hwc.driver.arrival` does the matching.
+- `hwc.driver.actions` emulates each step with world changes and addon events only.
+- The driver turns `out.data_gap` into the harness signal `arrival-data-gap`.
 
-**Tech Stack:** LuaJIT 2.1, busted 2.3, dkjson, luafilesystem; the report page is
-TypeScript (web/report, vitest).
+**Tech Stack:** LuaJIT 2.1, busted 2.3, dkjson, luafilesystem, curl (via
+`hwc.questie.http`); report page TypeScript (web/report, vitest).
 
-**Spec:** `docs/superpowers/specs/2026-11-19-arrival-emulation-design.md` (read it first;
-section numbers below are its §).
+**Spec:** `docs/superpowers/specs/2026-11-19-arrival-emulation-design.md`. Read it first;
+§ numbers below are its sections.
 
 ## Global Constraints
 
-- Landing values (zone, subzone, map id, bind text) never come from the step being
-  judged. The step may only pick *which* real arrival entry it means (spec §4, §10).
-- Unknown data is never a pass: it becomes `arrival-data-gap`, never `did-not-advance`,
-  and it is never silent.
-- Actions never write engine state. They change the world and fire events. Every event
-  sequence carries a comment citing the addon line it mirrors (`~/Projects/WoW-Pro-Guides`).
-- No third-party data is committed. Only `catalog/arrivals.example.json`, which holds
-  structure only, goes in the repo.
-- Forever is not Classic. No Classic zone/subzone value goes into fixtures as fact.
-  Fixture values are labelled test data.
-- Each PR lands one or more Conventional Commit subjects. Only `feat`/`fix` release.
-- Run specs: `~/.luarocks/bin/busted` (default suite) and `~/.luarocks/bin/busted --tags=slow`
-  before the last task's commit; `npm test` and `npm run typecheck` in `web/report` for
-  Task 8.
+- **Landing values come from data.** Zone, subzone, map id and bind text never come from
+  the step being judged. The step only picks *which* real point it means (spec §6, §9).
+- **Unknown is never a pass.** Unknown data becomes `arrival-data-gap`, never
+  `did-not-advance`, and never silence.
+- **Actions never write engine state.** They change the world and fire events. Each event
+  sequence cites the addon line it mirrors (`~/Projects/WoW-Pro-Guides`).
+- **No third-party data committed.** Downloaded tables live in `~/.hwc`. Spec fixtures are
+  trimmed, hand-made CSV/JSON labelled test data, a few rows each.
+- **Runs never hit the network.** Only `hwc update`/`hwc init` download.
+- **Forever is not Classic.** The client tables are Forever's own build. Classic values
+  never enter `hwc.world.arrivals`.
+- **Commits.** Use Conventional Commit subjects, ending with the `Co-Authored-By` line.
+- **Specs.** `~/.luarocks/bin/busted` per task; `~/.luarocks/bin/busted --tags=slow`
+  before Task 9's commit; `npm test && npm run typecheck` in `web/report` for Task 10.
 
 ## Plan decisions (where the spec left a choice)
 
-- **Coordinates:** file `x`/`y` are percent, converted to fractions at load, as
-  `parse_coords` does. `arrival.RADIUS = 0.05` (fraction of the map) for nearest
-  departure.
-- **Continents:** the file maps continents to their map ids and records whether the
-  client lists unlearned nodes (`lists_unlearned`), as the capture showed.
-- **`fp-unknown` downgrade:** after any `fp-unknown` on a continent, a later
-  `flight-point-undiscovered` on that continent is a notice. The unknown node can't be
-  identified, so the downgrade is per continent.
-- **When a gap becomes a signal:** `out.data_gap` turns into a signal only when the step
-  didn't advance, and then it replaces `did-not-advance`. The exception is
-  `start-node-unknown`, which the driver emits once at run start with no step.
-- **`arrival-mismatch`:** the driver sets it as the did-not-advance reason when the
-  action traveled (`out.arrived`) and gave no other reason.
-- **Settles:** `actions.perform` may settle twice for `F` (once after
-  `PLAYER_CONTROL_LOST`, once at the end). `out.settle` keeps the last result, with
-  `hit_limit` OR-ed across both.
+- **Departure radius.** `arrival.RADIUS = 0.05`, as a map fraction.
+- **Units.** Positions in `hwc.world.arrivals` are percent, converted to fractions at
+  load, as `parse_coords` does.
+- **wago URLs.** Builds: `https://wago.tools/api/builds`, key `wowf`, newest first; the
+  newest is `[1].version`. Tables:
+  `https://wago.tools/db2/<Table>/csv?build=<version>`.
+- **Build check.** A build string must match `^%d+%.%d+%.%d+%.%d+$` before it becomes a
+  path.
+- **`fp-unknown` downgrade.** After any `fp-unknown` on a continent, a later
+  `flight-point-undiscovered` there is a notice.
+- **`arrival-mismatch`.** The driver sets it as the reason when the action traveled
+  (`out.arrived`) and set no other reason.
+- **Two settles for `F`.** `actions.perform` may settle twice for `F`. `out.settle` keeps
+  the last result, with `hit_limit` OR-ed.
 
 ## Review Focus
 
-1. **No arrivals file at all** (fresh checkout, CI). Every travel step runs, none
-   crashes, none gives `did-not-advance`, and the harness fold shows one
-   `arrival-data-gap` group per reason. Test it in Task 7.
-2. **A file that's present but partial** (continent `complete: false`). An `F` whose node
-   is missing gives `taxi-map-incomplete`, not `no-taxi-node`. Test it in Task 4.
-3. **A step name that loosely matches two entries** (e.g. `Stormwind` against
-   "Stormwind, Elwynn" and an inn bound to "Stormwind City"). The loose resolver only
-   looks within one kind, so this resolves to the single taxi entry. Two taxi hits give
-   `destination-unresolved`. Test it in Task 2.
-4. **A boat leaving a dock to another continent** (Menethil to Theramore). The player's
-   continent follows the landing's map id, so the next `F` lists that continent's nodes.
-   Test it in Task 5.
-5. **A malformed entry** (missing `checked`, or a taxi entry without `npc`). The load
-   fails with the path and the entry index, like the counts file. Test it in Task 1.
+1. **No tables installed** (fresh checkout, CI). Every travel step runs; none crashes;
+   none gives `did-not-advance`. Each step that doesn't advance gives a `tables-missing`
+   notice, and the report says to run `hwc update`. Test: Task 9 (`#slow`).
+2. **A CSV field with a comma or doubled quote** (`"Stormwind, Elwynn"`,
+   `"Say ""hi"""`). It parses as one field. Test: Task 1.
+3. **A wago download that fails halfway, or a CSV missing a kept column.** Nothing is
+   installed, `active` is unchanged, and the error names the table. Test: Task 2.
+4. **A boat to another continent** (Menethil to Theramore). The next `F` lists the new
+   continent's nodes. Test: Task 7.
+5. **A name that is a real area on another continent** (e.g. an `F` named after a
+   Kalimdor subzone while in Eastern Kingdoms). It is not `name-not-an-area`, because
+   area names are build-wide; §3's other branches decide. Test: Task 5.
 
 ---
 
-### Task 1: Arrivals file: loader, config, example, doctor
+### Task 1: CSV parser and table converter
 
 **Files:**
-- Create: `src/hwc/catalog/arrivals.lua`, `catalog/arrivals.example.json`, `spec/catalog/arrivals_spec.lua`, `spec/fixtures/catalog/arrivals.json`
-- Modify: `src/hwc/config.lua:35-41` (`arrivals` key), `src/hwc/catalog/init.lua:113-131` (`self.arrivals`), `src/hwc/doctor.lua:182-206` (add `check_arrivals` beside `check_counts`), `README.md` ("World and catalog": an "Arrival points" subsection; config table row)
+- Create: `src/hwc/forever/csv.lua`, `src/hwc/forever/convert.lua`, `spec/forever/csv_spec.lua`, `spec/forever/convert_spec.lua`, `spec/fixtures/forever/*.csv` (TaxiNodes, UiMap, UiMapAssignment, AreaTable, WMOAreaTable, a few rows each, covering Stormwind/Thelsamar/Ironforge/a Kalimdor node)
 
 **Interfaces:**
 - Produces:
-  - `Arrivals.entry_problem(entry) -> string|nil`
-  - `Arrivals.from_table(obj) -> Arrivals`
-  - `Arrivals.load(path) -> Arrivals`. A missing file gives an empty object with `present = false`. Invalid JSON or an invalid entry raises `"hwc: arrivals: <path>: point <i> <problem>"`.
-  - Fields: `a.present: boolean`, `a.path`, `a.sha256`.
-  - `a:continent_of(map_id) -> continent_id|nil`
-  - `a:continent(id) -> { complete: boolean, lists_unlearned: boolean, taxi_order: {string} }|nil`
-  - `a:points(kind) -> {entry}` (file order)
-  - `a:taxi(name) -> entry|nil`
-  - `a:by_npc(kind, npc_id) -> entry|nil`
-  - `a:start_node(race_key) -> string|nil`
-  - `a:start_bind(race_key) -> entry|nil`
-  - Entry fields after load: `kind, name, npc, continent, zone, subzone, map_id, x, y, checked, from = {map_id,x,y}|nil, spell, bind`, with `x`/`y` as fractions.
-  - `Catalog.load` sets `self.arrivals` (from `c.arrivals`, or `c.arrivals_table` for specs) and `self.sources.arrivals = { path, present, sha256 }`.
-  - `config.load({}).catalog.arrivals` defaults to `<repo>/local/catalog/arrivals.json`.
+  - `csv.parse(text) -> { header = {string}, rows = {{string}} }`, RFC 4180 (quoted fields, `""` escapes, CRLF or LF, trailing newline). It raises `"hwc: csv: line <n>: <problem>"`.
+  - `convert.TABLES`: an ordered list of `{ name = "TaxiNodes", keep = {...} }` with the spec §1 columns.
+  - `convert.table(name, text) -> { columns = {string}, rows = {{...}} }`. Numeric columns become numbers. It raises `"hwc: forever: <name>: missing column <col>"`.
 
-File shape (copy into `catalog/arrivals.example.json` with placeholder values and
-`"checked": "how this was checked (e.g. in game, 2026-11-20)"`):
+- [ ] **Step 1: Write the failing specs:**
+  - `parse` keeps `"Stormwind, Elwynn"` as one field, unescapes `""`, and handles CRLF.
+  - It errors on an unterminated quote with the line number.
+  - `convert.table("TaxiNodes", fixture)` gives `rows` whose `ID`, `ContinentID`, `Flags` and `Pos_*` are numbers, keeping only the kept columns.
+  - It errors on a CSV missing `Pos_1`.
+- [ ] **Step 2: Run** `~/.luarocks/bin/busted spec/forever`. Expected: FAIL (module not found).
+- [ ] **Step 3: Implement both modules.**
+- [ ] **Step 4: Run** it again. Expected: PASS.
+- [ ] **Step 5: Commit** `feat: Parse and convert Forever client table CSVs`
 
-```json
-{
-  "continents": { "1415": { "complete": false, "lists_unlearned": true,
-                            "maps": [1426, 1432, 1453, 1455], "taxi_order": ["Ironforge, Dun Morogh"] } },
-  "start_nodes": { "Dwarf": "Ironforge, Dun Morogh" },
-  "start_bind": { "Dwarf": { "bind": "...", "zone": "...", "subzone": "...", "map_id": 1426, "x": 0, "y": 0, "checked": "..." } },
-  "points": [ { "kind": "taxi", "name": "...", "npc": 1573, "continent": 1415, "zone": "...", "subzone": "...",
-                "map_id": 1455, "x": 55.5, "y": 47.74, "checked": "..." } ]
-}
-```
+### Task 2: Install the tables (`hwc update`, `hwc init`, doctor, config)
 
-- [ ] **Step 1: Write the failing specs** in `spec/catalog/arrivals_spec.lua`:
-  - `it("loads the fixture and converts percent to fractions")`: `a:taxi(<fixture name>).x == 0.555`; `a:continent_of(1455) == 1415`.
-  - `it("a missing file is empty and not present")`: `Arrivals.load("nope.json").present == false`; `a:points("taxi")` is `{}`.
-  - `it("rejects a point without checked, naming path and index")`: error matches `"hwc: arrivals: .*: point 1 needs checked"`.
-  - `it("rejects a taxi point without npc or name")`, `it("rejects an unknown kind")`, `it("rejects a boat or portal without from")`, `it("rejects a teleport without spell")`, `it("rejects an inn without npc or bind")`.
-  - `it("start_node and start_bind read per race key")`.
-  - In `spec/config_spec.lua`: the default `catalog.arrivals` ends in `local/catalog/arrivals.json`.
-  - In `spec/doctor_spec.lua`: absent gives `warn` "absent (optional; arrival steps are not judged)", invalid gives `fail`, valid gives `ok`.
-- [ ] **Step 2: Run** `~/.luarocks/bin/busted spec/catalog/arrivals_spec.lua spec/config_spec.lua spec/doctor_spec.lua`. Expected: FAIL (module not found).
-- [ ] **Step 3: Implement** the module, config key, catalog hook, doctor check and README section, mirroring `load_counts` / `check_counts`. The fixture `spec/fixtures/catalog/arrivals.json` carries the nodes the later tasks name:
-  - "Ironforge, Dun Morogh" (npc 1573, map 1455) and "Thelsamar, Loch Modan" (npc 1572, map 1432), both on continent 1415;
-  - "Stormwind, Elwynn" (npc 352, map 1453, zone "Stormwind City", subzone "Trade District");
-  - two boats from one dock, an inn (Kharanos) and a teleport;
-  - `start_nodes.Dwarf`.
-  The top of the file says the values are test data.
-- [ ] **Step 4: Run** the same command. Expected: PASS.
-- [ ] **Step 5: Commit** `feat: Load an optional arrival-points file for travel steps`
+**Files:**
+- Create: `src/hwc/forever/home.lua`, `src/hwc/forever/install.lua`, `spec/forever/install_spec.lua`
+- Modify:
+  - `src/hwc/cli/update.lua`: also sync the tables; add a `--build VERSION` option; report a line `Forever tables <from> → <build>` or `... already installed; active`.
+  - `src/hwc/cli/init.lua`: install both.
+  - `src/hwc/doctor.lua`: a `forever` check after `questie_checks`.
+  - `src/hwc/config.lua:35-41`: `catalog.forever_dir` defaults to the active build dir.
+  - `README.md`: setup, "World and catalog", and the licence section (the tables are downloaded, never committed).
+- Test: `spec/cli/commands_spec.lua`, `spec/doctor_spec.lua`, `spec/config_spec.lua`
 
-### Task 2: Matching helpers (pure)
+**Interfaces:**
+- Consumes: Task 1 `convert.TABLES`, `convert.table`; `hwc.questie.http` (`get_json`, `download`, `sha256`).
+- Produces:
+  - `home.dir(root, build) -> path`, which raises `"hwc: forever: bad build <b>"`.
+  - `home.active(root) -> build|nil`; `home.set_active(root, build)`.
+  - `home.active_dir(root) -> path|nil, reason` (`"none installed"` / `"broken: <b>"`).
+  - `install.sync(root, opts, deps) -> { from, to, already } | nil, err`, with `opts = { build?, download_mode? }`.
+  - `install.init(root, deps, opts)`, same as `hwc.questie.install.init`.
+  - The installed dir holds `<Table>.json` for each table and `.hwc-release.json` = `{ build, tables = { [name] = { sha256, rows } }, downloaded_at }`.
+  - `install.verify(dir) -> true|nil, err`: every table's JSON is present and parses.
+
+`sync`:
+1. Resolve the build: `opts.build`, or newest `wowf`.
+2. If `dir(build)` verifies, set it active and return `already`.
+3. Otherwise stage `root/forever/.stage-<build>-...`. For each table: download the CSV into the stage, sha256 it, convert it, write the JSON, remove the CSV.
+4. Write the release file, place the stage atomically, set active.
+5. On any failure, remove the stage and leave `active` as it was.
+
+Mirror `hwc.questie.install` (`stage_name`, `place`).
+
+- [ ] **Step 1: Write the failing specs** (`deps` fakes serve the fixture CSVs from Task 1):
+  - `"installs the newest wowf build and makes it active"`
+  - `"--build pins the version"`
+  - `"an installed, verified build is already, with no download"`
+  - `"a failed download leaves active unchanged and no stage dir"` (Review Focus 3)
+  - `"a CSV missing a kept column fails with the table named"` (Review Focus 3)
+  - `"a bad build string is refused before any path is built"`
+  - doctor: `"forever ok shows the build"`; `"forever missing fails with fix hwc update"`.
+  - commands: `hwc update` prints both result lines; `--build` reaches `sync`.
+  - config: `catalog.forever_dir` is the active dir under `HWC_HOME`.
+- [ ] **Step 2: Run** `~/.luarocks/bin/busted spec/forever spec/cli/commands_spec.lua spec/doctor_spec.lua spec/config_spec.lua`. Expected: FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** it again. Expected: PASS.
+- [ ] **Step 5: Commit** `feat: Install Forever client tables with hwc update`
+
+### Task 3: Forever table reader and derived data
+
+**Files:**
+- Create: `src/hwc/forever/db.lua`, `spec/forever/db_spec.lua`, `spec/fixtures/forever/installed/` (the Task 1 fixtures converted, plus a `.hwc-release.json`)
+- Modify: `src/hwc/catalog/init.lua:113-131` (`self.forever`, `self.sources.forever = { path, present, build }`; specs may pass `c.forever_db`)
+
+**Interfaces:**
+- Consumes: Task 2 store layout.
+- Produces:
+  - `db.open(dir) -> DB | nil, reason`.
+  - `DB.build: string`.
+  - `DB:taxi_nodes(continent_id, faction) -> {node}`. Nodes come in `ID` order; `faction` is `"Alliance"` or `"Horde"` and matches `Flags & 3` 1, 2 or 3.
+  - `node = { id, name, continent, faction_bits, map_id, x, y, zone }`, with `x`/`y` as fractions per the spec §1 formula and `zone` from `AreaTable`.
+  - `DB:node(name) -> node|nil`.
+  - `DB:continent_of(ui_map_id) -> continent_ui_map_id|nil`, by walking `UiMap` parents to `Type` 2.
+  - `DB:zone_of_map(ui_map_id) -> string|nil`: the `AreaTable` name of the map's `UiMapAssignment.AreaID`, falling back to the `UiMap` name.
+  - `DB:ui_map_of_area(area_id) -> ui_map_id|nil` (for QuestieDB spawns).
+  - `DB:is_area_name(s) -> boolean`: in `AreaTable`, `WMOAreaTable` or `UiMap` names, exact and case-sensitive.
+  - `Catalog:npc_position(npc_id) -> map_id, x, y | nil`: QuestieDB first spawn, area converted to a UI map via `DB:ui_map_of_area`, percent converted to fractions.
+
+- [ ] **Step 1: Write the failing specs:**
+  - `"Thelsamar, Loch Modan"` derives map 1432, zone "Loch Modan", x ≈ 0.3394 and y ≈ 0.5079 (within 0.001).
+  - `continent_of(1453) == 1415`.
+  - `is_area_name("Stormwind")` is false; `is_area_name("Stormwind City")` and `is_area_name("Trade District")` are true.
+  - `taxi_nodes(1415, "Alliance")` excludes Horde-only nodes.
+  - `npc_position(1572)` returns 1432 and fractions.
+  - `db.open` of a missing dir returns `nil, "none installed"`.
+- [ ] **Step 2: Run** `~/.luarocks/bin/busted spec/forever/db_spec.lua spec/catalog`. Expected: FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** it again. Expected: PASS.
+- [ ] **Step 5: Commit** `feat: Derive taxi nodes, maps and area names from the Forever tables`
+
+### Task 4: First-party arrival facts and cross-check
+
+**Files:**
+- Create: `src/hwc/world/arrivals.lua`, `spec/world/arrivals_spec.lua`
+- Modify: `src/hwc/catalog/init.lua` (`Catalog:arrival_problems`)
+
+**Interfaces:**
+- Produces `hwc.world.arrivals`, a plain table:
+  - `subzones = { [node_name] = { subzone, checked } }`
+  - `inns = { { npc, bind, zone, subzone, map_id, x, y, checked } }`
+  - `crossings = { { kind = "boat"|"portal"|"teleport", from = {map_id,x,y}|nil, spell = id|nil, zone, subzone, map_id, x, y, checked } }`
+  - `start_nodes = { [race_key] = node_name }`
+  - `start_bind = { [race_key] = { bind, zone, subzone, map_id, x, y, checked } }`
+  - `taxi_map = { lists_undiscovered = true, order = "id", checked = "unverified" }`
+  - `arrivals.problem(kind, entry) -> string|nil`, which validates the required fields and that `checked` is present.
+  - Ship it with `start_nodes` for every race in `Player.RACES`, holding the capital node names read from the installed `TaxiNodes`, with `checked = "user, 2026-11-19: capital node learned"`. Every other list ships empty; captures fill them later.
+- Produces `Catalog:arrival_problems() -> { { key, detail } }`:
+  - an inn npc without `npcFlags` bit 128;
+  - a `start_nodes` name the installed `DB:node` doesn't know;
+  - an inn whose QuestieDB map id differs from the entry's.
+  It is empty without QuestieDB or the tables.
+
+- [ ] **Step 1: Write the failing specs:**
+  - every `Player.RACES` key has a `start_nodes` entry;
+  - `problem` rejects an inn without `checked`;
+  - `arrival_problems` flags an unknown start node and a mislabelled innkeeper, and is `{}` without the tables.
+- [ ] **Step 2: Run** `~/.luarocks/bin/busted spec/world/arrivals_spec.lua spec/catalog`. Expected: FAIL.
+- [ ] **Step 3: Implement.** Read the capital node names from your installed tables (`hwc update` first), not from memory.
+- [ ] **Step 4: Run** it again. Expected: PASS.
+- [ ] **Step 5: Commit** `feat: Add first-party arrival facts with a QuestieDB and table cross-check`
+
+### Task 5: Matching helpers
 
 **Files:**
 - Create: `src/hwc/driver/arrival.lua`, `spec/driver/arrival_spec.lua`
 
 **Interfaces:**
-- Consumes: Task 1 entry fields.
 - Produces:
   - `arrival.RADIUS = 0.05`
-  - `arrival.nearest(entries, map_id, x, y, pos_of) -> entry|nil`. `pos_of(entry) -> map_id, x, y | nil`. Only entries on the same map and within `RADIUS` count; the closest wins and a tie goes to the earlier entry.
-  - `arrival.exact(entry, text) -> boolean`. True when `text` equals `entry.zone` or `entry.subzone`, or `tonumber(text) == entry.map_id`. This mirrors `AutoCompleteZone` (`WoWPro_AutoComplete.lua:515-526`).
-  - `arrival.loose(entries, name, tz) -> entry|nil, why`, where `why` is `"none"` or `"ambiguous"`.
-  - `arrival.location(entry) -> string`. For a taxi node, this is the name before the first `,`.
-
-`loose` algorithm (the spec leaves its exact form open):
-
-```
-for each probe in { name, first ";" part of tz } (skip nil/""):
-  p = lower(trim(probe))
-  hits = entries where any of lower(location(e)), lower(e.zone), lower(e.subzone)
-         equals p, or starts with p, or contains p (in that order of preference:
-         take the highest tier that has any hit)
-  if #hits == 1 return hits[1]; if #hits > 1 return nil, "ambiguous"
-return nil, "none"
-```
+  - `arrival.nearest(list, map_id, x, y, pos_of) -> item|nil`: same map, within `RADIUS`, the closest wins, a tie goes to the earlier item.
+  - `arrival.exact(landing, text) -> boolean`: `text` equals `landing.zone` or `landing.subzone`, or `tonumber(text) == landing.map_id`. This mirrors `WoWPro_AutoComplete.lua:515-526`.
+  - `arrival.location(name) -> string`: the text before the first `,`, trimmed.
+  - `arrival.loose(candidates, name, tz) -> item|nil, "none"|"ambiguous"`. Probe the name, then the first `;` part of `tz`, lower-cased and trimmed. For each probe, match against `location(c.name)`, `c.zone` and `c.subzone`. Tiers are equals, then prefix, then substring; take the first tier with any hit. One hit returns it; several return `"ambiguous"`.
+  - `arrival.classify(db, landing, name, tz) -> "advances"|"name-not-an-area"|"subzone-unknown"|"subzone-known"`, per spec §3:
+    - `"name-not-an-area"` when the name and the TZ part (each when present) are neither `db:is_area_name` nor a number;
+    - `"advances"` when `exact` holds against the zone or map id;
+    - `"subzone-known"` when `landing.subzone ~= nil`;
+    - else `"subzone-unknown"`.
 
 - [ ] **Step 1: Write the failing specs:**
-  - `nearest` picks the closer of two points on the same map, ignores other maps and anything beyond `RADIUS`.
-  - `exact("Stormwind City")` is true for zone "Stormwind City", false for "Stormwind", and true for `"1453"` against map 1453.
-  - `loose(taxi, "Stormwind")` returns "Stormwind, Elwynn".
-  - `loose(taxi, "Gadgetzem")` returns `nil, "none"`.
-  - `loose` with two taxi entries containing "port" returns `nil, "ambiguous"`.
-  - `loose(taxi, "x", "Stormwind City")` falls back to the TZ probe.
+  - `nearest` (closer wins, other maps ignored, outside the radius ignored);
+  - `exact("Stormwind City")` against zone "Stormwind City" is true, `"Stormwind"` is false, `"1453"` against map 1453 is true;
+  - `loose(nodes, "Stormwind")` gives "Stormwind, Elwynn"; `"Gadgetzem"` gives `nil, "none"`; two `"port"` hits give `nil, "ambiguous"`; the TZ fallback works;
+  - `classify`: `"Stormwind"` gives `name-not-an-area`; `"Thelsamar"` with no captured subzone gives `subzone-unknown`; `"Loch Modan"` gives `advances`; a Kalimdor area name while in Eastern Kingdoms isn't `name-not-an-area` (Review Focus 5).
 - [ ] **Step 2: Run** `~/.luarocks/bin/busted spec/driver/arrival_spec.lua`. Expected: FAIL.
-- [ ] **Step 3: Implement** `src/hwc/driver/arrival.lua`.
-- [ ] **Step 4: Run** it again. Expected: PASS.
-- [ ] **Step 5: Commit** `feat: Add arrival matching helpers`
-
-### Task 3: QuestieDB cross-check and NPC positions
-
-**Files:**
-- Modify: `src/hwc/questie/source.lua` (add `Source:ui_map_of_area`), `src/hwc/catalog/init.lua` (add `Catalog:npc_position`, `Catalog:arrival_problems`), `spec/fixtures/catalog/questie_source.lua` (add the fixture flight masters/innkeeper and an area map)
-- Test: `spec/catalog/catalog_spec.lua`
-
-**Interfaces:**
-- Produces:
-  - `Source:ui_map_of_area(area_id) -> uiMapID|nil`. Reads `QuestieLoader:ImportModule("ZoneDB").private.areaIdToUiMapId` from `self.sandbox`: a Lua source string, run with an empty env and cached, as `drop_table` does. The `...Override` string wins over the base table.
-  - `Catalog:npc_position(npc_id) -> map_id, x, y | nil`. Uses the first spawn: area id converted to a uiMapID, percent converted to fractions.
-  - `Catalog:arrival_problems() -> { { key = string, detail = string } }`. For each `taxi`/`inn` entry with QuestieDB data, it flags:
-    - a missing flag (taxi needs bit 8, inn needs bit 128 in `npcFlags`);
-    - a QuestieDB position map id that differs from the entry's `map_id`. Taxi entries are compared on `map_id` too, since the flight master stands where the player lands.
-  - `key` is `"<kind>:<name or npc>"`.
-
-- [ ] **Step 1: Write the failing specs:**
-  - `npc_position(1572)` returns `1432, 0.3394, 0.5095` from the fixture (area 38 maps to 1432).
-  - `arrival_problems()` is empty for a consistent fixture.
-  - It reports `taxi:Thelsamar, Loch Modan` when the fixture's map id is changed to 1426.
-  - It reports a missing flight-master flag.
-  - Without QuestieDB, `npc_position` is nil and `arrival_problems()` is `{}`.
-- [ ] **Step 2: Run** `~/.luarocks/bin/busted spec/catalog/catalog_spec.lua`. Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it again. Expected: PASS.
-- [ ] **Step 5: Commit** `feat: Cross-check arrival points against QuestieDB flight masters and innkeepers`
+- [ ] **Step 5: Commit** `feat: Add arrival matching and name classification`
 
-### Task 4: Player state, start node, taxi stubs, `F` and `f`
+### Task 6: Player, taxi stubs, `F` and `f`
 
 **Files:**
-- Modify: `src/hwc/world/player.lua:97-98,181-189`, `src/hwc/world/init.lua:11-29`, `src/hwc/stubs/core.lua:145-148,232-256`, `src/hwc/driver/actions.lua` (`perform_flight_point`, a new `perform_flight` replacing `F` in `OTHER_HANDLERS`, plus a `depart` helper), `src/hwc/driver/engine.lua:26-46` (add `"waypcomplete"` to `TAG_KEYS`; CC=1, CS=2, CN=0 per `WoWPro_Parser.lua:486-488`)
-- Test: `spec/world/player_spec.lua`, `spec/stubs_spec.lua:205-218`, `spec/driver/actions_other_spec.lua` (replace the tests at :40-103 that assert the old step-name landing)
+- Modify:
+  - `src/hwc/world/player.lua:97-98,181-189`
+  - `src/hwc/world/init.lua:11-29`
+  - `src/hwc/stubs/core.lua:145-148,232-256`
+  - `src/hwc/driver/actions.lua`: `perform_flight_point`; a new `perform_flight` for `F`; a `depart(ctx, step, out)` helper; the header and Ruling Y comment at `:486-495`
+  - `src/hwc/driver/engine.lua:26-46`: add `"waypcomplete"` to `TAG_KEYS`, with CC=1, CS=2, CN=0 per `WoWPro_Parser.lua:486-488`
+  - `spec/helpers/driver_fixtures.lua`: the world gets the fixture `DB`; the fake engine gets `sb = { taxi_taken = {} }`; plus a no-tables variant
+- Test: `spec/world/player_spec.lua`, `spec/stubs_spec.lua:205-218`, `spec/driver/actions_other_spec.lua` (replace :40-103, which assert the old step-name landing)
 
 **Interfaces:**
-- Consumes: Task 1 (`catalog.arrivals`), Task 2 (`nearest`, `exact`, `loose`), Task 3 (`npc_position`).
+- Consumes: Task 3 `DB`, Task 4 `arrivals`, Task 5 helpers.
 - Produces:
-  - Player fields: `p.flight_points[node_name] = true`, `p.on_taxi: boolean`, `p.bind = { name, map_id, entry }`.
-  - `Player:learn_flight_point(node_name)` (unchanged signature; it now takes real node names).
-  - `Player:set_on_taxi(bool)`, recorded as `"taxi"`.
-  - `World.new` learns `arrivals:start_node(race_key)` and binds `start_bind` before clearing `self.events`.
-  - `world.fp_unknown[continent_id] = true`.
-  - Outcome fields used later: `out.data_gap = { reason, key }`, `out.expected = { name, tz }`, `out.arrived = { zone, subzone, map_id }`, `out.resolved_by = "taxi"|"loose"`, `out.route = "not-emulated"|nil`.
-  - Guide reasons: `out.reason ∈ { "no-taxi-node", "flight-point-undiscovered" }`.
+  - Player: `p.flight_points[node_name]`, `p.on_taxi`, `Player:set_on_taxi(bool)` (recorded as `"taxi"`).
+  - `World.new` learns `arrivals.start_nodes[race_key]` when the tables know it, and applies `start_bind`.
+  - `world.fp_unknown[continent] = true`.
+  - Outcome fields: `out.data_gap = { reason, key }`, `out.expected = { name, tz }`, `out.arrived = { zone, subzone, map_id }`, `out.resolved_by = "loose"|nil`, `out.classify` (from `arrival.classify`).
+  - Guide reasons: `"no-taxi-node"`, `"flight-point-undiscovered"`.
 
-Taxi stubs (spec §3, §7):
-- The node list is `arrivals:continent(continent_of(p.map_id)).taxi_order`. With `lists_unlearned == false`, it is filtered to learned nodes.
-- `TaxiNodeGetType` gives `"REACHABLE"` for a learned node and `"NONE"` otherwise.
+**Stubs:**
+- The node list comes from `DB:taxi_nodes(continent_of(p.map_id), p.faction)`. When `arrivals.taxi_map.lists_undiscovered` is false, it is filtered to learned nodes.
+- `TaxiNodeGetType` gives `REACHABLE` for learned nodes and `NONE` otherwise.
 - `UnitOnTaxi` returns `p.on_taxi`.
 - `TakeTaxiNode(i)` appends the name to `sb.taxi_taken`.
 
-`F` sequence:
-1. `depart`: the same move rule as `walk_to_step`, for travel actions.
-2. Fire `TAXIMAP_OPENED` and settle.
-3. Read the new tail of `ctx.engine.sb.taxi_taken` (`Engine.new` keeps `sb`, `engine.lua:63`). In specs the fake engine gets an `sb = { taxi_taken = {} }`.
-4. If a learned node was taken: `set_on_taxi(true)`, fire `PLAYER_CONTROL_LOST`, settle, `set_zone` to the node, `set_on_taxi(false)`, then fire `ZONE_CHANGED_NEW_AREA`, `ZONE_CHANGED` and `PLAYER_CONTROL_GAINED`. Cite `WoWPro_Events.lua:828-866` and `WoWPro_AutoComplete.lua:461-530`.
-5. Otherwise, if a node was taken but isn't learned: reason `flight-point-undiscovered`. It becomes the gap `taxi-map-incomplete` when the continent isn't complete or `world.fp_unknown[continent]` is set.
-6. Otherwise, with no node taken: reason `no-taxi-node`, or the gap `taxi-map-incomplete` when the continent isn't complete.
-7. In cases 5 and 6, resolve the destination with `arrival.loose(points("taxi"), name, tz)`. On a hit, land there with zone events only, set `resolved_by = "loose"` and `route = "not-emulated"`, and learn nothing. On a miss, the gap is `destination-unresolved` and the player stays.
-8. No file (`not arrivals.present`): the gap is `arrival-unknown` with key `"no-file"`. Don't fire `TAXIMAP_OPENED` at all.
-
-`f` (spec §2):
+**`F` (spec §5):**
 1. `depart`.
-2. Find the nearest taxi entry by `npc_position`, falling back to the entry's own `x`/`y`.
-3. If found: learn its name, fire `TAXIMAP_OPENED`, and if the node is new, fire `UI_INFO_MESSAGE(0, ERR_NEWTAXIPATH)`.
-4. If not found: gap `fp-unknown` with key `"<map_id>:<x>,<y>"`, and set `world.fp_unknown[continent] = true`.
+2. With no `DB`: `data_gap = { "tables-missing", "no-tables" }` and no taxi events.
+3. Otherwise fire `TAXIMAP_OPENED` and settle, then read the new tail of `ctx.engine.sb.taxi_taken` (`engine.lua:63` keeps `sb`).
+4. A learned node was taken: `set_on_taxi(true)`, fire `PLAYER_CONTROL_LOST`, settle. Then `set_zone(node.zone, subzone or "", node.map_id, node.x, node.y)`, where `subzone` is `arrivals.subzones[name]`. Then `set_on_taxi(false)` and fire `ZONE_CHANGED_NEW_AREA`, `ZONE_CHANGED` and `PLAYER_CONTROL_GAINED`. Cite `WoWPro_Events.lua:828-866` and `WoWPro_AutoComplete.lua:461-530`.
+5. An undiscovered node was taken: reason `flight-point-undiscovered`. It becomes the notice `start-node-unknown` when the race has no start node, or `fp-unknown` when `world.fp_unknown[continent]` is set.
+6. No node was taken: reason `no-taxi-node`.
+7. In cases 5 and 6, resolve with `arrival.loose(nodes, name, tz)`. On a hit, land with zone events only and learn nothing; on a miss, `data_gap = destination-unresolved`.
+8. Always set `out.expected`; set `out.arrived` and `out.classify` whenever the player landed.
 
-- [ ] **Step 1: Write the failing specs** (fixture arrivals via `setup`; extend `spec/helpers/driver_fixtures.lua` to pass `arrivals_table`, plus a variant with no file):
-  - `"a new Dwarf knows its start node"`
-  - `"the taxi map lists the continent's captured order, NONE for unlearned"`
-  - `"F Stormwind with a learned node flies: control lost, on taxi, lands in Stormwind City / Trade District, control gained"`. Assert the event order and `p.zone`/`p.subzone`, and that `p.subzone ~= "Stormwind"`.
-  - `"F to a taken but unlearned node is flight-point-undiscovered and lands by ground with route not-emulated"`
-  - `"F naming no node is no-taxi-node and lands at the loose match"`
-  - `"F on an incomplete continent gives taxi-map-incomplete, not a guide reason"`
-  - `"F with no arrivals file is an arrival-unknown gap and fires no taxi events"`
-  - `"f learns the nearest flight master's real node name and fires the discovery once"`
+**`f` (spec §4):**
+1. `depart`.
+2. Take the node of the player's faction nearest the departure on that map
+   (`arrival.nearest` over `DB:taxi_nodes`).
+   - This replaces the spec's "nearest QuestieDB flight master": QuestieDB has no index
+     by NPC flag, and the departure *is* the flight master's spot, where the node sits.
+3. Learn the node, fire `TAXIMAP_OPENED`, and fire `UI_INFO_MESSAGE(0, ERR_NEWTAXIPATH)`
+   only if the node is new.
+4. With no node: `data_gap = { "fp-unknown", "<map_id>:<x>,<y>" }` and set `fp_unknown`.
+
+- [ ] **Step 1: Write the failing specs:**
+  - `"a new Dwarf knows its capital node"`
+  - `"the taxi map lists the continent's faction nodes in ID order, NONE for undiscovered"`
+  - `"F Stormwind with a learned node flies: control lost, on taxi, lands in Stormwind City, control gained; subzone is not 'Stormwind'"` (assert the event order)
+  - `"F to an undiscovered node is flight-point-undiscovered and lands by the loose match without learning it"`
+  - `"F naming no node is no-taxi-node"`
+  - `"F with no tables is tables-missing and fires no taxi events"`
+  - `"f learns the real node name nearest the departure and fires the discovery once"`
   - `"f for a known node fires TAXIMAP_OPENED but no ERR_NEWTAXIPATH"`
-  - `"f with no flight master nearby is fp-unknown and marks the continent"`
+  - `"f with no node nearby is fp-unknown"`
 
-  The fake engine never calls `TakeTaxiNode`, so for `F` specs stub `E:fire` to append to `sb.taxi_taken` when `TAXIMAP_OPENED` fires. That emulates the addon's AutoSelect.
+  The fake engine doesn't run the addon, so `F` specs make `E:fire("TAXIMAP_OPENED")` append the node AutoSelect would pick to `E.sb.taxi_taken`.
 - [ ] **Step 2: Run** `~/.luarocks/bin/busted spec/world spec/stubs_spec.lua spec/driver/actions_other_spec.lua`. Expected: the new specs FAIL.
-- [ ] **Step 3: Implement.** Update the `actions.lua` header and the comment at `:486-495` (Ruling Y) to describe real arrivals.
+- [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it again. Expected: PASS.
 - [ ] **Step 5: Commit** `feat: Fly F steps on real taxi nodes and learn real flight points`
 
-### Task 5: `b` and `P`
+### Task 7: `b` and `P`
 
 **Files:**
-- Modify: `src/hwc/driver/actions.lua` (`perform_crossing` for `b`/`P` in `OTHER_HANDLERS`)
-- Test: `spec/driver/actions_other_spec.lua`
+- Modify: `src/hwc/driver/actions.lua` (`perform_crossing` for `b`/`P`)
+- Test: `spec/driver/actions_other_spec.lua` (fixture crossings passed through the world, not `hwc.world.arrivals`)
 
 **Interfaces:**
-- Consumes: Tasks 1, 2 and 4 (`depart`, the outcome fields).
-- Produces: guide reason `"ambiguous-route"`; gaps `arrival-unknown` and `destination-unresolved`.
+- Consumes: Tasks 4-6.
+- Produces: the `arrival-unknown` and `destination-unresolved` gaps; `out.arrived` and `out.classify`.
 
-Rules (spec §4, §10):
-- **Candidates:**
-  - `b`: boat entries whose `from` is within `RADIUS` of the departure.
-  - `P`: portal entries the same way, plus teleport entries whose `spell` the player knows or that equals the step's `SPELL` id.
+Rules (spec §6):
+- **Candidates:** crossings whose `from` is `arrival.nearest` to the departure; for `P`, also teleports whose `spell` the player knows or the step's `SPELL` names.
 - **One candidate:** land there.
-- **Several candidates:** take the one where `arrival.exact(e, name)` or `exact(e, tz)`. With none, the reason is `ambiguous-route` and `loose` decides the landing. With no loose hit either, the gap is `destination-unresolved`.
-- **No candidate:** gap `arrival-unknown` with key `"<kind>:<map_id>:<x>,<y>"`.
-- **Landing:** zone events only.
+- **Several:** take the one with `exact(c, name)` or `exact(c, tz)`; failing that, `loose`.
+- **None:** `arrival-unknown` with key `"<action>:<map_id>:<x>,<y>"`.
+- **Landing:** zone events only. Crossings are read from `ctx.world.arrivals`, which defaults to `hwc.world.arrivals` and is overridable in specs.
 
 - [ ] **Step 1: Write the failing specs:**
-  - `"b from a one-boat dock lands at the dock's real arrival"`
-  - `"b from a two-boat dock picks the route the step names exactly"`
-  - `"b naming neither route is ambiguous-route and lands by the loose match"`
+  - `"b from a one-route dock lands at its real arrival"`
+  - `"b from a two-route dock takes the route the step names exactly"`
+  - `"b naming neither route lands by the loose match"`
   - `"b to another continent changes the continent the next F lists"` (Review Focus 4)
   - `"P teleport lands at the known spell's destination"`
-  - `"b with no dock nearby is an arrival-unknown gap"`
+  - `"b with no dock nearby is arrival-unknown"`
 - [ ] **Step 2: Run** `~/.luarocks/bin/busted spec/driver/actions_other_spec.lua`. Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it again. Expected: PASS.
 - [ ] **Step 5: Commit** `feat: Land boat and portal steps at real arrival points`
 
-### Task 6: `h`, `H` and `R`
+### Task 8: `h`, `H` and `R`
 
 **Files:**
 - Modify: `src/hwc/driver/actions.lua` (`perform_bind`, `perform_travel`), `src/hwc/world/player.lua` (`set_bind(entry)`)
 - Test: `spec/driver/actions_other_spec.lua:87-118`, `spec/world/player_spec.lua:57-61`
 
 **Interfaces:**
-- Consumes: Tasks 1-4.
 - Produces:
-  - `Player:set_bind(entry)`, which stores `{ name = entry.bind, map_id = entry.map_id, entry = entry }`. `GetBindLocation` keeps returning `bind.name`.
+  - `Player:set_bind(entry)` stores `{ name = entry.bind, map_id = entry.map_id, entry = entry }`. `GetBindLocation` still returns `bind.name`.
   - Gaps: `inn-unknown`, `subzone-unknown`, `waypoint-arrival-not-emulated`.
+  - `R` sets `out.arrived` and `out.classify`.
 
-Rules:
-- **`h` (spec §9):**
-  1. Take the nearest inn entry by `npc_position`, falling back to the entry's `x`/`y`.
-  2. Then `set_bind(entry)` and fire `HEARTHSTONE_BOUND`.
-  3. With no inn: gap `inn-unknown`, and the bind is unchanged.
-- **`H`:** land at `p.bind.entry`, firing zone events. With no `bind.entry`: gap `inn-unknown`, and the player stays.
-- **`R` (spec §5):**
-  - Zone, map id and x/y come from `Z`/`M` as now. The subzone is `""` when the zone or map changes, and kept otherwise.
+Rules (spec §7):
+- **`h`:** the inn entry nearest the departure (by its `x`/`y`, within `RADIUS`). `set_bind`, then fire `HEARTHSTONE_BOUND`. With no entry: `inn-unknown`.
+- **`H`:** land at `p.bind.entry`. With no entry: `inn-unknown`, and the player stays.
+- **`R`:**
+  - Zone comes from `Z` via `DB:zone_of_map` when `Z` is numeric-only (otherwise the `Z` name); map and x/y as today.
+  - The subzone is `""` on a zone or map change and kept otherwise.
   - `credit_arrival` is unchanged.
-  - Set `out.data_gap`, which the driver uses only if the step didn't advance:
-    - `waypoint-arrival-not-emulated` when `tags.waypcomplete` is 1 or 2;
-    - otherwise `subzone-unknown`, when neither the name nor the TZ part is `exact` against the new zone or map id.
-  - Key is `"<gid>:<line>"`.
+  - `data_gap`: `waypoint-arrival-not-emulated` when `tags.waypcomplete` is 1 or 2; otherwise none (the driver uses `out.classify`).
 
 - [ ] **Step 1: Write the failing specs:**
-  - `"h binds at the nearest innkeeper: GetBindLocation is the captured bind text, not the step name"`
-  - `"H lands at the bound inn's real location"`
-  - `"H with no captured inn is inn-unknown"`
+  - `"h binds at the nearest inn: GetBindLocation is the captured bind, not the step name"`
+  - `"H lands at the bound inn"`
+  - `"H with no inn entry is inn-unknown"`
   - `"R no longer sets the subzone to the step name"`
   - `"R with CC carries waypoint-arrival-not-emulated"`
-  - `"R named after its zone carries no gap"`
-  - `"R named after a subzone carries subzone-unknown"`
+  - `"R named after a non-area classifies name-not-an-area"`
 - [ ] **Step 2: Run** `~/.luarocks/bin/busted spec/driver/actions_other_spec.lua spec/world/player_spec.lua`. Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it again. Expected: PASS.
 - [ ] **Step 5: Commit** `feat: Bind and hearth at real inns; stop faking run-to subzones`
 
-### Task 7: Driver signals
+### Task 9: Driver signals
 
 **Files:**
-- Modify: `src/hwc/driver/run.lua:509-570` (gap handling next to `refusals`), `:773-792` (did-not-advance fields), run start (`start-node-unknown`, `arrival_problems`)
-- Test: `spec/driver/run_spec.lua`, plus a `#slow` spec in the existing full-run spec file that runs a Dwarf Warrior with no arrivals file
+- Modify: `src/hwc/driver/run.lua`: gap handling next to `refusals` (`:527-563`); did-not-advance fields (`:773-792`); run start (`start-node-unknown`, `arrival_problems`)
+- Test: `spec/driver/run_spec.lua`; a `#slow` spec in the existing full-run spec file
 
 **Interfaces:**
-- Consumes: the outcome fields from Tasks 4-6; `catalog:arrival_problems()`.
-- Produces signals:
-  - `arrival-data-gap { reason, key, outcome }`. It is emitted when the step didn't advance and `out.data_gap` is set, and it sets `out.explained`. It is also emitted with no step:
-    - once at start for `start-node-unknown` (key = race key) when the file is present;
-    - once per `arrival_problems()` row as `arrival-data-mismatch` (key = row key, `detail`).
-  - `did-not-advance` gains `expected`, `arrived`, `resolved_by` and `route`. Its reason is `out.reason` or, when `out.arrived` is set, `"arrival-mismatch"`.
+- Consumes: the outcome fields from Tasks 6-8; `catalog:arrival_problems()`.
+- Produces:
+  - When a step didn't advance, the first rule that applies decides:
+    1. `out.data_gap` gives `arrival-data-gap { reason, key }`;
+    2. else `out.classify == "subzone-unknown"` gives `arrival-data-gap { "subzone-unknown", "<gid>:<line>" }`;
+    3. else `did-not-advance`, with reason `out.reason`, or `"name-not-an-area"` when `out.classify` says so, or `"arrival-mismatch"` when `out.arrived` is set. It carries `expected`, `arrived` and `resolved_by`.
+  - Gap signals set `out.explained`.
+  - At run start, once each: `start-node-unknown` (when the tables exist but don't know the race's start node), and each `arrival_problems()` row as `arrival-data-mismatch`.
 
 - [ ] **Step 1: Write the failing specs** (scripted engine):
-  - `"an arrival step that didn't advance with a data gap records arrival-data-gap, not did-not-advance"`
-  - `"an F that traveled and didn't advance is did-not-advance arrival-mismatch with expected and arrived"`
-  - `"an advanced step with a data gap records nothing"`
-  - `"a race with no start node records start-node-unknown once"`
-  - `"arrival_problems rows become arrival-data-mismatch signals"`
-  - `#slow`: `"a Dwarf Warrior run with no arrivals file has no did-not-advance on F/f/b/P/H/h steps"` (Review Focus 1)
+  - `"a stalled arrival with a data gap records arrival-data-gap, not did-not-advance"`
+  - `"a stalled F named Stormwind records did-not-advance name-not-an-area with expected and arrived"`
+  - `"a stalled F named after a real area records arrival-mismatch"`
+  - `"subzone-unknown is a notice"`
+  - `"an advanced step records nothing"`
+  - `"arrival_problems rows become arrival-data-mismatch once"`
+  - `#slow`: `"a Dwarf Warrior run with no Forever tables has no did-not-advance on F/f/b/P/H/h steps"` (Review Focus 1)
 - [ ] **Step 2: Run** `~/.luarocks/bin/busted spec/driver/run_spec.lua`. Expected: FAIL.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `~/.luarocks/bin/busted` and `~/.luarocks/bin/busted --tags=slow`. Expected: PASS. Fix any older spec that asserted the step-name landing so it uses the fixture arrivals.
+- [ ] **Step 4: Run** `~/.luarocks/bin/busted` and `~/.luarocks/bin/busted --tags=slow`. Expected: PASS. Update any older spec that asserted the step-name landing to use the fixtures.
 - [ ] **Step 5: Commit** `feat: Report arrival data gaps as harness notices`
 
-### Task 8: Findings, text and report page
+### Task 10: Findings, text and report page
 
 **Files:**
 - Modify:
-  - `src/hwc/findings/group.lua`: SEVERITY `["arrival-data-gap"] = "low"`; `key_of` for the gap is `{"arrival-data-gap", reason, key}`; `new_finding` copies `expected, arrived, resolved_by, route, detail`, and `name = reason .. ": " .. key` for the gap.
+  - `src/hwc/findings/group.lua`:
+    - SEVERITY: `["arrival-data-gap"] = "low"`;
+    - `key_of`: `{"arrival-data-gap", reason, key}`;
+    - `new_finding`: copy `expected, arrived, resolved_by, detail`; a gap's `name` is `reason .. ": " .. key`.
   - `src/hwc/findings/report.lua:34-36`: `is_harness` includes `arrival-data-gap`.
-  - `src/hwc/findings/text.lua`:
-    - a label for `arrival-data-gap`;
-    - did-not-advance explanations for `arrival-mismatch`, `no-taxi-node`, `flight-point-undiscovered` and `ambiguous-route`;
-    - one sentence per gap reason.
-  - `web/report/src/types.ts`: new fields.
-  - `web/report/src/logic/state.ts:41`: `isHarness` mirrors Lua.
-  - `tools/report-fixtures.lua`: a fixture case for each.
+  - `src/hwc/findings/text.lua`: the label, the did-not-advance explanations and the gap sentences.
+  - `web/report/src/types.ts`: the new fields.
+  - `web/report/src/logic/state.ts:41`: `isHarness`.
+  - `tools/report-fixtures.lua`.
+  - The bundled `src/hwc/findings/report.html`: rebuild with `npm run build` in `web/report`.
 - Test: `spec/findings/group_spec.lua`, `spec/findings/text_spec.lua`, `spec/findings/report_spec.lua`, `web/report/test/logic/state.test.ts`
 
-**Interfaces:**
-- Consumes: Task 7 signals.
-
 Exact copy:
+- `name-not-an-area`: `quoted(name) .. (tz and (" and TZ " .. quoted(tz)) or "") .. " name no area in Forever, so the addon can never complete this step by zone; the client clicked it off."`
 - `arrival-mismatch`: `"The step names " .. quoted(name) .. (tz and (" (TZ " .. quoted(tz) .. ")") or "") .. ", but the player arrived in " .. zone .. (subzone ~= "" and (" / " .. subzone) or "") .. ", so the addon didn't complete it and the client clicked it off."`
-- `flight-point-undiscovered`: `"The guide flies to a flight point the character hasn't discovered, so the client travelled there another way."`, plus `" The route there isn't emulated."` when `route == "not-emulated"`.
-- `no-taxi-node`: `"No flight point on the taxi map matches " .. quoted(name) .. "."`
-- `ambiguous-route`: `"This departure has several routes and the step names none of them exactly."`
-- Gap reasons, as `"hwc has no arrival data for this: <reason-specific clause>"`. The clauses are the builder's, one per reason.
+- `flight-point-undiscovered`: `"The guide flies to a flight point the character hasn't discovered, so the client travelled there another way."`
+- `no-taxi-node`: `"No flight point on the taxi map matches " .. quoted(name) .. ", so the client travelled there another way."`
+- `tables-missing`: `"The Forever client tables aren't installed, so arrival steps aren't judged. Run hwc update."`
+- The other gap reasons: `"hwc has no arrival data for this: "` plus one clause per reason, worded by the builder.
 
 - [ ] **Step 1: Write the failing specs:**
   - group: one finding per (reason, key) across combos; severity low; `report.counted` is false.
   - text: each sentence above, exactly.
-  - state.test.ts: `isHarness({signal: "arrival-data-gap"})` is true.
+  - `state.test.ts`: `isHarness({ signal: "arrival-data-gap" })` is true.
 - [ ] **Step 2: Run** `~/.luarocks/bin/busted spec/findings` and `cd web/report && npm test`. Expected: FAIL.
-- [ ] **Step 3: Implement**, then rebuild the bundled `src/hwc/findings/report.html` the way the package script does (`npm run build` in `web/report`).
-- [ ] **Step 4: Run** `~/.luarocks/bin/busted`, `cd web/report && npm test && npm run typecheck`. Expected: PASS.
+- [ ] **Step 3: Implement, then rebuild the report bundle.**
+- [ ] **Step 4: Run** `~/.luarocks/bin/busted` and `cd web/report && npm test && npm run typecheck`. Expected: PASS.
 - [ ] **Step 5: Commit** `feat: Explain arrival findings and fold arrival data gaps with harness notices`
 
-### Task 9: In-game capture script
+### Task 11: In-game capture scripts
 
 **Files:**
 - Create: `src/hwc/cli/arrivals.lua`
-- Modify: `src/hwc/cli/commands.lua`, `src/hwc/cli/help.lua`, `README.md` (the "Arrival points" section gets the capture steps)
+- Modify: `src/hwc/cli/commands.lua`, `src/hwc/cli/help.lua`, `README.md` ("Arrival facts": what to capture and where it goes in `src/hwc/world/arrivals.lua`)
 - Test: `spec/cli/commands_spec.lua`, `spec/cli/help_spec.lua`
 
 **Interfaces:**
-- Produces: `hwc arrivals capture-script [taxi|landing|bind]`, which prints one `/run` line per mode:
-  - `taxi`: prints `i`, `TaxiNodeName(i)` and `TaxiNodeGetType(i)` for every node, in slot order.
-  - `landing`: prints `GetZoneText()`, `GetSubZoneText()`, `C_Map.GetBestMapForUnit("player")` and the player's map position as percent.
-  - `bind`: prints `GetBindLocation()`.
+- Produces `hwc arrivals capture-script [taxi|landing|bind]`, printing one `/run` line:
+  - `taxi`: `i`, `TaxiNodeName(i)` and `TaxiNodeGetType(i)` in slot order;
+  - `landing`: `GetZoneText()`, `GetSubZoneText()`, `C_Map.GetBestMapForUnit("player")` and the map position as percent;
+  - `bind`: `GetBindLocation()`.
 
-  Every line must fit WoW's 255-character macro limit. The specs assert `#line <= 255` and that each line starts with `/run `.
+  Each line is at most 255 characters and starts with `/run `.
 
-- [ ] **Step 1: Write the failing specs** (output per mode, the length limit, help text lists the command).
+- [ ] **Step 1: Write the failing specs:** each mode's output; the length limit; the help text lists the command.
 - [ ] **Step 2: Run** `~/.luarocks/bin/busted spec/cli`. Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** `~/.luarocks/bin/busted` and `~/.luarocks/bin/busted --tags=slow`. Expected: PASS.
-- [ ] **Step 5: Commit** `feat: Print in-game capture scripts for arrival points`
+- [ ] **Step 5: Commit** `feat: Print in-game capture scripts for arrival facts`
