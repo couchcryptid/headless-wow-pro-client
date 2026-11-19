@@ -32,15 +32,18 @@ end
 -- "  harness: 2 Lua errors, 36 missing globals (...)"; nil when there are none.
 -- summary.* leaves harness findings out, so they are counted from the findings.
 local function harness_line(findings)
-  local errors, globals = 0, 0
+  local errors, globals, gaps = 0, 0, 0
   for _, f in ipairs(findings or {}) do
     if report.is_harness(f) then
-      if f.signal == "missing-global" then globals = globals + 1 else errors = errors + 1 end
+      if f.signal == "missing-global" then globals = globals + 1
+      elseif f.signal == "arrival-data-gap" then gaps = gaps + 1
+      else errors = errors + 1 end
     end
   end
   local parts = {}
   if errors > 0 then parts[#parts + 1] = plural(errors, "Lua error") end
   if globals > 0 then parts[#parts + 1] = plural(globals, "missing global") end
+  if gaps > 0 then parts[#parts + 1] = plural(gaps, "arrival data gap") end
   return #parts > 0 and ("  harness: " .. table.concat(parts, ", ") .. HARNESS_NOTE) or nil
 end
 
