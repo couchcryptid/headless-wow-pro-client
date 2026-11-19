@@ -17,8 +17,8 @@ report.GAPS = {
   "Forever Boosted Rest from campfires",
   "party XP for non-elites (spec §5.5)",
   "dungeon runs and instance XP (spec §3)",
-  -- QuestieDB has no objective counts; only the optional counts file gives them.
-  "objective counts aren't in QuestieDB: each is taken as 1 unless the counts file gives it, so kills and kill XP run short",
+  -- QuestieDB's objective rows have no counts: they come from its quest text or the counts file.
+  "objective counts in neither QuestieDB's quest text nor the counts file are taken as 1, so kills and kill XP may run short",
   -- Ruling AC: kill vs talk-to is a heuristic (kills.objective_kills).
   "talk-to NPC objectives may be credited as kills",
   -- Catalog:quest_rewards: QuestieDB has no reward counts and no choice/fixed split.
@@ -28,8 +28,6 @@ report.GAPS = {
   -- Design 2026-11-18-reputation §3, §4.5: no kill, item turn-in or encounter reputation.
   "reputation is gained from quest rewards only (no kills, item turn-ins or encounters)",
 }
-
-local NOT_REPRODUCIBLE = "uncommitted changes; this run may not be reproducible from its commit."
 
 -- Harness notices are about the client's WoW API stubs, not guides: kept out of
 -- every count and shown only in their own folded section.
@@ -77,13 +75,12 @@ end
 -- Guide levels and level flags (design spec §4.4)
 ---------------------------------------------------------------------------
 
--- Rule order is the warning-line order.
 local FLAG_RULES = {
-  { rule = "enter-under", says = "entered under-levelled",
+  { rule = "enter-under",
     fires = function(g, l) return l.enter and g.start_level and l.enter < g.start_level end },
-  { rule = "leave-under", says = "left under-levelled",
+  { rule = "leave-under",
     fires = function(g, l) return l.finished and l.leave and g.end_level and l.leave < g.end_level end },
-  { rule = "enter-over", says = "entered over-levelled",
+  { rule = "enter-over",
     fires = function(g, l) return l.enter and g.end_level and l.enter > g.end_level end },
 }
 
@@ -125,45 +122,16 @@ end
 ---------------------------------------------------------------------------
 -- Warnings (the header's warning lines)
 ---------------------------------------------------------------------------
+-- Only what changes how every finding below reads: the page shows these above
+-- the findings and the CLI prints them on stderr. Everything else is placed
+-- where it's read: a dirty checkout on the page's run line and in About this
+-- run, level flags on the guide map, the unverified count in About this run.
 
-local function checkout_warnings(warn, header)
-  local a = header.addon or {}
-  if a.git ~= false and a.dirty == true then warn[#warn + 1] = "The WoW-Pro checkout had " .. NOT_REPRODUCIBLE end
-  if (header.client or {}).dirty == true then warn[#warn + 1] = "The client checkout had " .. NOT_REPRODUCIBLE end
-end
-
+-- QuestieDB is the only quest source: without it no quest has XP, level or objectives.
 local function catalog_warnings(warn, catalog)
-  for _, name in ipairs(sorted_keys(catalog or {})) do
-    -- The counts file is optional: its absence is the "Not modelled" count gap, not a warning.
-    if catalog[name].present == false and name ~= "counts" then
-      warn[#warn + 1] = "Catalog source " .. name .. " was missing."
-    end
-  end
-end
-
-local function unverified_warning(warn, findings)
-  local n, unverified = 0, 0
-  for _, f in ipairs(findings) do
-    if counted(f) then
-      n = n + 1
-      if f.confidence == "unverified" then unverified = unverified + 1 end
-    end
-  end
-  if unverified * 2 > n then
-    warn[#warn + 1] = unverified .. " of " .. n .. " findings rest on quest data not checked against a second source."
-  end
-end
-
--- One line per rule that fires, counting guides (not characters).
-local function level_warnings(warn, guides)
-  for _, r in ipairs(FLAG_RULES) do
-    local n = 0
-    for _, g in ipairs(guides or {}) do
-      for _, fl in ipairs(g.flags or {}) do
-        if fl.rule == r.rule then n = n + 1; break end
-      end
-    end
-    if n > 0 then warn[#warn + 1] = plural(n, "guide") .. " " .. r.says end
+  local q = (catalog or {}).questie
+  if q and q.present == false then
+    warn[#warn + 1] = "QuestieDB was missing, so no quest had XP, a level or objectives: treat every finding as suspect."
   end
 end
 
@@ -174,13 +142,10 @@ local function skipped_races_warning(warn, races)
     .. (#races == 1 and "was" or "were") .. " skipped: " .. table.concat(races, ", ") .. "."
 end
 
-function report.warnings(header, findings)
+function report.warnings(header)
   local warn = setmetatable({}, ARRAY)
-  checkout_warnings(warn, header)
   catalog_warnings(warn, header.catalog)
   skipped_races_warning(warn, header.skipped_races)
-  unverified_warning(warn, findings)
-  level_warnings(warn, header.guides)
   return warn
 end
 
@@ -257,8 +222,25 @@ function report.skipped_races_note(races)
   return "Races that reached no included guide: " .. ids(races) .. "."
 end
 
-function report.notes(header)
+-- Counted findings whose quest data is incomplete in QuestieDB (no XP, level, name
+-- or objective count) or that a heuristic raised (catalog Quest.confidence,
+-- Driver:confidence); nil when there are none.
+function report.unverified_note(findings)
+  local n, unverified = 0, 0
+  for _, f in ipairs(findings or {}) do
+    if counted(f) then
+      n = n + 1
+      if f.confidence == "unverified" then unverified = unverified + 1 end
+    end
+  end
+  if unverified == 0 then return nil end
+  return "Unverified findings: " .. unverified .. " of " .. n .. ". Their quest's data is incomplete (no XP, "
+    .. "level or name in QuestieDB, or an objective count assumed or guessed), or a heuristic raised them."
+end
+
+function report.notes(header, findings)
   return setmetatable({
+    unverified = report.unverified_note(findings),
     filters = report.filters_note(header.filters),
     played = report.played_note(header.played),
     unreached = report.unreached_note(header.unreached),
@@ -367,8 +349,8 @@ function report.build(findings, header)
   for _, g in ipairs(header.assumptions or {}) do gaps[#gaps + 1] = g end
   h.gaps = gaps
   h.assumptions = nil
-  h.warnings = report.warnings(header, findings)
-  h.notes = report.notes(header)
+  h.warnings = report.warnings(header)
+  h.notes = report.notes(header, findings)
   return { format = report.FORMAT, header = h, labels = labels(header), summary = summarize(findings), findings = out }
 end
 

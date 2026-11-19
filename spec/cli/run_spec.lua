@@ -206,13 +206,13 @@ describe("hwc run: progress and output", function()
     assert.is_nil(err:find("level 5", 1, true), err)
   end)
 
-  it("on a terminal redraws the progress line and clears it before the warnings", function()
+  it("on a terminal redraws the progress line and clears it when the run ends", function()
     local env = env_at(fixture())
     env.tty = true
     env.width = 200
     local code, out, err = play(dw(), { env = env })
     assert.equal(0, code, err)
-    assert.truthy(err:find("Dwarf Warrior · b %(guide 1%) · level 5 · 0:0%d\r\27%[Kwarning: "), err)
+    assert.truthy(err:find("Dwarf Warrior · b %(guide 1%) · level 5 · 0:0%d\r\27%[K$"), err)
     -- Redrawn in place, never ended with a newline.
     assert.is_nil(err:find("0:0%d\n"))
     assert.is_nil(out:find("\27", 1, true))
@@ -265,10 +265,10 @@ describe("hwc run: progress and output", function()
     assert.equal("", err)
   end)
 
-  it("prints the report's warnings on stderr", function()
+  it("prints the report's warnings on stderr, not level flags", function()
     local code, _, err = play(dw())
     assert.equal(0, code, err)
-    assert.truthy(err:find("warning: 1 guide entered under-levelled\n", 1, true), err)
+    assert.is_nil(err:find("under-levelled", 1, true), err)
   end)
 
   it("--verbose reports jumps, catalog sources and wall times on stderr", function()
@@ -423,8 +423,8 @@ describe("hwc run: filters and paths", function()
     assert.is_nil(doc.header.stop)
     assert.equal("Dwarf-WARRIOR", doc.header.scope)
     assert.equal("Dwarf Warrior", doc.labels.combos["Dwarf WARRIOR none"])
-    -- The client checkout's own state may add a line first: the level flag is the last.
-    assert.equal("1 guide entered under-levelled", doc.header.warnings[#doc.header.warnings])
+    -- Level flags are on the guide map, not in the warnings.
+    assert.same({}, doc.header.warnings)
   end)
 
   it("writes neither file when the report template can't be read", function()

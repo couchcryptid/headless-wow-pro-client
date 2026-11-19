@@ -604,7 +604,7 @@
       "dirty":false
     },
     "date":"2026-01-01",
-    "gaps":["rested XP","Forever Boosted Rest from campfires","party XP for non-elites (spec §5.5)","dungeon runs and instance XP (spec §3)","objective counts aren't in QuestieDB: each is taken as 1 unless the counts file gives it, so kills and kill XP run short","talk-to NPC objectives may be credited as kills","quest rewards give one of each item QuestieDB lists, choice rewards included","subzones are known only from R steps; steps gated on a subzone by IZ may stay hidden","reputation is gained from quest rewards only (no kills, item turn-ins or encounters)"],
+    "gaps":["rested XP","Forever Boosted Rest from campfires","party XP for non-elites (spec §5.5)","dungeon runs and instance XP (spec §3)","objective counts in neither QuestieDB's quest text nor the counts file are taken as 1, so kills and kill XP may run short","talk-to NPC objectives may be credited as kills","quest rewards give one of each item QuestieDB lists, choice rewards included","subzones are known only from R steps; steps gated on a subzone by IZ may stay hidden","reputation is gained from quest rewards only (no kills, item turn-ins or encounters)"],
     "guides":[{
         "end_level":5,
         "file":"WoWPro_Leveling/Guides/Alliance/Dun_1_5.lua",
@@ -655,12 +655,13 @@
       "combos":["Dwarf WARRIOR none"]
     },
     "notes":{
-      "rank":"Guide rank: 2 (WoWPro's setting for which optional steps are shown)."
+      "rank":"Guide rank: 2 (WoWPro's setting for which optional steps are shown).",
+      "unverified":"Unverified findings: 1 of 24. Their quest's data is incomplete (no XP, level or name in QuestieDB, or an objective count assumed or guessed), or a heuristic raised them."
     },
     "paths_relative_to":"headless-wow-pro-client",
     "rank":2,
     "scope":"Dwarf-WARRIOR-baseline",
-    "warnings":["1 guide entered under-levelled"]
+    "warnings":[]
   },
   "labels":{
     "actions":{

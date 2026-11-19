@@ -31,6 +31,8 @@ function runLine(doc: ReportDoc): string[] {
     let s = "WoW-Pro";
     if (a.branch) s += ` ${a.branch === "HEAD" ? "detached" : a.branch}`;
     if (a.commit) s += ` @ ${a.commit.slice(0, 7)}`;
+    // A dirty checkout isn't reproducible from its commit: said next to the commit, not as a warning.
+    if (a.dirty === true) s += " (uncommitted changes)";
     parts.push(s);
   }
   const n = h.matrix.combos.length;

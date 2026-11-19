@@ -155,10 +155,9 @@ describe("report.build", function()
     local doc = report.build({}, { client = { dirty = true },
       catalog = { questie = { present = false }, counts = { present = false } } })
     assert.same(report.GAPS, doc.header.gaps)
-    -- The optional counts file's absence is a gap line, not a warning.
+    -- The optional counts file's absence is no warning; a dirty checkout is on the run line.
     assert.same({
-      "The client checkout had uncommitted changes; this run may not be reproducible from its commit.",
-      "Catalog source questie was missing.",
+      "QuestieDB was missing, so no quest had XP, a level or objectives: treat every finding as suspect.",
     }, doc.header.warnings)
   end)
 
@@ -274,51 +273,46 @@ describe("labels and notes for wording the markdown carried", function()
 end)
 
 describe("report.warnings", function()
-  it("names a dirty WoW-Pro checkout unless it isn't a git folder", function()
-    local line = "The WoW-Pro checkout had uncommitted changes; this run may not be reproducible from its commit."
-    assert.same({ line }, report.warnings({ addon = { dirty = true } }, {}))
-    assert.same({}, report.warnings({ addon = { git = false, dirty = true } }, {}))
+  it("leaves a dirty checkout to the run line and About this run", function()
+    assert.same({}, report.warnings({ addon = { dirty = true }, client = { dirty = true } }))
   end)
 
-  it("names missing catalog sources in name order, without backticks", function()
-    local w = report.warnings({ catalog = { questie = { present = false }, a = { present = false },
-      b = { present = true } } }, {})
-    assert.same({ "Catalog source a was missing.", "Catalog source questie was missing." }, w)
+  it("warns only when QuestieDB is missing, never about the supplement", function()
+    assert.same({}, report.warnings({ catalog = { supplement = { present = false }, questie = { present = true } } }))
+    assert.same({ "QuestieDB was missing, so no quest had XP, a level or objectives: treat every finding as suspect." },
+      report.warnings({ catalog = { questie = { present = false } } }))
   end)
 
-  it("warns when most counted findings are unverified", function()
+  it("warns about races that reached no included guide", function()
+    assert.same({ "1 race reached no included guide and was skipped: Human." },
+      report.warnings({ skipped_races = { "Human" } }))
+    assert.same({ "2 races reached no included guide and were skipped: Human, NightElf." },
+      report.warnings({ skipped_races = { "Human", "NightElf" } }))
+    assert.same({}, report.warnings({ skipped_races = {} }))
+  end)
+
+  it("leaves level flags to the guide map", function()
+    local h = { guides = { { gid = "G", flags = { { combo = "Dwarf WARRIOR none", rule = "enter-under" } } } } }
+    assert.same({}, report.warnings(h))
+  end)
+end)
+
+describe("report.unverified_note", function()
+  it("counts unverified counted findings, harness notices left out", function()
     local fs = {
       { id = "F-1", signal = "accept-refused", severity = "high", confidence = "unverified" },
       { id = "F-2", signal = "accept-refused", severity = "high", confidence = "unverified" },
       { id = "F-3", signal = "accept-refused", severity = "high" },
       { id = "F-4", signal = "missing-global", severity = "low", confidence = "unverified" },
     }
-    assert.same({ "2 of 3 findings rest on quest data not checked against a second source." },
-      report.warnings({}, fs))
+    assert.equal("Unverified findings: 2 of 3. Their quest's data is incomplete (no XP, "
+      .. "level or name in QuestieDB, or an objective count assumed or guessed), or a heuristic raised them.",
+      report.unverified_note(fs))
   end)
 
-  it("warns about races that reached no included guide", function()
-    assert.same({ "1 race reached no included guide and was skipped: Human." },
-      report.warnings({ skipped_races = { "Human" } }, {}))
-    assert.same({ "2 races reached no included guide and were skipped: Human, NightElf." },
-      report.warnings({ skipped_races = { "Human", "NightElf" } }, {}))
-    assert.same({}, report.warnings({ skipped_races = {} }, {}))
-  end)
-
-  it("adds a level-flag warning line", function()
-    local h = { guides = { { gid = "G", flags = { { combo = "Dwarf WARRIOR none", rule = "enter-under" } } } } }
-    assert.same({ "1 guide entered under-levelled" }, report.warnings(h, {}))
-  end)
-
-  it("counts guides, not flags, per rule, in rule order", function()
-    local h = { guides = {
-      { gid = "G1", flags = { { combo = "a", rule = "enter-under" }, { combo = "b", rule = "enter-under" },
-        { combo = "a", rule = "leave-under" } } },
-      { gid = "G2", flags = { { combo = "a", rule = "enter-under" }, { combo = "a", rule = "enter-over" } } },
-      { gid = "G3", flags = {} },
-    } }
-    assert.same({ "2 guides entered under-levelled", "1 guide left under-levelled", "1 guide entered over-levelled" },
-      report.warnings(h, {}))
+  it("is nil when every finding is verified", function()
+    assert.is_nil(report.unverified_note({ { id = "F-1", signal = "accept-refused", severity = "high" } }))
+    assert.is_nil(report.unverified_note(nil))
   end)
 end)
 
