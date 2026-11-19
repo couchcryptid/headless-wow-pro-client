@@ -4,7 +4,7 @@
 -- Fidelity: nothing here writes engine state. The engine is touched only by
 -- firing events, settling the virtual clock and the player-equivalent
 -- E:update_guide() after a level-up (the addon has no level-up handler). F and f
--- live in hwc.driver.flight under the same rule.
+-- live in hwc.driver.flight, b and P in hwc.driver.crossing, under the same rule.
 --
 -- Event sequences, checked against the handlers in ~/Projects/WoW-Pro-Guides:
 --   QUEST_ACCEPTED(qlidx, qid)  WoWPro_Events.lua:783-793 (args read at :784); with
@@ -50,6 +50,7 @@ local kills = require("hwc.world.kills")
 local xp = require("hwc.world.xp")
 local gap = require("hwc.findings.gap")
 local flight = require("hwc.driver.flight")
+local crossing = require("hwc.driver.crossing")
 
 local actions = {}
 
@@ -499,24 +500,6 @@ end
 
 -- Rules ---------------------------------------------------------------------
 
--- Ruling Y (b and P only; F flies on real taxi nodes, hwc.driver.flight): b and P land
--- the player at the destination. Their Z and M tags say where the player departs from
--- (the boat dock), so they are not used. AutoCompleteZone completes F/H/b/P/R when the
--- step name or the TZ tag's first ";" part equals GetZoneText() or GetSubZoneText(), or a
--- numeric TZ equals the map id (WoWPro_AutoComplete.lua:513-526; TZ is
--- DefineTag("TZ","targetzone") at WoWPro_Parser.lua:484). TZ joins the Global Constraints'
--- Z/M exception: it says where the player goes.
--- subzone = step name; zone = TZ when it names one, else the current zone; map id
--- = TZ when it is numeric, else the current one; x/y are kept. Task 7 replaces this.
-local function perform_arrival(ctx, step, out)
-  local p = ctx.world.player
-  local tz_name, tz_map = parse_zone(step.tags and step.tags.targetzone)
-  p:set_zone(tz_name or p.zone, step.name or "", tz_map or p.map_id, p.x, p.y)
-  out.kind = "acted"
-  fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
-  fire(ctx, out, "ZONE_CHANGED")
-end
-
 -- Spec §5.1: the player's position is the step's M coordinate when it has one. A
 -- player walks to every step, so a non-travel step with a Z or M tag moves the
 -- player there before its own rule runs. Without this the player stays where the
@@ -555,6 +538,8 @@ end
 local FLIGHT_HELPERS = { fire = fire, depart = depart, settle = settle }
 local function perform_flight(ctx, step, out) flight.fly(ctx, step, out, FLIGHT_HELPERS) end
 local function perform_flight_point(ctx, step, out) flight.learn(ctx, step, out, FLIGHT_HELPERS) end
+-- b and P (hwc.driver.crossing): land at a real crossing arrival (spec section 6).
+local function perform_crossing(ctx, step, out) crossing.perform(ctx, step, out, FLIGHT_HELPERS) end
 
 -- The actions that work on their quest's objectives: a C, K, U, l or B step with the
 -- quest's QID (its qids, ACTIVE included for the fallback actions, Engine.qids_of).
@@ -821,7 +806,7 @@ function actions.is_quest_step(step)
   return QUEST_HANDLERS[step.action] ~= nil
 end
 local OTHER_HANDLERS = {
-  R = perform_travel, F = perform_flight, b = perform_arrival, P = perform_arrival, H = perform_travel,
+  R = perform_travel, F = perform_flight, b = perform_crossing, P = perform_crossing, H = perform_travel,
   f = perform_flight_point, h = perform_bind, U = perform_use, L = perform_level,
   l = perform_item_step, B = perform_item_step, ["*"] = perform_trash, ["="] = perform_trainer,
 }

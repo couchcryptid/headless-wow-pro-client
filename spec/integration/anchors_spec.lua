@@ -53,11 +53,13 @@ end
 local ANCHOR_GUIDES = { ClassicDunMorogh0112 = true, ClassicEasternKingdom1220 = true, ClassicAlliance1925 = true }
 -- forever_dir: Forever client tables for the run (default: hwc.config's, the active install).
 local runs = {}
-local function run_of(slug, forever_dir)
-  local key = slug .. "|" .. tostring(forever_dir)
+-- arrivals: a fixture first-party facts table (cfg.arrivals) in place of hwc.world.arrivals.
+local function run_of(slug, forever_dir, arrivals)
+  local key = slug .. "|" .. tostring(forever_dir) .. "|" .. tostring(arrivals)
   if runs[key] then return runs[key] end
   local cfg = config.load({ addon_path = ROOT .. slug, race = "Dwarf", class = "WARRIOR",
     catalog = forever_dir and { forever_dir = forever_dir } or nil })
+  cfg.arrivals = arrivals
   local result = require("hwc.boot").run(cfg)
   local E = require("hwc.driver.engine").new(result)
   local log = require("hwc.driver.run").drive({
@@ -259,6 +261,48 @@ describe("travel arrival on main (F with TZ, fixture tables) #slow", function()
     end
     print("F steps with TZ from fixture maps acted on: " .. table.concat(checked, "; "))
     assert.is_true(#checked > 0, "the run acted on no F step with a TZ tag from a fixture map")
+    assert.same({}, clicked)
+  end)
+end)
+
+-- b steps land at first-party crossings (arrival emulation spec section 6). The facts are a
+-- fixture (not hwc.world.arrivals): the Wetlands dock at 4.61,57.07 sails to Auberdine in
+-- Darkshore (19_25_Alliance.lua:346, `b Darkshore|AVAILABLE|1008|M|4.61,57.07|Z|1437; Wetlands`).
+-- The landing zone is "Darkshore", so the engine's AutoCompleteZone completes the step.
+describe("boat arrival on main (b, fixture crossings) #slow", function()
+  local why = absent("main")
+  if why then
+    pending(why)
+    return
+  end
+  local ARRIVALS = { start_nodes = { Dwarf = "Ironforge, Dun Morogh" }, start_bind = {}, subzones = {}, crossings = {
+    { kind = "boat", from = { map_id = 1437, x = 4.61, y = 57.07 }, zone = "Darkshore", subzone = "Auberdine",
+      map_id = 1439, x = 36.5, y = 44.2, checked = "spec fixture" },
+  } }
+
+  it("every acted b step departing the fixture dock completes without a manual click", function()
+    local r = run_of("main", "spec/fixtures/forever/installed", ARRIVALS)
+    local guide_source = require("hwc.driver.guide_source")
+    local manual = {}
+    for _, s in ipairs(r.log.signals) do
+      if s.signal == "manual-completion" or s.signal == "did-not-advance" then
+        manual[tostring(s.gid) .. ":" .. tostring(s.line)] = true
+      end
+    end
+    local checked, clicked = {}, {}
+    for _, snap in ipairs(r.log.steps) do
+      if snap.action == "b" and snap.line then
+        local file = r.engine:guide(snap.gid).file
+        local text = file and guide_source.line_text(ROOT .. "main", file, snap.line) or ""
+        if text:find("|M|4.61,57.07|", 1, true) then
+          local where = file .. ":" .. snap.line .. " " .. snap.action .. " " .. snap.name
+          checked[#checked + 1] = where
+          if manual[snap.gid .. ":" .. snap.line] then clicked[#clicked + 1] = where end
+        end
+      end
+    end
+    print("b steps from the fixture dock acted on: " .. table.concat(checked, "; "))
+    assert.is_true(#checked > 0, "the run acted on no b step from the fixture dock")
     assert.same({}, clicked)
   end)
 end)

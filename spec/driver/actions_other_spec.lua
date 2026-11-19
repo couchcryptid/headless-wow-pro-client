@@ -5,6 +5,16 @@ local F = dofile("spec/helpers/driver_fixtures.lua")
 local step, setup, names = F.step, F.setup, F.names
 local core = require("hwc.stubs.core")
 
+-- b and P land at first-party crossing facts (spec section 6), passed through the world
+-- (cfg.arrivals), not hwc.world.arrivals. Positions in the facts are percent.
+local function facts(crossings)
+  return { start_nodes = { Dwarf = "Ironforge, Dun Morogh" }, start_bind = {}, subzones = {}, crossings = crossings }
+end
+local DOCK = { map_id = 1432, x = 50, y = 50 }
+local ARRIVALS = facts({
+  { kind = "boat", from = DOCK, zone = "The Barrens", subzone = "Ratchet", map_id = 1413, x = 63.2, y = 37.1, checked = "spec" },
+})
+
 describe("actions.perform: travel", function()
   it("R moves the player (zone, map, x/y from M / 100) and fires the zone events", function()
     local ctx, E, w = setup()
@@ -38,30 +48,12 @@ describe("actions.perform: travel", function()
   end)
 
   it("b and P fire only the zone events", function()
-    local ctx, E = setup()
-    actions.perform(ctx, step("b", {}, { zone = "1455; Ironforge" }))
-    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
+    local ctx, E = setup("Dwarf", nil, { arrivals = ARRIVALS })
+    actions.perform(ctx, step("b", {}, { zone = "1455; Ironforge", map = "10,10" }, "Darkshore"))
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E)) -- the departure only: no candidate
     E.fired = {}
-    actions.perform(ctx, step("P", {}, { zone = "1455; Ironforge" }))
-    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
-  end)
-
-  -- Ruling Y (b and P until Task 7): they land at the destination. Z and M on these steps
-  -- say where the player departs from; AutoCompleteZone matches the step name or TZ against
-  -- GetZoneText / GetSubZoneText (WoWPro_AutoComplete.lua:513-526).
-  it("b and P land at the destination: subzone = step name, zone = TZ", function()
-    local ctx, E, w = setup()
-    local p = w.player
-    actions.perform(ctx, step("b", {}, { zone = "1437; Wetlands", targetzone = "Darkshore" }, "Auberdine"))
-    assert.are.same({ "Darkshore", "Auberdine", 1426 }, { p.zone, p.subzone, p.map_id })
-    actions.perform(ctx, step("P", {}, { zone = "1453; Stormwind City" }, "Darnassus"))
-    assert.are.same({ "Darkshore", "Darnassus", 1426 }, { p.zone, p.subzone, p.map_id })
-  end)
-
-  it("a numeric TZ is a map id: the player lands on that map", function()
-    local ctx, E, w = setup()
-    actions.perform(ctx, step("b", {}, { zone = "1436; Westfall", targetzone = "1453" }, "Stormwind"))
-    assert.are.same({ "Dun Morogh", "Stormwind", 1453 }, { w.player.zone, w.player.subzone, w.player.map_id })
+    actions.perform(ctx, step("b", {}, { zone = "1432; Loch Modan", map = "50,50" }, "Wetlands"))
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
   end)
 
   it("H uses the bind location for the zone", function()
@@ -213,16 +205,16 @@ describe("actions.perform: walking to each step", function()
   end)
 
   it("a later b to the same place is not already there after walking elsewhere", function()
-    local ctx, E, w = setup()
-    actions.perform(ctx, step("b", {}, { zone = "1455; Ironforge", targetzone = "1453; Stormwind City" }, "Stormwind"))
-    assert.are.equal("Stormwind", w.player.subzone)
+    local ctx, E, w = setup("Dwarf", nil, { arrivals = ARRIVALS })
+    actions.perform(ctx, step("b", {}, { zone = "1432; Loch Modan", map = "50,50" }, "Ratchet"))
+    assert.are.equal("Ratchet", w.player.subzone)
     actions.perform(ctx, step("N", {}, { zone = "1426; Dun Morogh", map = "30,70" }))
     -- AutoCompleteZone matches the step name or TZ against zone/subzone text, or TZ's map id
     -- (WoWPro_AutoComplete.lua:513-526): none of them matches the b step any more.
     local p = w.player
-    assert.are_not.equal("Stormwind", p.subzone)
-    assert.are_not.equal("Stormwind City", p.zone)
-    assert.are_not.equal(1453, p.map_id)
+    assert.are_not.equal("Ratchet", p.subzone)
+    assert.are_not.equal("The Barrens", p.zone)
+    assert.are_not.equal(1413, p.map_id)
   end)
 
   it("a step with only M moves x/y within the current zone and keeps the subzone", function()
@@ -704,5 +696,105 @@ describe("actions.perform: flights", function()
     assert.are.same({ reason = "tables-missing", key = "no-tables" }, o.data_gap)
     assert.are.same({}, w.player.flight_points)
     assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
+  end)
+end)
+
+describe("actions.perform: b and P", function()
+  local DOCK_TAGS = { zone = "1432; Loch Modan", map = "50,50" }
+  local TWO = facts({
+    { kind = "boat", from = DOCK, zone = "Dun Morogh", subzone = "Kharanos", map_id = 1426, x = 30, y = 40, checked = "spec" },
+    { kind = "boat", from = DOCK, zone = "The Barrens", subzone = "Ratchet", map_id = 1413, x = 63.2, y = 37.1, checked = "spec" },
+  })
+
+  it("b from a one-route dock lands at its real arrival", function()
+    local ctx, E, w = setup("Dwarf", nil, { arrivals = ARRIVALS })
+    local o = actions.perform(ctx, step("b", {}, DOCK_TAGS, "Ratchet"))
+    local p = w.player
+    assert.are.equal("acted", o.kind)
+    assert.are.same({ "The Barrens", "Ratchet", 1413, 0.632, 0.371 }, { p.zone, p.subzone, p.map_id, p.x, p.y })
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
+    assert.are.same({ zone = "The Barrens", subzone = "Ratchet", map_id = 1413 }, o.arrived)
+    assert.are.same({ name = "Ratchet" }, o.expected)
+    assert.is_nil(o.data_gap)
+    assert.is_nil(o.resolved_by)
+  end)
+
+  it("b from a two-route dock takes the route the step names exactly", function()
+    local ctx, _, w = setup("Dwarf", nil, { arrivals = TWO })
+    local o = actions.perform(ctx, step("b", {}, DOCK_TAGS, "Ratchet"))
+    assert.are.same({ "The Barrens", "Ratchet" }, { w.player.zone, w.player.subzone })
+    assert.is_nil(o.resolved_by)
+    ctx, _, w = setup("Dwarf", nil, { arrivals = TWO })
+    actions.perform(ctx, step("b", {}, { zone = "1432; Loch Modan", map = "50,50", targetzone = "1426" }, "Whatever"))
+    assert.are.equal(1426, w.player.map_id)
+  end)
+
+  it("b naming neither route lands by the loose match", function()
+    local ctx, _, w = setup("Dwarf", nil, { arrivals = TWO })
+    local o = actions.perform(ctx, step("b", {}, DOCK_TAGS, "Rat"))
+    assert.are.equal("Ratchet", w.player.subzone)
+    assert.are.equal("loose", o.resolved_by)
+    ctx, _, w = setup("Dwarf", nil, { arrivals = TWO })
+    o = actions.perform(ctx, step("b", {}, DOCK_TAGS, "Nowhere"))
+    assert.are.same({ reason = "destination-unresolved", key = "Nowhere" }, o.data_gap)
+    assert.are.equal(1432, w.player.map_id)
+    assert.is_nil(o.arrived)
+  end)
+
+  it("b to another continent changes the continent the next F lists", function()
+    local ctx, E, w = setup("Dwarf", nil, { arrivals = ARRIVALS })
+    local p = w.player
+    p.faction = "Horde"
+    local db = w.catalog.forever
+    -- The taxi map lists the player's continent (stubs.core taxi_nodes): Eastern Kingdoms first.
+    assert.are_not.equal(1414, db:continent_of(1432))
+    function E:fire(event, ...)
+      self.fired[#self.fired + 1] = { event, ... }
+      if event == "TAXIMAP_OPENED" then
+        for _, n in ipairs(db:taxi_nodes(db:continent_of(p.map_id), p.faction)) do
+          if n.name:find("Crossroads", 1, true) then self.sb.taxi_taken[#self.sb.taxi_taken + 1] = n.name end
+        end
+      end
+    end
+    actions.perform(ctx, step("b", {}, DOCK_TAGS, "Ratchet"))
+    local o = actions.perform(ctx, step("F", {}, { zone = "1413; The Barrens", map = "63.2,37.1" }, "Crossroads"))
+    assert.are.same({ "Crossroads, The Barrens" }, E.sb.taxi_taken)
+    assert.are.equal("flight-point-undiscovered", o.reason) -- a real node, listed on Kalimdor
+  end)
+
+  it("P teleport lands at the known spell's destination", function()
+    local arrivals = facts({
+      { kind = "teleport", spell = 3561, zone = "Stormwind City", subzone = "Trade District", map_id = 1453, x = 49.5, y = 87.3, checked = "spec" },
+      { kind = "teleport", spell = 3562, zone = "Ironforge", subzone = "The Great Forge", map_id = 1455, x = 27, y = 71, checked = "spec" },
+    })
+    local ctx, _, w = setup("Dwarf", nil, { arrivals = arrivals })
+    w.player:learn_spell(3561)
+    local o = actions.perform(ctx, step("P", {}, { zone = "1432; Loch Modan" }, "Stormwind City"))
+    assert.are.same({ "Stormwind City", "Trade District", 1453, 0.495, 0.873 },
+      { w.player.zone, w.player.subzone, w.player.map_id, w.player.x, w.player.y })
+    assert.are.same({ zone = "Stormwind City", subzone = "Trade District", map_id = 1453 }, o.arrived)
+    assert.are.equal("advances", o.classify)
+    -- A spell the step names (SPELL tag) counts too.
+    ctx, _, w = setup("Dwarf", nil, { arrivals = arrivals })
+    actions.perform(ctx, step("P", {}, { zone = "1432; Loch Modan", spell = "Teleport: Ironforge; 3562" }, "Ironforge"))
+    assert.are.equal(1455, w.player.map_id)
+  end)
+
+  it("b with no dock nearby is arrival-unknown, and the player stays", function()
+    local ctx, _, w = setup("Dwarf", nil, { arrivals = ARRIVALS })
+    local o = actions.perform(ctx, step("b", {}, { zone = "1455; Ironforge", map = "10,10" }, "Ratchet"))
+    assert.are.same({ reason = "arrival-unknown", key = "b:1455:10.0,10.0" }, o.data_gap)
+    assert.are.equal(1455, w.player.map_id)
+    assert.is_nil(o.arrived)
+    o = actions.perform(setup("Dwarf", nil, { arrivals = facts({}) }), step("P", {}, { zone = "1455; Ironforge", map = "10,10" }, "X"))
+    assert.are.equal("P:1455:10.0,10.0", o.data_gap.key)
+  end)
+
+  it("lands without the Forever tables, unclassified", function()
+    local ctx, _, w = setup("Dwarf", nil, { arrivals = ARRIVALS, forever = false })
+    local o = actions.perform(ctx, step("b", {}, DOCK_TAGS, "Ratchet"))
+    assert.are.equal(1413, w.player.map_id)
+    assert.is_nil(o.classify)
+    assert.is_nil(o.data_gap)
   end)
 end)
