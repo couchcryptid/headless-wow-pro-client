@@ -273,6 +273,16 @@ local function perform_accept(ctx, step, out)
   end
 
   out.kind = "acted"
+  -- An item-started quest (QuestieDB startedBy item, catalog starter_kind "item") is begun by
+  -- using the item the player already holds, so the client has it in the bags when the quest
+  -- is accepted (Stolen Blasting Powder 95213 turns in on that item). It goes in BEFORE the
+  -- accept events and never leaves again here. Whether the game consumes the item on accept
+  -- is unverified for Forever.
+  local quest = w.log:get(qid).quest
+  if quest.starter_kind == "item" and quest.starter and w.player:item_count(quest.starter) == 0 then
+    add_item(ctx, out, quest.starter, 1)
+    fire(ctx, out, "BAG_UPDATE", 0)
+  end
   w.dialog = { qid = qid, kind = "detail" }
   fire(ctx, out, "QUEST_ACCEPTED", log_index(w, qid), qid)
   fire(ctx, out, "QUEST_LOG_UPDATE")
@@ -293,7 +303,6 @@ local function perform_accept(ctx, step, out)
   -- character lacks the gating skill. No skill is trained here: a character
   -- with no professions trains only when a guide step says so (spec §11), and Cooking has no
   -- requires_skill gate, so it is turned in without learning Cooking.
-  local quest = w.log:get(qid).quest
   if not is_camping(quest) or guide_turns_in(ctx.engine, qid) then return end
   if quest.requires_skill and not w.player:knows_skill(quest.requires_skill) then return end
   w.log:complete_objectives(qid, nil)
