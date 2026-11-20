@@ -462,6 +462,23 @@ skipped, and the `missing-global` list. "Farsen's Watch why names
 96629" stays pending: the engine's why names only the first unmet prereq of
 `PRE|314&96408`, which is 96408.
 
+## Arrival facts
+
+`src/hwc/world/arrivals.lua` holds first-party facts about where the player stands after a taxi, boat,
+portal or hearth. They come from the game, never from a guide. `hwc arrivals capture-script [taxi|landing|bind]`
+prints one `/run` line (at most 255 characters) to paste into the WoW Forever chat box; it needs no WoW-Pro
+folder and no network. Each print is one labelled value.
+
+| Mode | When | Captures | Goes in `arrivals.lua` as |
+| --- | --- | --- | --- |
+| `taxi` | At a flight master with the taxi map open | Each node's slot, name and type, in slot order | The subzone per taxi node, and how `taxi_map` lists nodes |
+| `landing` | Right after a flight, boat, portal or hearth arrives | Zone, subzone, map ID and position as a percent | A `crossings` entry (departure and landing), or an inn's hearth landing |
+| `bind` | Right after setting the hearthstone | The bind location text | An inn's bind text |
+
+Date every entry in its `checked` field, for example `user, 2026-11-19: ...`. Two candidates are still
+to capture: the Skyborne skycutter departures from Valanaar's harbour, Alliance to Dalaran (from 64.9, 80.9)
+and Horde to Thunder Bluff (from 58.2, 79.5).
+
 ## World and catalog
 
 The stubs answer from a simulated world (`src/hwc/world/`): the player, bags,

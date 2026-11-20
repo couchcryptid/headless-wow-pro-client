@@ -554,3 +554,57 @@ describe("hwc diff", function()
     assert.matches("2026.11.12.A (not a git folder)", out2, 1, true)
   end)
 end)
+
+describe("hwc arrivals capture-script", function()
+  local function script(mode)
+    local args = { "arrivals", "capture-script" }
+    if mode then args[#args + 1] = mode end
+    return run(args)
+  end
+
+  it("prints a /run line of at most 255 characters for each mode", function()
+    for _, mode in ipairs({ "taxi", "landing", "bind" }) do
+      local code, out, err = script(mode)
+      assert.equal(0, code)
+      assert.equal("", err)
+      local ls = lines(out)
+      assert.equal(1, #ls)
+      assert.equal("/run ", ls[1]:sub(1, 5))
+      assert.is_true(#ls[1] <= 255, mode .. " line is " .. #ls[1])
+    end
+  end)
+
+  it("taxi prints the slot, name and type of each node", function()
+    local _, out = script("taxi")
+    for _, name in ipairs({ "NumTaxiNodes", "TaxiNodeName", "TaxiNodeGetType" }) do
+      assert.truthy(out:find(name, 1, true))
+    end
+  end)
+
+  it("landing prints the zone, subzone, map and position percent", function()
+    local _, out = script("landing")
+    for _, name in ipairs({ "GetZoneText()", "GetSubZoneText()", "GetBestMapForUnit", "GetPlayerMapPosition", "GetXY" }) do
+      assert.truthy(out:find(name, 1, true))
+    end
+  end)
+
+  it("bind prints the bind location", function()
+    local _, out = script("bind")
+    assert.truthy(out:find("GetBindLocation()", 1, true))
+  end)
+
+  it("defaults to taxi, and refuses an unknown mode", function()
+    local _, out = script()
+    assert.truthy(out:find("TaxiNodeName", 1, true))
+    local code, _, err = script("hearth")
+    assert.equal(2, code)
+    assert.truthy(err:find("hearth", 1, true))
+  end)
+
+  it("is generated Lua that compiles", function()
+    for _, mode in ipairs({ "taxi", "landing", "bind" }) do
+      local _, out = script(mode)
+      assert.truthy(load((out:gsub("^/run ", ""))))
+    end
+  end)
+end)

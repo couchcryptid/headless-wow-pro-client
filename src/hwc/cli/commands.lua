@@ -8,7 +8,7 @@ local commands = {}
 -- one module.
 local MODULE = { help = "help_cmd", boot = "stubs", matrix = "stubs", sync = "stubs" }
 
-local ORDER = { "init", "doctor", "update", "run", "diff", "quest", "list", "version", "help", "boot", "matrix", "sync" }
+local ORDER = { "init", "doctor", "update", "run", "diff", "quest", "arrivals", "list", "version", "help", "boot", "matrix", "sync" }
 
 local function load(name)
   local mod = require("hwc.cli." .. (MODULE[name] or name))
