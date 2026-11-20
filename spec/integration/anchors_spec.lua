@@ -51,7 +51,12 @@ end
 -- limited to that scope with the guide filter: Dun Morogh -> 12_20 -> 19_25, then
 -- the excluded 25_30 ends it (no-next-guide) with 19_25 still loaded.
 local ANCHOR_GUIDES = { ClassicDunMorogh0112 = true, ClassicEasternKingdom1220 = true, ClassicAlliance1925 = true }
--- forever_dir: Forever client tables for the run (default: hwc.config's, the active install).
+-- forever_dir: Forever client tables for the run. Every anchor names one, the fixture
+-- tables (FIXTURE_TABLES) or a path that doesn't exist, so no result depends on what this
+-- machine has installed; nil would fall back to hwc.config's active install.
+local FIXTURE_TABLES = "spec/fixtures/forever/installed"
+-- A path that doesn't exist (ruling R5): no tables, so every arrival stall is a notice.
+local NO_TABLES = config.repo_root() .. "/local/no-forever-tables-here"
 local runs = {}
 -- arrivals: a fixture first-party facts table (cfg.arrivals) in place of hwc.world.arrivals.
 local function run_of(slug, forever_dir, arrivals)
@@ -124,7 +129,7 @@ describe("anchor #3535 (Camping 101: Cooking prereq gates) #slow", function()
   -- 98321 (Flintfire's Shipment), 96392 (Farsen's Watch) and 96629 (Camping 101: Cooking) are Forever-added:
   -- an older QuestieDB may lack them, so the catalog may not know or name them.
   it("the catalog knows the three Red QIDs and names them where a source does", function()
-    local w = run_of("main").world
+    local w = run_of("main", FIXTURE_TABLES).world
     local want = { [COOKING] = "Camping 101: Cooking" }
     for qid, name in pairs(RED_3535) do want[qid] = name end
     local unnamed = {}
@@ -144,7 +149,7 @@ describe("anchor #3535 (Camping 101: Cooking prereq gates) #slow", function()
   end)
 
   it("Red: on main a Dwarf Warrior never sees the three accepts", function()
-    local r = run_of("main")
+    local r = run_of("main", FIXTURE_TABLES)
     for _, qid in ipairs(RED_ORDER) do
       local f = never_shown(r, DUN_MOROGH, qid)
       assert.is_truthy(f, "no never-shown-accept for " .. RED_3535[qid] .. " (" .. qid .. ")")
@@ -153,7 +158,7 @@ describe("anchor #3535 (Camping 101: Cooking prereq gates) #slow", function()
   end)
 
   it("Red: the why of Tools for Steelgrill and Flintfire's Shipment names 96629", function()
-    local r = run_of("main")
+    local r = run_of("main", FIXTURE_TABLES)
     for _, qid in ipairs({ 400, 98321 }) do
       local f = never_shown(r, DUN_MOROGH, qid)
       assert.is_truthy(f)
@@ -162,7 +167,7 @@ describe("anchor #3535 (Camping 101: Cooking prereq gates) #slow", function()
   end)
 
   it("Red: the why of Farsen's Watch names 96629", function()
-    local f = never_shown(run_of("main"), DUN_MOROGH, 96392)
+    local f = never_shown(run_of("main", FIXTURE_TABLES), DUN_MOROGH, 96392)
     assert.is_truthy(f)
     if not tostring(f.why):find(tostring(COOKING), 1, true) then
       -- Engine result, reported not patched: PRE 314&96408 names no 96629; the fix
@@ -174,7 +179,7 @@ describe("anchor #3535 (Camping 101: Cooking prereq gates) #slow", function()
   end)
 
   it("Green: on fix/forever-prereq-gates the three accepts are shown", function()
-    local r = run_of("fix-forever-prereq-gates")
+    local r = run_of("fix-forever-prereq-gates", FIXTURE_TABLES)
     for _, qid in ipairs(RED_ORDER) do
       local f = never_shown(r, DUN_MOROGH, qid)
       assert.is_nil(f, RED_3535[qid] .. " still never shown: " .. tostring(f and f.why))
@@ -182,8 +187,8 @@ describe("anchor #3535 (Camping 101: Cooking prereq gates) #slow", function()
   end)
 
   it("prints the never-shown-accept totals (issue-03 Python model: main 46, fix 0)", function()
-    local red = count_signal(run_of("main"), "never-shown-accept")
-    local green = count_signal(run_of("fix-forever-prereq-gates"), "never-shown-accept")
+    local red = count_signal(run_of("main", FIXTURE_TABLES), "never-shown-accept")
+    local green = count_signal(run_of("fix-forever-prereq-gates", FIXTURE_TABLES), "never-shown-accept")
     -- Not asserted (plan carry-over): a difference is a triage question.
     print(string.format("#3535 never-shown-accept findings: main %d, fix/forever-prereq-gates %d", red, green))
   end)
@@ -197,7 +202,7 @@ describe("anchor #3554 (U step gated on its L result) #slow", function()
   end
 
   local function u_of(slug)
-    local r = run_of(slug)
+    local r = run_of(slug, FIXTURE_TABLES)
     local gid = r.log.stop.gid
     assert.equal(ALLIANCE_19_25, r.engine:guide(gid).file, "run stopped outside 19_25: " .. tostring(gid))
     -- Finishing 19_25 makes the engine load 25_30 itself; the driver then sees it is
@@ -238,7 +243,7 @@ describe("travel arrival on main (F with TZ, fixture tables) #slow", function()
   local FIXTURE_MAPS = { [1426] = true, [1432] = true, [1453] = true, [1455] = true }
 
   it("every acted F step with a TZ tag departing from a fixture map completes without a manual click", function()
-    local r = run_of("main", "spec/fixtures/forever/installed")
+    local r = run_of("main", FIXTURE_TABLES)
     local guide_source = require("hwc.driver.guide_source")
     local manual = {}
     for _, s in ipairs(r.log.signals) do
@@ -263,6 +268,28 @@ describe("travel arrival on main (F with TZ, fixture tables) #slow", function()
     assert.is_true(#checked > 0, "the run acted on no F step with a TZ tag from a fixture map")
     assert.same({}, clicked)
   end)
+
+  -- Spec section 3: "Stormwind" is no area name in Forever (the city is "Stormwind City"),
+  -- so a bare `F Stormwind` with no TZ can never complete by zone wherever it lands: a
+  -- did-not-advance name-not-an-area guide finding, never a notice.
+  it("a bare F Stormwind (no TZ) is did-not-advance name-not-an-area", function()
+    local r = run_of("main", FIXTURE_TABLES)
+    local guide_source = require("hwc.driver.guide_source")
+    local seen = {}
+    for _, s in ipairs(r.log.signals) do
+      if s.action == "F" and s.name == "Stormwind" and s.line
+        and (s.signal == "did-not-advance" or s.signal == "arrival-data-gap") then
+        local text = guide_source.line_text(ROOT .. "main", s.file, s.line) or ""
+        if not text:find("|TZ|", 1, true) then
+          seen[#seen + 1] = string.format("%s:%d %s %s", s.file, s.line, s.signal, tostring(s.reason))
+          assert.equal("did-not-advance", s.signal, seen[#seen])
+          assert.equal("name-not-an-area", s.reason, seen[#seen])
+        end
+      end
+    end
+    print("bare F Stormwind stalls: " .. table.concat(seen, "; "))
+    assert.is_true(#seen > 0, "the fixture run stalled on no bare F Stormwind")
+  end)
 end)
 
 -- b steps land at first-party crossings (arrival emulation spec section 6). The facts are a
@@ -281,7 +308,7 @@ describe("boat arrival on main (b, fixture crossings) #slow", function()
   } }
 
   it("every acted b step departing the fixture dock completes without a manual click", function()
-    local r = run_of("main", "spec/fixtures/forever/installed", ARRIVALS)
+    local r = run_of("main", FIXTURE_TABLES, ARRIVALS)
     local guide_source = require("hwc.driver.guide_source")
     local manual = {}
     for _, s in ipairs(r.log.signals) do
@@ -316,7 +343,6 @@ describe("a run with no Forever tables on main #slow", function()
     pending(why)
     return
   end
-  local NO_TABLES = config.repo_root() .. "/local/no-forever-tables-here"
   local ARRIVAL = { F = true, f = true, b = true, P = true, H = true, h = true, R = true }
 
   it("a Dwarf Warrior run with no Forever tables has no did-not-advance on F/f/b/P/H/h steps", function()
@@ -349,8 +375,11 @@ describe("item objectives follow the bags on main #slow", function()
     return
   end
 
+  -- No tables: this anchor is about item objectives, and the fixture tables name too few
+  -- areas (12_20_Eastern_Kingdom.lua:32 `R Amberstill Ranch|ACTIVE|314` would be
+  -- name-not-an-area against them), so arrival stalls stay notices here.
   it("turns in Protecting the Herd (314) and Thunderbrew Lager (117) and leaves neither in the log", function()
-    local r = run_of("main")
+    local r = run_of("main", NO_TABLES)
     assert.is_true(r.world.log.history[314] == true, "314 was never turned in")
     assert.is_true(r.world.log.history[117] == true, "117 was never turned in")
     for _, s in ipairs(r.log.signals) do
@@ -371,7 +400,7 @@ describe("anchor: dungeon accepts and harness completeness on main #slow", funct
   -- Skip Dungeon Quests is on by default, and this client doesn't run dungeons: the
   -- DUNGEON accepts it completes unshown are recorded as run info, never as findings.
   it("records the 19_25 DUNGEON accepts as dungeon skips, not findings", function()
-    local r = run_of("main")
+    local r = run_of("main", FIXTURE_TABLES)
     assert.is_true(r.log.skip_dungeons)
     local in_guide, skipped = {}, {}
     for _, d in ipairs(r.log.dungeon_skips) do
@@ -393,7 +422,7 @@ describe("anchor: dungeon accepts and harness completeness on main #slow", funct
   -- Zero addon lua-errors too: a missing client stub raises inside an addon file, so it
   -- is classed as an addon error, not a harness one.
   it("a full run has zero harness or addon lua-error findings and prints the missing globals", function()
-    local r = run_of("main")
+    local r = run_of("main", FIXTURE_TABLES)
     print("main run stop: " .. tostring(r.log.stop.reason) .. " at level " .. tostring(r.log.stop.level))
     local harness, addon, missing = {}, 0, {}
     for _, f in ipairs(r.findings) do
