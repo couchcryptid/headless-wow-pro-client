@@ -8,9 +8,9 @@ local MAX_LINE = 255
 -- Mode -> the Lua (without the /run prefix) the user pastes. One value per print, each labelled.
 local SCRIPTS = {
   taxi = 'for i=1,NumTaxiNodes() do print("taxi",i,TaxiNodeName(i),TaxiNodeGetType(i)) end',
-  landing = 'local m=C_Map.GetBestMapForUnit("player") '
-    .. 'local x,y=C_Map.GetPlayerMapPosition(m,"player"):GetXY() print("zone",GetZoneText()) print("subzone",GetSubZoneText()) print("map",m) '
-    .. 'print("x%",format("%.2f",x*100)) print("y%",format("%.2f",y*100))',
+  landing = 'local m=C_Map.GetBestMapForUnit("player") local p=m and C_Map.GetPlayerMapPosition(m,"player") '
+    .. 'local s="nil" if p then local x,y=p:GetXY() s=format("%.2f %.2f",x*100,y*100) end '
+    .. 'print("zone",GetZoneText(),"sub",GetSubZoneText(),"map",m,"xy%",s)',
   bind = 'print("bind",GetBindLocation())',
 }
 

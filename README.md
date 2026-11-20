@@ -467,7 +467,7 @@ skipped, and the `missing-global` list. "Farsen's Watch why names
 `src/hwc/world/arrivals.lua` holds first-party facts about where the player stands after a taxi, boat,
 portal or hearth. They come from the game, never from a guide. `hwc arrivals capture-script [taxi|landing|bind]`
 prints one `/run` line (at most 255 characters) to paste into the WoW Forever chat box; it needs no WoW-Pro
-folder and no network. Each print is one labelled value.
+folder and no network. Values are labelled; a missing map position prints `xy% nil`.
 
 | Mode | When | Captures | Goes in `arrivals.lua` as |
 | --- | --- | --- | --- |

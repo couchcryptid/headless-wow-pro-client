@@ -570,7 +570,7 @@ describe("hwc arrivals capture-script", function()
       local ls = lines(out)
       assert.equal(1, #ls)
       assert.equal("/run ", ls[1]:sub(1, 5))
-      assert.is_true(#ls[1] <= 255, mode .. " line is " .. #ls[1])
+      assert.is_true(#ls[1] <= require("hwc.cli.arrivals").MAX_LINE, mode .. " line is " .. #ls[1])
     end
   end)
 
@@ -586,6 +586,41 @@ describe("hwc arrivals capture-script", function()
     for _, name in ipairs({ "GetZoneText()", "GetSubZoneText()", "GetBestMapForUnit", "GetPlayerMapPosition", "GetXY" }) do
       assert.truthy(out:find(name, 1, true))
     end
+  end)
+
+  it("landing runs without error when the map or position is missing, printing nil for the position", function()
+    local _, out = script("landing")
+    local body = out:gsub("^/run ", "")
+    local function exec(map, pos)
+      local printed = {}
+      local env = {
+        print = function(...)
+          local t = {}
+          for i = 1, select("#", ...) do t[i] = tostring((select(i, ...))) end
+          printed[#printed + 1] = table.concat(t, " ")
+        end,
+        format = string.format,
+        GetZoneText = function() return "Z" end,
+        GetSubZoneText = function() return "S" end,
+        C_Map = {
+          GetBestMapForUnit = function() return map end,
+          GetPlayerMapPosition = function() return pos end,
+        },
+      }
+      local fn = assert(load(body, "landing", "t", env))
+      assert.has_no.errors(fn)
+      return table.concat(printed, "\n")
+    end
+    local no_map = exec(nil, nil)
+    assert.truthy(no_map:find("zone Z sub S", 1, true))
+        assert.truthy(no_map:find("map nil", 1, true))
+    assert.truthy(no_map:find("xy% nil", 1, true))
+    local no_pos = exec(1453, nil)
+    assert.truthy(no_pos:find("map 1453", 1, true))
+    assert.truthy(no_pos:find("xy% nil", 1, true))
+    local pos = { GetXY = function() return 0.5, 0.25 end }
+    local ok = exec(1453, pos)
+    assert.truthy(ok:find("xy% 50.00 25.00", 1, true))
   end)
 
   it("bind prints the bind location", function()
