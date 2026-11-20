@@ -350,18 +350,21 @@ function text.title(f)
 end
 
 -- Arrival emulation (spec section 10): what hwc itself lacks, one clause per reason.
+-- Each says what hwc's own data lacks, never that the step named something wrong.
 local GAP_CLAUSES = {
-  ["fp-unknown"] = "the flight point this step names isn't in the flight point table",
+  ["fp-unknown"] = "no flight point is within reach of the departure in hwc's tables",
   ["start-node-unknown"] = "the character's starting taxi node isn't known",
   ["destination-unresolved"] = "the step's destination couldn't be resolved to a place",
-  ["arrival-unknown"] = "the place this step names has no recorded arrival area",
-  ["inn-unknown"] = "the inn this step names isn't in the inn data",
+  ["arrival-unknown"] = "no captured crossing leaves from here",
+  ["inn-unknown"] = "no captured inn is near here",
   ["waypoint-arrival-not-emulated"] = "arrival by waypoint isn't emulated",
-  ["subzone-unknown"] = "the subzone this step names isn't in the subzone data",
+  ["subzone-unknown"] = "the landing subzone isn't captured",
   ["taxi-not-taken"] = "the step names a real flight point but the addon never took the flight "
     .. "(for example, this F step wasn't the active row)",
   ["arrival-data-mismatch"] = "two arrival data tables disagree",
 }
+-- An F step's arrival-unknown: the departure map is on no continent (hwc.driver.flight).
+local F_ARRIVAL_UNKNOWN = "hwc's tables place the departure map on no continent"
 
 local function gap_sentence(f)
   local r = (f.reasons or {})[1] or (f.name and f.name:match("^[^:]+"))
@@ -369,6 +372,7 @@ local function gap_sentence(f)
     return "The Forever client tables aren't installed, so arrival steps aren't judged. Run hwc update."
   end
   local clause = GAP_CLAUSES[r] or tostring(r)
+  if r == "arrival-unknown" and f.action == "F" then clause = F_ARRIVAL_UNKNOWN end
   if r == "arrival-data-mismatch" and f.detail then clause = clause .. " (" .. tostring(f.detail) .. ")" end
   return "hwc has no arrival data for this: " .. clause .. "."
 end
@@ -512,11 +516,14 @@ local function clauses(f, ctx)
       return "The step names " .. quoted(named.name or "") .. (named.tz and (" (TZ " .. quoted(named.tz) .. ")") or "")
         .. ", but the player arrived in " .. tostring(arrived.zone or "") .. (sub ~= "" and (" / " .. sub) or "")
         .. ", so the addon didn't complete it and the client clicked it off."
-    elseif r == "flight-point-undiscovered" then
-      return "The guide flies to a flight point the character hasn't discovered, so the client travelled there another way."
-    elseif r == "no-taxi-node" then
-      return "No flight point on the taxi map matches " .. quoted(named.name or "")
-        .. ", so the client travelled there another way."
+    elseif r == "flight-point-undiscovered" or r == "no-taxi-node" then
+      -- "Another way" only when the player did land somewhere (spec section 9's loose match).
+      local tail = (f.resolved_by or f.arrived) and ", so the client travelled there another way."
+        or ", so the client clicked the step off."
+      if r == "flight-point-undiscovered" then
+        return "The guide flies to a flight point the character hasn't discovered" .. tail
+      end
+      return "No flight point on the taxi map matches " .. quoted(named.name or "") .. tail
     elseif r == "incomplete" and f.action == "T" then
       return "The turn-in was refused because " .. own .. " wasn't complete, so the client clicked the step off."
     elseif r == "incomplete" then

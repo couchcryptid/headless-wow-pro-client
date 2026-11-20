@@ -606,9 +606,17 @@ describe("arrival finding text (spec section 10)", function()
     assert.equal('The step names "Stormwind" (TZ "1453; Stormwind City"), but the player arrived in Elwynn Forest, '
       .. "so the addon didn't complete it and the client clicked it off.",
       text.sentence(dnaf("arrival-mismatch", { arrived = { zone = "Elwynn Forest" } }), {}))
+    -- Resolved: the player landed by the loose match (spec section 9).
+    local landed = { resolved_by = "loose", arrived = { zone = "Stormwind City" } }
     assert.equal("The guide flies to a flight point the character hasn't discovered, so the client travelled there "
-      .. "another way.", text.sentence(dnaf("flight-point-undiscovered"), {}))
+      .. "another way.", text.sentence(dnaf("flight-point-undiscovered", landed), {}))
     assert.equal('No flight point on the taxi map matches "Stormwind", so the client travelled there another way.',
+      text.sentence(dnaf("no-taxi-node", landed), {}))
+  end)
+  it("doesn't claim another way of travel when nothing says where the player landed", function()
+    assert.equal("The guide flies to a flight point the character hasn't discovered, so the client clicked the "
+      .. "step off.", text.sentence(dnaf("flight-point-undiscovered"), {}))
+    assert.equal('No flight point on the taxi map matches "Stormwind", so the client clicked the step off.',
       text.sentence(dnaf("no-taxi-node"), {}))
   end)
   it("words the gap reasons", function()
@@ -619,6 +627,21 @@ describe("arrival finding text (spec section 10)", function()
       assert.matches("^hwc has no arrival data for this: .+%.$", text.sentence(gapf(r), {}))
     end
     assert.matches("never took the flight", text.sentence(gapf("taxi-not-taken"), {}), 1, true)
+    -- What hwc lacks, never what the step names (the step isn't blamed for a gap).
+    assert.equal("hwc has no arrival data for this: the landing subzone isn't captured.",
+      text.sentence(gapf("subzone-unknown"), {}))
+    assert.equal("hwc has no arrival data for this: no flight point is within reach of the departure in hwc's tables.",
+      text.sentence(gapf("fp-unknown"), {}))
+    assert.equal("hwc has no arrival data for this: no captured inn is near here.",
+      text.sentence(gapf("inn-unknown"), {}))
+    assert.equal("hwc has no arrival data for this: no captured crossing leaves from here.",
+      text.sentence(gapf("arrival-unknown"), {}))
+    -- An F step's arrival-unknown is a departure map hwc's tables place on no continent.
+    assert.equal("hwc has no arrival data for this: hwc's tables place the departure map on no continent.",
+      text.sentence(gapf("arrival-unknown", { action = "F" }), {}))
+    for _, r in ipairs({ "fp-unknown", "arrival-unknown", "inn-unknown", "subzone-unknown" }) do
+      assert.is_nil(text.sentence(gapf(r), {}):find("this step names", 1, true), r)
+    end
     assert.matches("(x vs y)", text.sentence(gapf("arrival-data-mismatch", { detail = "x vs y" }), {}), 1, true)
     assert.equal("Arrival data missing", text.SIGNALS["arrival-data-gap"])
     assert.equal("No arrival data: subzone-unknown: k", text.title(gapf("subzone-unknown", { name = "subzone-unknown: k" })))
