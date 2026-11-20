@@ -502,6 +502,25 @@ end
 
 -- Rules ---------------------------------------------------------------------
 
+-- Where a step's Z/M puts the player, shared by depart and R (perform_travel): nil when
+-- the step has no Z, map id or usable M. The zone name comes from the map id through the
+-- Forever tables (DB:zone_of_map) when they are installed and name it: the Z text is the
+-- guide's own, the step being judged. Without the tables, or for a map they don't name,
+-- the Z text; with neither, the current zone. A new zone or map: the subzone is unknown,
+-- so it is cleared. The same zone and map: the player walks within it and keeps the
+-- subzone (nothing says which subzone an arbitrary M is in).
+local function destination(ctx, tags)
+  local zone, map_id = parse_zone(tags.zone)
+  local x, y = parse_coords(tags.map)
+  if not (zone or map_id or x) then return nil end
+  local p = ctx.world.player
+  local db = ctx.world.catalog and ctx.world.catalog.forever
+  if map_id and db then zone = db:zone_of_map(map_id) or zone end
+  local to_zone, to_map = zone or p.zone, map_id or p.map_id
+  local same_area = to_zone == p.zone and to_map == p.map_id
+  return { zone = to_zone, subzone = same_area and p.subzone or "", map_id = to_map, x = x or p.x, y = y or p.y }
+end
+
 -- Spec §5.1: the player's position is the step's M coordinate when it has one. A
 -- player walks to every step, so a non-travel step with a Z or M tag moves the
 -- player there before its own rule runs. Without this the player stays where the
@@ -513,18 +532,12 @@ end
 -- (spec section 8: F and f call it from hwc.driver.flight).
 local function depart(ctx, step, out)
   local tags = step.tags or {}
-  local zone, map_id = parse_zone(tags.zone)
-  local x, y = parse_coords(tags.map)
-  if not (zone or map_id or x) then return end
+  local to = destination(ctx, tags)
+  if not to then return end
   local p = ctx.world.player
-  -- A new zone or map: the subzone is unknown, so it is cleared. The same zone and map:
-  -- the player walks within it and keeps the subzone (the catalog has no subzone for an
-  -- arbitrary M). A numeric-only Z keeps the previous zone name (no map-name catalog).
-  local same_area = (zone or p.zone) == p.zone and (map_id or p.map_id) == p.map_id
-  local to = { zone or p.zone, same_area and p.subzone or "", map_id or p.map_id, x or p.x, y or p.y }
   -- Already standing on that spot (subzone included): stay put.
-  if to[1] == p.zone and to[3] == p.map_id and to[4] == p.x and to[5] == p.y then return end
-  p:set_zone(to[1], to[2], to[3], to[4], to[5])
+  if to.zone == p.zone and to.map_id == p.map_id and to.x == p.x and to.y == p.y then return end
+  p:set_zone(to.zone, to.subzone, to.map_id, to.x, to.y)
   fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
   fire(ctx, out, "ZONE_CHANGED")
 end
@@ -619,26 +632,23 @@ local function credit_arrival(ctx, step, out)
   if #out.arrivals > 0 then fire(ctx, out, "QUEST_LOG_UPDATE") end
 end
 
--- R: run to Z/M. A numeric-only Z names its zone through DB:zone_of_map (without the
--- tables the previous zone name stays); the subzone is "" on a zone or map change and
--- kept otherwise, never the step name. out.arrived/out.classify/out.named feed the
+-- R: run to Z/M (destination: the zone name from the map id through DB:zone_of_map when
+-- the tables are installed, else the Z text); the subzone is "" on a zone or map change
+-- and kept otherwise, never the step name, and never reported in out.arrived. out.arrived/out.classify/out.named feed the
 -- driver's arrival grading (spec section 8); waypcomplete 1 or 2 cannot be emulated
 -- (waypoint-arrival-not-emulated, key "<gid>:<line>"), otherwise the driver decides from
 -- out.classify. WoWPro_Events.lua:301-316 / WoWPro_AutoComplete.lua:488-530.
 local function perform_travel(ctx, step, out)
   local p = ctx.world.player
   local tags = step.tags or {}
-  local zone, map_id = parse_zone(tags.zone)
-  local x, y = parse_coords(tags.map)
   local db = ctx.world.catalog and ctx.world.catalog.forever
-  if not zone and map_id and db then zone = db:zone_of_map(map_id) end
-  local to_zone, to_map = zone or p.zone, map_id or p.map_id
-  local same_area = to_zone == p.zone and to_map == p.map_id
-  local subzone = same_area and p.subzone or ""
-  p:set_zone(to_zone, subzone, to_map, x or p.x, y or p.y)
+  local to = destination(ctx, tags)
+  if to then p:set_zone(to.zone, to.subzone, to.map_id, to.x, to.y) end
   out.kind = "acted"
   out.named = { name = step.name, tz = tags.targetzone }
-  out.arrived = { zone = p.zone, subzone = p.subzone ~= "" and p.subzone or nil, map_id = p.map_id }
+  -- subzone nil: a kept subzone is some earlier landing's, not a capture of this one, so
+  -- §3 never reads it (spec section 7: name-not-an-area or subzone-unknown only).
+  out.arrived = { zone = p.zone, map_id = p.map_id }
   out.classify = db and arrival.classify(db, out.arrived, step.name, tags.targetzone) or nil
   local wc = tags.waypcomplete
   if wc == 1 or wc == 2 then
@@ -839,7 +849,7 @@ end
 -- ctx = { engine = E, world = W, cfg = cfg }; step is an Engine:step() record.
 -- Returns { kind = "acted"|"refused"|"noop", reason, qid, events = {names...},
 -- levels, grind = {kills, to}|nil, elite, settle = <E:settle() result> }; travel steps add
--- the arrival fields (hwc.driver.flight header: data_gap, expected, arrived, resolved_by,
+-- the arrival fields (hwc.driver.flight header: data_gap, named, arrived, resolved_by,
 -- classify). Every call settles once at the end and leaves world.dialog nil; an F step also
 -- settles mid-flight (after TAXIMAP_OPENED, and past PLAYER_CONTROL_LOST when it flies), and
 -- out.settle keeps the last result with hit_limit OR-ed across them.

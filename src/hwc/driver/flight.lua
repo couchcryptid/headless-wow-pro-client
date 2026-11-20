@@ -8,7 +8,8 @@
 -- Outcome fields set here (read by the driver):
 --   out.reason    guide reason: "no-taxi-node" | "flight-point-undiscovered"
 --   out.data_gap  { reason, key }: hwc's own data is missing ("tables-missing", "fp-unknown",
---                 "start-node-unknown", "destination-unresolved"), or "taxi-not-taken": the
+--                 "start-node-unknown", "destination-unresolved", "arrival-unknown" for a
+--                 departure map on no continent), or "taxi-not-taken": the
 --                 addon never tried to pick a node it would have matched (ruling R12). The
 --                 first gap recorded wins.
 --   out.named     { name, tz }: what the step asks for (F)
@@ -94,6 +95,17 @@ function flight.fly(ctx, step, out, h)
     return
   end
   local nodes, continent = continent_nodes(db, p)
+  if not continent then
+    -- A departure map the tables place on no continent: hwc can't list the taxi map, so a
+    -- stall is its own gap (key "map:<id>"), never no-taxi-node. Only a name that is no area
+    -- anywhere stays the guide's (spec section 3: it can't complete by zone wherever it lands).
+    if arrival.names_no_area(db, step.name, tz) then
+      out.classify = "name-not-an-area"
+    else
+      gap(out, "arrival-unknown", "map:" .. tostring(p.map_id))
+    end
+    return
+  end
   local taken = ctx.engine.sb.taxi_taken
   local before = #taken
   h.fire(ctx, out, "TAXIMAP_OPENED")
@@ -126,7 +138,7 @@ function flight.fly(ctx, step, out, h)
     out.reason = "flight-point-undiscovered"
     if w.start_node_unknown then
       gap(out, "start-node-unknown", p.race_key)
-    elseif continent and w.fp_unknown[continent] then
+    elseif w.fp_unknown[continent] then
       gap(out, "fp-unknown", tostring(continent))
     end
   elseif addon_would_take(listed(w, nodes), step.name) then
@@ -177,10 +189,16 @@ function flight.learn(ctx, step, out, h)
     return
   end
   local nodes, continent = continent_nodes(db, p)
+  if not continent then
+    -- A map the tables place on no continent: a gap of its own, keyed by the map. It marks
+    -- no continent in w.fp_unknown (keyed by continent only), since none is known.
+    gap(out, "fp-unknown", "map:" .. tostring(p.map_id))
+    return
+  end
   local node = arrival.nearest(nodes, p.map_id, p.x, p.y, function(n) return n.map_id, n.x, n.y end)
   if not node then
     gap(out, "fp-unknown", string.format("%s:%.1f,%.1f", tostring(p.map_id), p.x * 100, p.y * 100))
-    w.fp_unknown[continent or p.map_id] = true
+    w.fp_unknown[continent] = true
     return
   end
   local new = not p.flight_points[node.name]

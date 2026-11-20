@@ -98,12 +98,19 @@ local function area_or_number(db, s)
   return db:is_area_name(s) or tonumber(s) ~= nil
 end
 
--- Why a travel step that may not complete is (or is not) the guide's fault.
-function M.classify(db, landing, name, tz)
+-- True when neither the step name nor the TZ part is an area name in the build or a map
+-- id: the step can never complete by zone anywhere (spec section 3), whatever the landing.
+function M.names_no_area(db, name, tz)
   local part = tz_part(tz)
   if part == "" then part = nil end
-  local plausible = (name and area_or_number(db, name)) or (part and area_or_number(db, part))
-  if not plausible then return "name-not-an-area" end
+  return not ((name and area_or_number(db, name)) or (part and area_or_number(db, part)))
+end
+
+-- Why a travel step that may not complete is (or is not) the guide's fault.
+function M.classify(db, landing, name, tz)
+  if M.names_no_area(db, name, tz) then return "name-not-an-area" end
+  local part = tz_part(tz)
+  if part == "" then part = nil end
   if M.exact(landing, name) or M.exact(landing, part) then return "advances" end
   if landing.subzone ~= nil then return "subzone-known" end
   return "subzone-unknown"

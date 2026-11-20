@@ -123,7 +123,43 @@ describe("actions.perform: R arrival", function()
     w.player:set_zone("Dun Morogh", "Anvilmar", 1426, 0.1, 0.1)
     local o = actions.perform(ctx, step("R", {}, { zone = "1426; Dun Morogh" }, "Kharanos"))
     assert.are.equal("Anvilmar", w.player.subzone)
-    assert.are.same({ zone = "Dun Morogh", subzone = "Anvilmar", map_id = 1426 }, o.arrived)
+    -- The kept subzone is a previous landing's, not this step's: never reported as arrived.
+    assert.are.same({ zone = "Dun Morogh", map_id = 1426 }, o.arrived)
+  end)
+
+  -- Spec section 7: a stalled R is name-not-an-area or subzone-unknown, never a mismatch
+  -- judged against a subzone some earlier step left behind.
+  it("R that keeps a stale subzone classifies subzone-unknown, never subzone-known", function()
+    local ctx, _, w = setup()
+    w.player:set_zone("Dun Morogh", "Anvilmar", 1426, 0.1, 0.1)
+    local o = actions.perform(ctx, step("R", {}, { zone = "1426; Dun Morogh" }, "Ironforge"))
+    assert.are.equal("Anvilmar", w.player.subzone) -- the addon still sees the kept subzone
+    assert.is_nil(o.arrived.subzone)
+    assert.are.equal("subzone-unknown", o.classify)
+  end)
+
+  -- Ruling: the Z name is the guide's text (the step being judged); the map id names the
+  -- zone through the Forever tables when they are installed.
+  it("R and a walked-to step take the zone name from the map id, not the Z text, with the tables", function()
+    local ctx, _, w = setup()
+    actions.perform(ctx, step("R", {}, { zone = "1453; Stormwind" }, "x"))
+    assert.are.equal("Stormwind City", w.player.zone)
+    ctx, _, w = setup()
+    actions.perform(ctx, step("N", {}, { zone = "1453; Stormwind", map = "50,50" }))
+    assert.are.equal("Stormwind City", w.player.zone)
+    -- A map the tables don't name falls back to the Z text.
+    ctx, _, w = setup()
+    actions.perform(ctx, step("R", {}, { zone = "1431; Duskwood" }, "x"))
+    assert.are.same({ "Duskwood", 1431 }, { w.player.zone, w.player.map_id })
+  end)
+
+  it("R and a walked-to step use the Z text without the tables", function()
+    local ctx, _, w = setup("Dwarf", nil, { forever = false })
+    actions.perform(ctx, step("R", {}, { zone = "1453; Stormwind" }, "x"))
+    assert.are.equal("Stormwind", w.player.zone)
+    ctx, _, w = setup("Dwarf", nil, { forever = false })
+    actions.perform(ctx, step("N", {}, { zone = "1453; Stormwind", map = "50,50" }))
+    assert.are.equal("Stormwind", w.player.zone)
   end)
 
   it("R with a numeric-only Z takes the zone name from the map", function()
@@ -788,6 +824,37 @@ describe("actions.perform: flights", function()
     assert.is_true(w.fp_unknown[1415])
     assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E))
     assert.is_nil(w.player.flight_points["Thelsamar, Loch Modan"])
+  end)
+
+  -- A departure map the tables place on no continent (1431 isn't in the fixture tables):
+  -- hwc can't list the taxi map, so nothing is the guide's fault but a name that is no
+  -- area anywhere (spec section 3).
+  it("F departing a map with no continent is arrival-unknown, with no guide reason", function()
+    local ctx, E, w = setup("Dwarf")
+    local s = step("F", {}, { zone = "1431; Duskwood", map = "77.5,44.3" }, "Ironforge")
+    s.gid, s.line = "G1", 5
+    local o = actions.perform(ctx, s)
+    assert.is_nil(o.reason)
+    assert.are.same({ reason = "arrival-unknown", key = "map:1431" }, o.data_gap)
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E)) -- the departure only
+    assert.are.same({ 1431 }, { w.player.map_id })
+    assert.is_nil(o.arrived)
+    assert.are.same({}, E.sb.taxi_taken)
+  end)
+
+  it("F departing a map with no continent, named after no area, is name-not-an-area", function()
+    local ctx = setup("Dwarf")
+    local o = actions.perform(ctx, step("F", {}, { zone = "1431; Duskwood", map = "77.5,44.3" }, "Stormwind"))
+    assert.is_nil(o.reason)
+    assert.is_nil(o.data_gap)
+    assert.are.equal("name-not-an-area", o.classify)
+  end)
+
+  it("f on a map with no continent is fp-unknown keyed by the map, and marks no continent", function()
+    local ctx, _, w = setup("Dwarf")
+    local o = actions.perform(ctx, step("f", {}, { zone = "1431; Duskwood", map = "77.5,44.3" }, "Darkshire"))
+    assert.are.same({ reason = "fp-unknown", key = "map:1431" }, o.data_gap)
+    assert.is_nil(next(w.fp_unknown))
   end)
 
   it("f with no tables is tables-missing and learns nothing", function()
