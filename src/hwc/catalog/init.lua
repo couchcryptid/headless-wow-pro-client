@@ -160,8 +160,8 @@ function Catalog:npc_position(npc_id)
 end
 
 -- Cross-checks first-party arrival facts (hwc.world.arrivals, or the table passed)
--- against QuestieDB and the Forever tables: an inn npc without the innkeeper flag
--- (npcFlags bit 128), a start node the tables don't know, an inn whose QuestieDB map
+-- against QuestieDB and the Forever tables: an inn npc QuestieDB doesn't have, or without
+-- the innkeeper flag (npcFlags bit 128), a start node the tables don't know, an inn whose QuestieDB map
 -- differs. Empty without QuestieDB or the tables. Returns { { key, detail } }.
 function Catalog:arrival_problems(arrivals)
   local out = {}
@@ -181,7 +181,9 @@ function Catalog:arrival_problems(arrivals)
   for i, inn in ipairs(arrivals.inns or {}) do
     local key = "inns[" .. i .. "]"
     local npc = self.questie:npc(inn.npc)
-    if npc and math.floor((npc.npcFlags or 0) / 128) % 2 ~= 1 then
+    if not npc then
+      out[#out + 1] = { key = key, detail = "npc " .. tostring(inn.npc) .. " is not in QuestieDB" }
+    elseif math.floor((npc.npcFlags or 0) / 128) % 2 ~= 1 then
       out[#out + 1] = { key = key, detail = "npc " .. tostring(inn.npc) .. " is not an innkeeper in QuestieDB" }
     end
     local map_id = self:npc_position(inn.npc)

@@ -68,12 +68,24 @@ function arrivals.problem(kind, entry)
   table.sort(names)
   for _, field in ipairs(names) do
     local want, v = req[field], entry[field]
-    if type(v) ~= want or (want == "string" and v == "") then
+    -- subzone may be "": GetSubZoneText() returns that where no subzone applies.
+    if type(v) ~= want or (want == "string" and v == "" and field ~= "subzone") then
       return kind .. " needs " .. want .. " " .. field
     end
   end
-  if kind == "crossing" and not CROSSING_KINDS[entry.kind] then
-    return "crossing kind must be boat, portal or teleport"
+  if kind == "crossing" then
+    if not CROSSING_KINDS[entry.kind] then
+      return "crossing kind must be boat, portal or teleport"
+    end
+    -- Spec section 6: a teleport is found by its spell, a boat or portal by its departure.
+    if entry.kind == "teleport" then
+      if type(entry.spell) ~= "number" then return "teleport crossing needs number spell" end
+    else
+      local f = entry.from
+      if type(f) ~= "table" or type(f.map_id) ~= "number" or type(f.x) ~= "number" or type(f.y) ~= "number" then
+        return entry.kind .. " crossing needs from = { map_id, x, y } (numbers)"
+      end
+    end
   end
   if not nonempty_string(entry.checked) then
     return kind .. " needs checked (who saw it, and when)"

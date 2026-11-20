@@ -47,6 +47,23 @@ describe("arrivals data", function()
   end)
 end)
 
+-- Every shipped first-party fact must pass arrivals.problem: an entry hwc would refuse at
+-- run time must fail here first. The lists ship empty today, so this guards later captures.
+describe("shipped arrival facts", function()
+  it("every shipped subzone, inn, crossing and start_bind entry is usable", function()
+    local bad = {}
+    local function check(kind, key, entry)
+      local why = arrivals.problem(kind, entry)
+      if why then bad[#bad + 1] = kind .. " " .. tostring(key) .. ": " .. why end
+    end
+    for name, e in pairs(arrivals.subzones) do check("subzone", name, e) end
+    for i, e in ipairs(arrivals.inns) do check("inn", i, e) end
+    for i, e in ipairs(arrivals.crossings) do check("crossing", i, e) end
+    for race, e in pairs(arrivals.start_bind) do check("start_bind", race, e) end
+    assert.same({}, bad)
+  end)
+end)
+
 describe("arrivals.problem", function()
   it("accepts a complete inn", function()
     assert.is_nil(arrivals.problem("inn", inn()))
@@ -66,13 +83,39 @@ describe("arrivals.problem", function()
   it("validates the other kinds and rejects an unknown one", function()
     assert.is_nil(arrivals.problem("subzone", { subzone = "Thelsamar", checked = "x" }))
     assert.is_string(arrivals.problem("subzone", { subzone = "Thelsamar" }))
+    local FROM = { map_id = 1, x = 1, y = 2 }
     assert.is_nil(arrivals.problem("crossing",
-      { kind = "boat", zone = "Z", subzone = "S", map_id = 1, x = 1, y = 2, checked = "x" }))
+      { kind = "boat", from = FROM, zone = "Z", subzone = "S", map_id = 1, x = 1, y = 2, checked = "x" }))
     assert.is_string(arrivals.problem("crossing",
-      { kind = "ferry", zone = "Z", subzone = "S", map_id = 1, x = 1, y = 2, checked = "x" }))
+      { kind = "ferry", from = FROM, zone = "Z", subzone = "S", map_id = 1, x = 1, y = 2, checked = "x" }))
     assert.is_nil(arrivals.problem("start_bind",
       { bind = "B", zone = "Z", subzone = "S", map_id = 1, x = 1, y = 2, checked = "x" }))
     assert.is_string(arrivals.problem("nope", {}))
+  end)
+
+  -- Spec section 6: a boat or portal is found by its departure, a teleport by its spell.
+  it("needs from for a boat or portal and spell for a teleport", function()
+    local function crossing(over)
+      local e = { kind = "boat", zone = "Z", subzone = "S", map_id = 1, x = 1, y = 2, checked = "x" }
+      for k, v in pairs(over) do e[k] = v end
+      return e
+    end
+    assert.is_string(arrivals.problem("crossing", crossing({})))
+    assert.is_string(arrivals.problem("crossing", crossing({ kind = "portal" })))
+    assert.is_string(arrivals.problem("crossing", crossing({ from = { map_id = 1, x = "1", y = 2 } })))
+    assert.is_nil(arrivals.problem("crossing", crossing({ kind = "portal", from = { map_id = 1, x = 1, y = 2 } })))
+    assert.is_string(arrivals.problem("crossing", crossing({ kind = "teleport" })))
+    assert.is_nil(arrivals.problem("crossing", crossing({ kind = "teleport", spell = 3561 })))
+  end)
+
+  -- GetSubZoneText() legitimately returns "" where no subzone applies.
+  it("accepts an empty subzone but not a missing one", function()
+    assert.is_nil(arrivals.problem("subzone", { subzone = "", checked = "x" }))
+    assert.is_string(arrivals.problem("subzone", { checked = "x" }))
+    assert.is_nil(arrivals.problem("inn", inn { subzone = "" }))
+    assert.is_string(arrivals.problem("inn", inn { subzone = false }))
+    assert.is_nil(arrivals.problem("start_bind",
+      { bind = "B", zone = "Z", subzone = "", map_id = 1, x = 1, y = 2, checked = "x" }))
   end)
 end)
 
@@ -99,6 +142,13 @@ describe("Catalog:arrival_problems", function()
     local probs = cat_with():arrival_problems({ start_nodes = good.start_nodes, inns = { inn() } })
     assert.are.equal(1, #probs)
     assert.is_truthy(probs[1].detail:find("innkeeper", 1, true))
+  end)
+
+  it("flags an inn npc QuestieDB doesn't know", function()
+    local probs = cat_with():arrival_problems({ start_nodes = good.start_nodes, inns = { inn { npc = 987654 } } })
+    assert.are.equal(1, #probs)
+    assert.are.equal("inns[1]", probs[1].key)
+    assert.is_truthy(probs[1].detail:find("not in QuestieDB", 1, true))
   end)
 
   it("flags an inn whose QuestieDB map differs", function()
