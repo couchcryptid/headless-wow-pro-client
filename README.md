@@ -471,9 +471,13 @@ folder and no network. Values are labelled; a missing map position prints `xy% n
 
 | Mode | When | Captures | Goes in `arrivals.lua` as |
 | --- | --- | --- | --- |
-| `taxi` | At a flight master with the taxi map open | Each node's slot, name and type, in slot order | The subzone per taxi node, and how `taxi_map` lists nodes |
-| `landing` | Right after a flight, boat, portal or hearth arrives | Zone, subzone, map ID and position as a percent | A `crossings` entry (departure and landing), or an inn's hearth landing |
+| `taxi` | At a flight master with the taxi map open | Each node's slot, name and type, in slot order | How `taxi_map` lists nodes (whether undiscovered nodes show, and their order) |
+| `landing` | Right after a flight, boat, portal or hearth arrives | Zone, subzone, map ID and position as a percent | The subzone per taxi node (after a flight), a `crossings` entry (departure and landing), or an inn's hearth landing |
 | `bind` | Right after setting the hearthstone | The bind location text | An inn's bind text |
+
+`inns`, `crossings`, `subzones` and `start_bind` ship empty. Until they are captured, an `h`, `H`, `b` or
+`P` step that doesn't advance is an `arrival-data-gap` notice (`inn-unknown`, `arrival-unknown`), never a
+guide finding, and a landing whose subzone decides the step is a `subzone-unknown` notice.
 
 Date every entry in its `checked` field, for example `user, 2026-11-19: ...`. Two candidates are still
 to capture: the Skyborne skycutter departures from Valanaar's harbour, Alliance to Dalaran (from 64.9, 80.9)
@@ -500,7 +504,9 @@ This downloads the latest QuestieDB Forever release into `~/.hwc/questie/<tag>/`
 makes it the active one. It also downloads the newest Forever client build of five
 tables from wago.tools, converts them to JSON in `~/.hwc/forever/<build>/` and makes
 that the active build, then runs the health check. `hwc update` refreshes both
-(`--tag TAG` pins QuestieDB, `--build VERSION` pins the client tables). `HWC_HOME` moves the store (`~/.hwc/questie`, `~/.hwc/forever`); findings still default to `~/.hwc/findings` unless `--out` is given.
+(`--tag TAG` pins QuestieDB, `--build VERSION` pins the client tables). QuestieDB is installed and made
+active first: if the client tables then fail, `hwc update` exits 1 with the new QuestieDB already active and
+the previous tables still in use. `HWC_HOME` moves the store (`~/.hwc/questie`, `~/.hwc/forever`); findings still default to `~/.hwc/findings` unless `--out` is given.
 
 ### Reputation
 

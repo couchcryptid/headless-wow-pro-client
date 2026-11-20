@@ -8,7 +8,7 @@ local update = {
     .. "tables (or --build VERSION) into ~/.hwc and make them active.",
   options = {
     { name = "tag", metavar = "TAG", help = "A QuestieDB release tag, e.g. v1.1.3.", default_text = "newest" },
-    { name = "build", metavar = "VERSION", help = "A Forever client build, e.g. 1.16.1.64321.", default_text = "newest" },
+    { name = "build", metavar = "VERSION", help = "A Forever client build, e.g. 1.60.1.70959.", default_text = "newest" },
   },
 }
 
