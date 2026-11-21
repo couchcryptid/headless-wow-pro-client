@@ -24,17 +24,15 @@ local function inn(over)
 end
 
 describe("arrivals data", function()
-  -- false = known to start with no node (user, 2026-11-19: Skyborne's hub Valanaar has
-  -- no flight master); nil would be unknown (start-node-unknown).
-  it("names a capital node for every race but Skyborne, which start with none", function()
+  -- Skyborne have no hub node (Valanaar has no flight master): High Order start with
+  -- Stormwind (user, 2026-11-20, in game); Windshaper assumed Thunder Bluff, unverified.
+  it("names a capital node for every race", function()
     for key in pairs(Player.RACES) do
-      if key:find("^Skyborne") then
-        assert.is_false(arrivals.start_nodes[key], key)
-      else
-        assert.is_string(arrivals.start_nodes[key], key)
-      end
+      assert.is_string(arrivals.start_nodes[key], key)
     end
     assert.are.equal("Stormwind, Elwynn", arrivals.start_nodes.Human)
+    assert.are.equal("Stormwind, Elwynn", arrivals.start_nodes.SkyborneAlliance)
+    assert.are.equal("Thunder Bluff, Mulgore", arrivals.start_nodes.SkyborneHorde)
   end)
 
   it("ships the other lists empty and a taxi_map note", function()

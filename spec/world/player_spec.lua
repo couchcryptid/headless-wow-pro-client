@@ -145,12 +145,13 @@ describe("World.new start node", function()
     assert.same({}, w.events) -- the starting state, not a world change
   end)
 
-  it("a Skyborne world learns no node and does not set start_node_unknown", function()
-    for _, race in ipairs({ "SkyborneAlliance", "SkyborneHorde" }) do
-      local w = world(race)
-      assert.same({}, w.player.flight_points)
-      assert.is_nil(w.start_node_unknown, race)
-    end
+  it("a High Order Skyborne knows Stormwind; Windshaper's Thunder Bluff is outside the fixture", function()
+    local w = world("SkyborneAlliance")
+    assert.is_true(w.player.flight_points["Stormwind, Elwynn"])
+    assert.is_nil(w.start_node_unknown)
+    w = world("SkyborneHorde") -- Thunder Bluff is not in the fixture tables
+    assert.same({}, w.player.flight_points)
+    assert.is_true(w.start_node_unknown)
   end)
 
   it("a race with no start node, or one the tables don't know, sets start_node_unknown", function()

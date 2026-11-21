@@ -20,8 +20,10 @@ arrivals.crossings = {}
 -- checked = "user, 2026-11-19: capital node learned; names from Forever TaxiNodes 1.60.1.70959"
 -- false = known to start with no node learned; a race with no entry (nil) is unknown,
 -- a start-node-unknown notice (spec section 11).
--- Skyborne: user, 2026-11-19 — the Skyborne hub Valanaar has no flight master (no Valanaar
--- node in Forever TaxiNodes); Skyborne start with no flight point learned.
+-- Skyborne: the hub Valanaar has no flight master (no Valanaar node in Forever TaxiNodes).
+-- SkyborneAlliance: user, 2026-11-20: High Order Skyborne start with Stormwind learned (in game).
+-- SkyborneHorde: unverified — assumed Thunder Bluff, a standard Horde capital (user, 2026-11-20);
+-- confirm in game.
 -- Future `crossings` to capture in game (no entries until the landings are captured): the
 -- Skyborne leave Valanaar's harbour by skycutter ship, Alliance to Dalaran from 64.9, 80.9
 -- and Horde to Thunder Bluff from 58.2, 79.5 (user, 2026-11-19).
@@ -34,8 +36,8 @@ arrivals.start_nodes = {
   Troll    = "Orgrimmar, Durotar",
   Tauren   = "Thunder Bluff, Mulgore",
   Undead   = "Undercity, Tirisfal",
-  SkyborneAlliance = false,
-  SkyborneHorde    = false,
+  SkyborneAlliance = "Stormwind, Elwynn",
+  SkyborneHorde    = "Thunder Bluff, Mulgore", -- unverified, see above
 }
 
 -- race key -> { bind, zone, subzone, map_id, x, y, checked }: the starting hearth bind.
