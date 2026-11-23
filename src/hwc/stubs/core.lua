@@ -233,27 +233,52 @@ function M.install(sb, cfg)
   env.IsInInstance = function() return false, "none" end
   -- WoWPro.lua:1120 (ShouldCombatHide). Out of combat.
   env.UnitAffectingCombat = function() return false end
-  -- WoWPro_AutoComplete.lua:474,507, WoWPro_Events.lua:842,853, WoWPro_Mapping.lua:106. The driver
-  -- performs an F step as an arrival (actions.lua perform_travel), never a flight in progress.
-  env.UnitOnTaxi = function() return false end
+  -- WoWPro_AutoComplete.lua:474,507 (ScheduleTaxiCompletion, AutoCompleteZone), WoWPro_Events.lua
+  -- :842,853 (PLAYER_CONTROL_LOST_PUNTED, PLAYER_CONTROL_GAINED), WoWPro_Mapping.lua:106. The
+  -- player's taxi flag: actions.lua sets it for the length of an F flight.
+  env.UnitOnTaxi = function() return player().on_taxi == true end
 
-  -- The Classic taxi map (WoWPro_AutoComplete.lua:9-30 RecordTaxiLocations and :32-52 TakeTaxiClassic,
-  -- both on TAXIMAP_OPENED, WoWPro_Events.lua:814-825; AutoSelect defaults true, WoWPro.lua:490-492).
-  -- Nodes are the player's learned flight points in sorted name order, all reachable; the driver
-  -- already moves the player on an F step, so TakeTaxiNode only records the chosen node.
+  -- The Classic taxi map (WoWPro_AutoComplete.lua:9-29 RecordTaxiLocations and :32-53 TakeTaxiClassic,
+  -- both on TAXIMAP_OPENED, WoWPro_Events.lua:815-826; AutoSelect defaults true, WoWPro.lua:490-492).
+  -- Nodes come from the Forever tables (catalog.forever): the continent of the player's map, the
+  -- player's faction, in TaxiNodes.ID order. hwc.world.arrivals taxi_map (unverified in game) says
+  -- whether undiscovered nodes are listed; they are typed NONE, learned ones REACHABLE. Without the
+  -- tables, or on a map they don't place on a continent, the map is empty. TakeTaxiNode only
+  -- records the chosen node name; actions.lua reads sb.taxi_taken and flies the player.
   local function taxi_nodes()
-    local names = {}
-    for name in pairs(player().flight_points) do names[#names + 1] = name end
-    table.sort(names)
-    return names
+    local w = sb.world
+    local p = w.player
+    local db = w.catalog and w.catalog.forever
+    local continent = db and db:continent_of(p.map_id)
+    if not continent then return {} end
+    local list = db:taxi_nodes(continent, p.faction)
+    local tm = w.arrivals and w.arrivals.taxi_map
+    if tm and tm.lists_undiscovered == false then
+      local learned = {}
+      for _, n in ipairs(list) do
+        if p.flight_points[n.name] then learned[#learned + 1] = n end
+      end
+      list = learned
+    end
+    return list
+  end
+  local function node_name(i)
+    local n = taxi_nodes()[i]
+    return n and n.name
   end
   sb.taxi_taken = sb.taxi_taken or {}
   env.NumTaxiNodes = function() return #taxi_nodes() end
-  env.TaxiNodeName = function(i) return taxi_nodes()[i] end
-  env.TaxiNodeGetType = function(i) return taxi_nodes()[i] and "REACHABLE" or "NONE" end
-  env.GetNumRoutes = function(i) return taxi_nodes()[i] and 1 or 0 end
+  env.TaxiNodeName = node_name
+  env.TaxiNodeGetType = function(i)
+    local name = node_name(i)
+    return (name and player().flight_points[name]) and "REACHABLE" or "NONE"
+  end
+  env.GetNumRoutes = function(i) return node_name(i) and 1 or 0 end
   env.TaxiGetNodeSlot = function(i) return i end
-  env.TakeTaxiNode = function(i) sb.taxi_taken[#sb.taxi_taken + 1] = taxi_nodes()[i] end
+  env.TakeTaxiNode = function(i)
+    local name = node_name(i)
+    if name then sb.taxi_taken[#sb.taxi_taken + 1] = name end
+  end
   env.IsMounted = function() return false end
   env.Dismount = function() end
 
@@ -267,6 +292,29 @@ function M.install(sb, cfg)
       id = tonumber(id)
       if not id then return nil end
       return { spellID = id, name = "Spell " .. id .. " (stub)" }
+    end,
+  })
+
+  -- Forever has no UnitAura and has C_UnitAuras.GetAuraDataByIndex (user, in game, 2026-11-23), so
+  -- WoWPro.UnitAura (WoWPro_CompatUtil.lua:385-400) always takes this branch; UnitAura stays undefined.
+  -- WoWPro.AuraScan (WoWPro_AutoComplete.lua:126-145) walks index 1.. per filter until nil, for the
+  -- BUFF tag (Broker.lua:3481-3496, AutoCompleteBuff). Answers from world.player.auras, entries
+  -- { name, icon, applications, spellId, harmful }; nothing in hwc adds one (aura stub design, approach A).
+  -- HARMFUL lists the harmful entries, HELPFUL the rest; any other unit or filter answers nil.
+  env.C_UnitAuras = trap(sb, "C_UnitAuras", {
+    GetAuraDataByIndex = function(unit, index, filter)
+      index = tonumber(index)
+      if unit ~= "player" or not index or (filter ~= "HELPFUL" and filter ~= "HARMFUL") then return nil end
+      local want, n = filter == "HARMFUL", 0
+      for _, a in ipairs(sb.world.player.auras or {}) do
+        if (a.harmful == true) == want then
+          n = n + 1
+          if n == index then
+            return { name = a.name, icon = a.icon, applications = a.applications or 0, spellId = a.spellId }
+          end
+        end
+      end
+      return nil
     end,
   })
 

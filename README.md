@@ -60,7 +60,7 @@ come from a catalog built from QuestieDB, never from the guide lines.
   `Interface/AddOns` folder. `hwc` must be run from inside it (see
   [Choosing guides](#choosing-guides)).
 - **`curl`, `unzip`, and `shasum` or `sha256sum`**, which `hwc init` and
-  `hwc update` use to download and verify QuestieDB.
+  `hwc update` use to download and verify QuestieDB and the Forever client tables.
 - **Optional:** `python3`.
 
 ## Install
@@ -83,7 +83,7 @@ LuaRocks modules from `~/.luarocks`.
 Run `hwc` from inside a WoW-Pro folder (a git checkout or `Interface/AddOns`):
 
 ```sh
-hwc init                                                       # download QuestieDB into ~/.hwc, check the setup (any folder)
+hwc init                                                       # download QuestieDB and the Forever client tables into ~/.hwc, check the setup (any folder)
 cd ~/Projects/WoW-Pro-Guides
 hwc run --race Dwarf --class WARRIOR                           # play one character along the chain
 hwc diff OLD.json NEW.json                                     # compare two runs (see "Comparing runs")
@@ -136,6 +136,9 @@ when it is stale. The dev server fills the page from `spec/fixtures/findings/<na
     checked against the engine.
 - **QuestieDB** is GPL-3.0. It is downloaded to `~/.hwc` on your machine and
   never committed. See [World and catalog](#world-and-catalog).
+- **The Forever client tables** (taxi nodes, maps, areas) are Blizzard game data,
+  downloaded from wago.tools to `~/.hwc/forever` on your machine, converted to JSON
+  and never committed. See [World and catalog](#world-and-catalog).
 - **LibDeflate** is vendored under the zlib licence at `src/hwc/vendor/`.
 - **Not affiliated with Blizzard Entertainment.** World of Warcraft is a
   trademark of Blizzard Entertainment, Inc.
@@ -459,6 +462,36 @@ skipped, and the `missing-global` list. "Farsen's Watch why names
 96629" stays pending: the engine's why names only the first unmet prereq of
 `PRE|314&96408`, which is 96408.
 
+## Arrival facts
+
+`src/hwc/world/arrivals.lua` holds first-party facts about where the player stands after a taxi, boat,
+portal or hearth. They come from the game, never from a guide. `hwc arrivals capture-script [taxi|landing|bind]`
+prints one `/run` line (at most 255 characters) to paste into the WoW Forever chat box; it needs no WoW-Pro
+folder and no network. Values are labelled; a missing map position prints `xy% nil`.
+
+| Mode | When | Captures | Goes in `arrivals.lua` as |
+| --- | --- | --- | --- |
+| `taxi` | At a flight master with the taxi map open | Each node's slot, name and type, in slot order | How `taxi_map` lists nodes (whether undiscovered nodes show, and their order) |
+| `landing` | Right after a flight, boat, portal or hearth arrives | Zone, subzone, map ID and position as a percent | The subzone per taxi node (after a flight), a `crossings` entry (departure and landing), or an inn's hearth landing |
+| `bind` | Right after setting the hearthstone | The bind location text | An inn's bind text |
+
+`inns`, `crossings`, `subzones` and `start_bind` ship empty. Until they are captured, an `h`, `H`, `b` or
+`P` step that doesn't advance is an `arrival-data-gap` notice (`inn-unknown`, `arrival-unknown`), never a
+guide finding, and a landing whose subzone decides the step is a `subzone-unknown` notice.
+
+Date every entry in its `checked` field, for example `user, 2026-11-19: ...`. Two candidates are still
+to capture: the Skyborne skycutter departures from Valanaar's harbour, Alliance to Dalaran (from 64.9, 80.9)
+and Horde to Thunder Bluff (from 58.2, 79.5).
+
+## Auras
+
+Forever has no `UnitAura` and has `C_UnitAuras.GetAuraDataByIndex` (checked in game, 2026-11-23), so
+hwc stubs only the latter. It answers from the player's aura list, which starts empty and which nothing
+in hwc fills: hwc models no buffs. A step with a `BUFF` tag that doesn't advance is therefore the harness
+notice `emulation-gap` (`aura-not-emulated`, keyed `<gid>:<line>`), out of every count, never a guide
+finding. Modelling buff sources (for example `/sit` at a campfire granting Boosted Rest) is a later
+option if these notices show it's worth it (`docs/superpowers/specs/2026-11-23-aura-stub-design.md`).
+
 ## World and catalog
 
 The stubs answer from a simulated world (`src/hwc/world/`): the player, bags,
@@ -467,7 +500,8 @@ XP and a 40-slot quest log. Quest, NPC and item facts come from a catalog
 counts. The guide lines are never a source.
 
 **Data policy: no third-party data is committed.** QuestieDB lives in
-`~/.hwc`. The repo holds only the loaders and the structure-only `catalog/counts.example.json`.
+`~/.hwc`, and so do the Forever client tables (taxi nodes, maps, areas), downloaded
+from wago.tools. The repo holds only the loaders and the structure-only `catalog/counts.example.json`.
 
 Setup:
 
@@ -476,7 +510,12 @@ hwc init      # from any folder
 ```
 
 This downloads the latest QuestieDB Forever release into `~/.hwc/questie/<tag>/`,
-makes it the active one, then runs the health check. `HWC_HOME` moves the QuestieDB store (`~/.hwc/questie`); findings still default to `~/.hwc/findings` unless `--out` is given.
+makes it the active one. It also downloads the newest Forever client build of five
+tables from wago.tools, converts them to JSON in `~/.hwc/forever/<build>/` and makes
+that the active build, then runs the health check. `hwc update` refreshes both
+(`--tag TAG` pins QuestieDB, `--build VERSION` pins the client tables). QuestieDB is installed and made
+active first: if the client tables then fail, `hwc update` exits 1 with the new QuestieDB already active and
+the previous tables still in use. `HWC_HOME` moves the store (`~/.hwc/questie`, `~/.hwc/forever`); findings still default to `~/.hwc/findings` unless `--out` is given.
 
 ### Reputation
 

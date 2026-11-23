@@ -34,6 +34,8 @@ describe("text constants", function()
       ["lua-error"] = "Lua error",
       ["missing-global"] = "Missing global",
       ["rep-faction-unmet"] = "REP faction never met",
+      ["arrival-data-gap"] = "Arrival data missing",
+      ["emulation-gap"] = "Not emulated",
     }, text.SIGNALS)
   end)
   it("labels every early stop reason, and not the normal end", function()
@@ -579,5 +581,84 @@ describe("text.title and text.sentence (design spec §4.7)", function()
     local f = F({ signal = "never-shown-accept", name = "Next", qid = 5, why = "Something odd", caused_by = "F-7F8B32EE" })
     local ctx = { single = "Dwarf Warrior", by_id = { ["F-7F8B32EE"] = parent } }
     assert.equal("The guide tells you to accept this quest, but WoWPro never shows the step.", text.sentence(f, ctx))
+  end)
+end)
+
+describe("arrival finding text (spec section 10)", function()
+  local function dnaf(reason, extra)
+    local f = { signal = "did-not-advance", action = "R", name = "Stormwind", reasons = { reason },
+      named = { name = "Stormwind", tz = "1453; Stormwind City" } }
+    for k, v in pairs(extra or {}) do f[k] = v end
+    return f
+  end
+  local function gapf(reason, extra)
+    local f = { signal = "arrival-data-gap", reasons = { reason }, name = reason .. ": k" }
+    for k, v in pairs(extra or {}) do f[k] = v end
+    return f
+  end
+  it("words each did-not-advance arrival reason", function()
+    assert.equal('"Stormwind" and TZ "1453; Stormwind City" name no area in Forever, so the addon can never complete '
+      .. "this step by zone; the client clicked it off.", text.sentence(dnaf("name-not-an-area"), {}))
+    assert.equal('"Stormwind" name no area in Forever, so the addon can never complete this step by zone; the client '
+      .. "clicked it off.", text.sentence(dnaf("name-not-an-area", { named = { name = "Stormwind" } }), {}))
+    assert.equal('The step names "Stormwind" (TZ "1453; Stormwind City"), but the player arrived in Elwynn Forest / '
+      .. "Goldshire, so the addon didn't complete it and the client clicked it off.",
+      text.sentence(dnaf("arrival-mismatch", { arrived = { zone = "Elwynn Forest", subzone = "Goldshire" } }), {}))
+    assert.equal('The step names "Stormwind" (TZ "1453; Stormwind City"), but the player arrived in Elwynn Forest, '
+      .. "so the addon didn't complete it and the client clicked it off.",
+      text.sentence(dnaf("arrival-mismatch", { arrived = { zone = "Elwynn Forest" } }), {}))
+    -- Resolved: the player landed by the loose match (spec section 9).
+    local landed = { resolved_by = "loose", arrived = { zone = "Stormwind City" } }
+    assert.equal("The guide flies to a flight point the character hasn't discovered, so the client travelled there "
+      .. "another way.", text.sentence(dnaf("flight-point-undiscovered", landed), {}))
+    assert.equal('No flight point on the taxi map matches "Stormwind", so the client travelled there another way.',
+      text.sentence(dnaf("no-taxi-node", landed), {}))
+  end)
+  it("doesn't claim another way of travel when nothing says where the player landed", function()
+    assert.equal("The guide flies to a flight point the character hasn't discovered, so the client clicked the "
+      .. "step off.", text.sentence(dnaf("flight-point-undiscovered"), {}))
+    assert.equal('No flight point on the taxi map matches "Stormwind", so the client clicked the step off.',
+      text.sentence(dnaf("no-taxi-node"), {}))
+  end)
+  it("words an f for a flight point the character already knows", function()
+    assert.equal('The guide asks you to get the flight point at "Ironforge, Dun Morogh", which the character '
+      .. "already knows, so no new flight path was discovered and the client clicked the step off.",
+      text.sentence(dnaf("flight-point-already-known", { action = "f", named = { name = "Ironforge, Dun Morogh" } }),
+        {}))
+  end)
+  it("words an emulation-gap", function()
+    local f = { signal = "emulation-gap", reasons = { "aura-not-emulated" }, buff = "1229451",
+      name = "aura-not-emulated: G:7" }
+    assert.equal("Not emulated", text.SIGNALS["emulation-gap"])
+    assert.equal("Not emulated: aura-not-emulated: G:7", text.title(f))
+    assert.equal("hwc doesn't emulate auras, so the buff this step checks (BUFF 1229451) never appears; "
+      .. "the client clicked the step off.", text.sentence(f, {}))
+  end)
+  it("words the gap reasons", function()
+    assert.equal("The Forever client tables aren't installed, so arrival steps aren't judged. Run hwc update.",
+      text.sentence(gapf("tables-missing"), {}))
+    for _, r in ipairs({ "fp-unknown", "start-node-unknown", "destination-unresolved", "arrival-unknown", "inn-unknown",
+      "waypoint-arrival-not-emulated", "subzone-unknown", "taxi-not-taken", "arrival-data-mismatch" }) do
+      assert.matches("^hwc has no arrival data for this: .+%.$", text.sentence(gapf(r), {}))
+    end
+    assert.matches("never took the flight", text.sentence(gapf("taxi-not-taken"), {}), 1, true)
+    -- What hwc lacks, never what the step names (the step isn't blamed for a gap).
+    assert.equal("hwc has no arrival data for this: the landing subzone isn't captured.",
+      text.sentence(gapf("subzone-unknown"), {}))
+    assert.equal("hwc has no arrival data for this: no flight point is within reach of the departure in hwc's tables.",
+      text.sentence(gapf("fp-unknown"), {}))
+    assert.equal("hwc has no arrival data for this: no captured inn is near here.",
+      text.sentence(gapf("inn-unknown"), {}))
+    assert.equal("hwc has no arrival data for this: no captured crossing leaves from here.",
+      text.sentence(gapf("arrival-unknown"), {}))
+    -- An F step's arrival-unknown is a departure map hwc's tables place on no continent.
+    assert.equal("hwc has no arrival data for this: hwc's tables place the departure map on no continent.",
+      text.sentence(gapf("arrival-unknown", { action = "F" }), {}))
+    for _, r in ipairs({ "fp-unknown", "arrival-unknown", "inn-unknown", "subzone-unknown" }) do
+      assert.is_nil(text.sentence(gapf(r), {}):find("this step names", 1, true), r)
+    end
+    assert.matches("(x vs y)", text.sentence(gapf("arrival-data-mismatch", { detail = "x vs y" }), {}), 1, true)
+    assert.equal("Arrival data missing", text.SIGNALS["arrival-data-gap"])
+    assert.equal("No arrival data: subzone-unknown: k", text.title(gapf("subzone-unknown", { name = "subzone-unknown: k" })))
   end)
 end)

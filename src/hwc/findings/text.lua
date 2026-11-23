@@ -62,6 +62,8 @@ text.SIGNALS = {
   ["lua-error"] = "Lua error",
   ["missing-global"] = "Missing global",
   ["rep-faction-unmet"] = "REP faction never met",
+  ["arrival-data-gap"] = "Arrival data missing",
+  ["emulation-gap"] = "Not emulated",
 }
 
 -- Why a character's run stopped early: every stop reason driver/run.lua passes
@@ -338,12 +340,44 @@ function text.title(f)
       return "REP step names " .. f.tag_faction .. " but checks " .. checks .. ", which this character never met"
     end
     return "REP step checks " .. checks .. ", which this character never met"
+  elseif s == "arrival-data-gap" then
+    return "No arrival data: " .. tostring(f.name or "")
+  elseif s == "emulation-gap" then
+    return "Not emulated: " .. tostring(f.name or "")
   elseif s == "lua-error" then
     local first = tostring(f.message or f.name or ""):match("^[^\n]*")
     if #first > 80 then first = first:sub(1, 80) .. "…" end
     return "Lua error: " .. first
   end
   return tostring(s) .. ": " .. (text.step(f.action, f.name) or f.name or "")
+end
+
+-- Arrival emulation (spec section 10): what hwc itself lacks, one clause per reason.
+-- Each says what hwc's own data lacks, never that the step named something wrong.
+local GAP_CLAUSES = {
+  ["fp-unknown"] = "no flight point is within reach of the departure in hwc's tables",
+  ["start-node-unknown"] = "the character's starting taxi node isn't known",
+  ["destination-unresolved"] = "the step's destination couldn't be resolved to a place",
+  ["arrival-unknown"] = "no captured crossing leaves from here",
+  ["inn-unknown"] = "no captured inn is near here",
+  ["waypoint-arrival-not-emulated"] = "arrival by waypoint isn't emulated",
+  ["subzone-unknown"] = "the landing subzone isn't captured",
+  ["taxi-not-taken"] = "the step names a real flight point but the addon never took the flight "
+    .. "(for example, this F step wasn't the active row)",
+  ["arrival-data-mismatch"] = "two arrival data tables disagree",
+}
+-- An F step's arrival-unknown: the departure map is on no continent (hwc.driver.flight).
+local F_ARRIVAL_UNKNOWN = "hwc's tables place the departure map on no continent"
+
+local function gap_sentence(f)
+  local r = (f.reasons or {})[1] or (f.name and f.name:match("^[^:]+"))
+  if r == "tables-missing" then
+    return "The Forever client tables aren't installed, so arrival steps aren't judged. Run hwc update."
+  end
+  local clause = GAP_CLAUSES[r] or tostring(r)
+  if r == "arrival-unknown" and f.action == "F" then clause = F_ARRIVAL_UNKNOWN end
+  if r == "arrival-data-mismatch" and f.detail then clause = clause .. " (" .. tostring(f.detail) .. ")" end
+  return "hwc has no arrival data for this: " .. clause .. "."
 end
 
 -- Returns the sentence as (first sentence, remainder or nil). Plain text: the
@@ -476,7 +510,28 @@ local function clauses(f, ctx)
   elseif s == "did-not-advance" then
     -- The reason is the refusal of the client's action (driver.actions); none means it acted.
     local r = (f.reasons or {})[1]
-    if r == "incomplete" and f.action == "T" then
+    local named, arrived = f.named or {}, f.arrived or {}
+    if r == "name-not-an-area" then
+      return quoted(named.name or "") .. (named.tz and (" and TZ " .. quoted(named.tz)) or "")
+        .. " name no area in Forever, so the addon can never complete this step by zone; the client clicked it off."
+    elseif r == "arrival-mismatch" then
+      local sub = arrived.subzone or ""
+      return "The step names " .. quoted(named.name or "") .. (named.tz and (" (TZ " .. quoted(named.tz) .. ")") or "")
+        .. ", but the player arrived in " .. tostring(arrived.zone or "") .. (sub ~= "" and (" / " .. sub) or "")
+        .. ", so the addon didn't complete it and the client clicked it off."
+    elseif r == "flight-point-undiscovered" or r == "no-taxi-node" then
+      -- "Another way" only when the player did land somewhere (spec section 9's loose match).
+      local tail = (f.resolved_by or f.arrived) and ", so the client travelled there another way."
+        or ", so the client clicked the step off."
+      if r == "flight-point-undiscovered" then
+        return "The guide flies to a flight point the character hasn't discovered" .. tail
+      end
+      return "No flight point on the taxi map matches " .. quoted(named.name or "") .. tail
+    elseif r == "flight-point-already-known" then
+      return "The guide asks you to get the flight point at " .. quoted(named.name or "")
+        .. ", which the character already knows, so no new flight path was discovered and the client clicked "
+        .. "the step off."
+    elseif r == "incomplete" and f.action == "T" then
       return "The turn-in was refused because " .. own .. " wasn't complete, so the client clicked the step off."
     elseif r == "incomplete" then
       return "The objectives of " .. own .. " weren't complete after the client did this step, "
@@ -504,6 +559,12 @@ local function clauses(f, ctx)
     return "WoWPro asks for reputation with faction " .. tostring(f.faction)
       .. ", but this character has never met that faction, so the step is skipped.",
       "Reputation from kills and encounters isn't modelled; if the guide meant another faction, the id is wrong."
+  elseif s == "arrival-data-gap" then
+    return gap_sentence(f)
+  elseif s == "emulation-gap" then
+    -- aura-not-emulated is the only reason (aura stub design, 2026-11-23).
+    return "hwc doesn't emulate auras, so the buff this step checks (BUFF " .. tostring(f.buff or "?")
+      .. ") never appears; the client clicked the step off."
   elseif s == "lua-error" then
     return "WoWPro raised an error during the run.", "The message and stack are in the detail below."
   end

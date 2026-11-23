@@ -55,10 +55,12 @@ describe("Player behind the stubs", function()
     p:learn_spell(2550)
     assert.is_true(env.IsPlayerSpell(2550))
     assert.is_nil(env.GetBindLocation())
-    p:set_bind("Kharanos", 1426)
+    local inn = { npc = 1, bind = "Kharanos", zone = "Dun Morogh", subzone = "Thunderbrew Distillery", map_id = 1426, x = 46, y = 53 }
+    p:set_bind(inn)
     assert.equal("Kharanos", env.GetBindLocation())
-    p:learn_flight_point("Ironforge")
-    assert.is_true(p.flight_points.Ironforge)
+    assert.same({ name = "Kharanos", map_id = 1426, entry = inn }, p.bind)
+    p:learn_flight_point("Thelsamar, Loch Modan")
+    assert.is_true(p.flight_points["Thelsamar, Loch Modan"])
     p.level, p.xp = 5, 12
     assert.same({ 5, 12, 2800 }, { env.UnitLevel(), env.UnitXP(), env.UnitXPMax() })
   end)
@@ -123,5 +125,63 @@ describe("professions teach their spell", function()
     local cfg = config.load({ race = "Dwarf", class = "WARRIOR", professions = { { name = "Fishing", rank = 1, max = 75 } } })
     local w = World.new(cfg, nil)
     assert.is_true(w.player.spells[7620])
+  end)
+end)
+
+-- Starting flight point and bind (arrival emulation spec section 2): learned from
+-- hwc.world.arrivals (or cfg.arrivals) only when the Forever tables know the node.
+describe("World.new start node", function()
+  local forever_db = require("hwc.forever.db")
+  local DB = forever_db.open("spec/fixtures/forever/installed")
+  local function world(race, arrivals, db)
+    local cfg = { race = race, class = "WARRIOR", sex = 2, arrivals = arrivals }
+    return World.new(cfg, { forever = db == nil and DB or db or nil })
+  end
+
+  it("a new Dwarf knows its capital node", function()
+    local w = world("Dwarf")
+    assert.is_true(w.player.flight_points["Ironforge, Dun Morogh"])
+    assert.is_nil(w.start_node_unknown)
+    assert.same({}, w.events) -- the starting state, not a world change
+  end)
+
+  it("a High Order Skyborne knows Stormwind; Windshaper's Thunder Bluff is outside the fixture", function()
+    local w = world("SkyborneAlliance")
+    assert.is_true(w.player.flight_points["Stormwind, Elwynn"])
+    assert.is_nil(w.start_node_unknown)
+    w = world("SkyborneHorde") -- Thunder Bluff is not in the fixture tables
+    assert.same({}, w.player.flight_points)
+    assert.is_true(w.start_node_unknown)
+  end)
+
+  it("a race with no start node, or one the tables don't know, sets start_node_unknown", function()
+    local w = world("Dwarf", { start_nodes = {}, start_bind = {} })
+    assert.same({}, w.player.flight_points)
+    assert.is_true(w.start_node_unknown)
+    w = world("Orc") -- Orgrimmar is not in the fixture tables
+    assert.same({}, w.player.flight_points)
+    assert.is_true(w.start_node_unknown)
+  end)
+
+  it("without the tables learns nothing and flags nothing", function()
+    local w = world("Dwarf", nil, false)
+    assert.same({}, w.player.flight_points)
+    assert.is_nil(w.start_node_unknown)
+    assert.same({}, w.fp_unknown)
+  end)
+
+  it("applies start_bind when present", function()
+    local w = world("Dwarf", { start_nodes = {}, start_bind = { Dwarf = { bind = "Kharanos", map_id = 1426 } } })
+    assert.same({ name = "Kharanos", map_id = 1426 }, { name = w.player.bind.name, map_id = w.player.bind.map_id })
+    assert.equal(w.arrivals.start_bind.Dwarf, w.player.bind.entry)
+    assert.same({}, w.events)
+  end)
+
+  it("set_on_taxi sets the flag UnitOnTaxi reads and records a taxi event", function()
+    local w = world("Dwarf")
+    assert.is_false(w.player.on_taxi)
+    w.player:set_on_taxi(true)
+    assert.is_true(w.player.on_taxi)
+    assert.same({ t = 0, kind = "taxi", on = true }, w.events[1])
   end)
 end)

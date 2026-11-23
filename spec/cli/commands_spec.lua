@@ -241,25 +241,39 @@ describe("hwc init, doctor and update", function()
     end
   end)
 
-  it("update passes --tag through to the installer", function()
-    local seen
+  local forever = require("hwc.forever.install")
+  local FOREVER_RES = { from = "1.16.0.64000", to = "1.16.1.64321" }
+
+  it("update passes --tag and --build through to the installers", function()
+    local seen, fseen
     local code = with_stub(install, "sync", function(_, opts)
       seen = opts
       return { to = "v1.1.3", build = "e1652ce0123", skipped = {} }
-    end, function() return (store_run({ "update", "--tag", "v1.1.3" })) end)
+    end, function()
+      return with_stub(forever, "sync", function(_, opts)
+        fseen = opts
+        return FOREVER_RES
+      end, function() return (store_run({ "update", "--tag", "v1.1.3", "--build", "1.16.1.64321" })) end)
+    end)
     assert.equal(0, code)
     assert.equal("v1.1.3", seen.tag)
+    assert.equal("1.16.1.64321", fseen.build)
   end)
 
-  it("update prints the change, the skipped releases and the already line", function()
-    local r = with_stub(install, "sync", function()
-      return { to = "v1.1.2", build = "e1652ce0123", skipped = { "v1.1.3" } }
-    end, function() local c, o = store_run({ "update" }); return { c, o } end)
+  it("update prints both result lines, the skipped releases and the already lines", function()
+    local function go(qres, fres)
+      return with_stub(install, "sync", function() return qres end, function()
+        return with_stub(forever, "sync", function() return fres end,
+          function() local c, o = store_run({ "update" }); return { c, o } end)
+      end)
+    end
+    local r = go({ to = "v1.1.2", build = "e1652ce0123", skipped = { "v1.1.3" } }, FOREVER_RES)
     assert.equal(0, r[1])
-    assert.equal("QuestieDB none \226\134\146 v1.1.2 (build e1652ce)\nskipped v1.1.3: no Forever build\n", r[2])
-    r = with_stub(install, "sync", function() return { to = "v1.1.2", already = true, skipped = {} } end,
-      function() local c, o = store_run({ "update" }); return { c, o } end)
-    assert.equal("QuestieDB v1.1.2 already installed; active\n", r[2])
+    assert.equal("QuestieDB none \226\134\146 v1.1.2 (build e1652ce)\nskipped v1.1.3: no Forever build\n"
+      .. "Forever tables 1.16.0.64000 \226\134\146 1.16.1.64321\n", r[2])
+    r = go({ to = "v1.1.2", already = true, skipped = {} }, { to = "1.16.1.64321", already = true })
+    assert.equal("QuestieDB v1.1.2 already installed; active\n"
+      .. "Forever tables 1.16.1.64321 already installed; active\n", r[2])
   end)
 
   it("update failure exits 1 with the error", function()
@@ -267,6 +281,16 @@ describe("hwc init, doctor and update", function()
       function() local c, _, e = store_run({ "update" }); return { c, e } end)
     assert.equal(1, r[1])
     assert.equal("hwc: no network\n", r[2])
+  end)
+
+  it("update exits 1 with the Forever error when the tables fail", function()
+    local r = with_stub(install, "sync", function() return { to = "v1.1.2", already = true, skipped = {} } end,
+      function()
+        return with_stub(forever, "sync", function() return nil, "hwc: forever: UiMap: missing column ID" end,
+          function() local c, _, e = store_run({ "update" }); return { c, e } end)
+      end)
+    assert.equal(1, r[1])
+    assert.equal("hwc: forever: UiMap: missing column ID\n", r[2])
   end)
 
   it("doctor exits 1 when the report failed, 0 otherwise", function()
@@ -287,12 +311,17 @@ describe("hwc init, doctor and update", function()
     local r = with_stub(install, "init", function()
       return { already = false, sync_result = { to = "v1.1.2", build = "e1652ce0123", skipped = {} } }
     end, function()
-      return with_stub(doctor, "run", function()
-        return { checks = { { id = "luajit", status = "ok", detail = "fine" } }, failed = false }
-      end, function() local c, o = store_run({ "init" }); return { c, o } end)
+      return with_stub(forever, "init", function()
+        return { already = false, sync_result = FOREVER_RES }
+      end, function()
+        return with_stub(doctor, "run", function()
+          return { checks = { { id = "luajit", status = "ok", detail = "fine" } }, failed = false }
+        end, function() local c, o = store_run({ "init" }); return { c, o } end)
+      end)
     end)
     assert.equal(0, r[1])
-    assert.equal("QuestieDB none \226\134\146 v1.1.2 (build e1652ce)\nok   luajit: fine\n", r[2])
+    assert.equal("QuestieDB none \226\134\146 v1.1.2 (build e1652ce)\n"
+      .. "Forever tables 1.16.0.64000 \226\134\146 1.16.1.64321\nok   luajit: fine\n", r[2])
   end)
 end)
 
@@ -523,5 +552,94 @@ describe("hwc diff", function()
     code, out2 = run({ "diff", nogit, nogit })
     assert.equal(0, code)
     assert.matches("2026.11.12.A (not a git folder)", out2, 1, true)
+  end)
+end)
+
+describe("hwc arrivals capture-script", function()
+  local function script(mode)
+    local args = { "arrivals", "capture-script" }
+    if mode then args[#args + 1] = mode end
+    return run(args)
+  end
+
+  it("prints a /run line of at most 255 characters for each mode", function()
+    for _, mode in ipairs({ "taxi", "landing", "bind" }) do
+      local code, out, err = script(mode)
+      assert.equal(0, code)
+      assert.equal("", err)
+      local ls = lines(out)
+      assert.equal(1, #ls)
+      assert.equal("/run ", ls[1]:sub(1, 5))
+      assert.is_true(#ls[1] <= require("hwc.cli.arrivals").MAX_LINE, mode .. " line is " .. #ls[1])
+    end
+  end)
+
+  it("taxi prints the slot, name and type of each node", function()
+    local _, out = script("taxi")
+    for _, name in ipairs({ "NumTaxiNodes", "TaxiNodeName", "TaxiNodeGetType" }) do
+      assert.truthy(out:find(name, 1, true))
+    end
+  end)
+
+  it("landing prints the zone, subzone, map and position percent", function()
+    local _, out = script("landing")
+    for _, name in ipairs({ "GetZoneText()", "GetSubZoneText()", "GetBestMapForUnit", "GetPlayerMapPosition", "GetXY" }) do
+      assert.truthy(out:find(name, 1, true))
+    end
+  end)
+
+  it("landing runs without error when the map or position is missing, printing nil for the position", function()
+    local _, out = script("landing")
+    local body = out:gsub("^/run ", "")
+    local function exec(map, pos)
+      local printed = {}
+      local env = {
+        print = function(...)
+          local t = {}
+          for i = 1, select("#", ...) do t[i] = tostring((select(i, ...))) end
+          printed[#printed + 1] = table.concat(t, " ")
+        end,
+        format = string.format,
+        GetZoneText = function() return "Z" end,
+        GetSubZoneText = function() return "S" end,
+        C_Map = {
+          GetBestMapForUnit = function() return map end,
+          GetPlayerMapPosition = function() return pos end,
+        },
+      }
+      local fn = assert(load(body, "landing", "t", env))
+      assert.has_no.errors(fn)
+      return table.concat(printed, "\n")
+    end
+    local no_map = exec(nil, nil)
+    assert.truthy(no_map:find("zone Z sub S", 1, true))
+        assert.truthy(no_map:find("map nil", 1, true))
+    assert.truthy(no_map:find("xy% nil", 1, true))
+    local no_pos = exec(1453, nil)
+    assert.truthy(no_pos:find("map 1453", 1, true))
+    assert.truthy(no_pos:find("xy% nil", 1, true))
+    local pos = { GetXY = function() return 0.5, 0.25 end }
+    local ok = exec(1453, pos)
+    assert.truthy(ok:find("xy% 50.00 25.00", 1, true))
+  end)
+
+  it("bind prints the bind location", function()
+    local _, out = script("bind")
+    assert.truthy(out:find("GetBindLocation()", 1, true))
+  end)
+
+  it("defaults to taxi, and refuses an unknown mode", function()
+    local _, out = script()
+    assert.truthy(out:find("TaxiNodeName", 1, true))
+    local code, _, err = script("hearth")
+    assert.equal(2, code)
+    assert.truthy(err:find("hearth", 1, true))
+  end)
+
+  it("is generated Lua that compiles", function()
+    for _, mode in ipairs({ "taxi", "landing", "bind" }) do
+      local _, out = script(mode)
+      assert.truthy(load((out:gsub("^/run ", ""))))
+    end
   end)
 end)

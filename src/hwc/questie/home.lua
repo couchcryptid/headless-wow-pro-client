@@ -1,6 +1,7 @@
 -- The hwc store: ~/.hwc (or $HWC_HOME) holds downloaded QuestieDB versions at
 -- questie/<tag>/ and a questie/active file naming the one in use.
 local lfs = require("lfs")
+local store = require("hwc.store")
 local dkjson = require("dkjson")
 
 local M = {}
@@ -45,34 +46,10 @@ function M.active(root)
   return set(text:match("^%s*(.-)%s*$"))
 end
 
-local function mkdirs(path)
-  local cur = path:sub(1, 1) == "/" and "" or nil
-  for part in path:gmatch("[^/]+") do
-    cur = cur and (cur .. "/" .. part) or part
-    lfs.mkdir(cur)
-  end
-end
-
 function M.set_active(root, tag)
   check_tag(tag)
-  mkdirs(root .. "/questie")
-  local target = root .. "/questie/active"
-  local tmp = root .. "/questie/active.tmp"
-  local function fail(err) error("hwc: cannot write " .. target .. ": " .. tostring(err), 0) end
-  local f, err = io.open(tmp, "wb")
-  if not f then fail(err) end
-  local ok, werr = f:write(tag, "\n")
-  local closed, cerr = f:close()
-  if ok and not closed then ok, werr = nil, cerr end
-  if not ok then
-    os.remove(tmp)
-    fail(werr)
-  end
-  local renamed, rerr = os.rename(tmp, target)
-  if not renamed then
-    os.remove(tmp)
-    fail(rerr)
-  end
+  store.mkdirs(root .. "/questie")
+  store.write_active(root .. "/questie/active", tag)
 end
 
 function M.active_dir(root)

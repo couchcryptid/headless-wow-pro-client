@@ -1,0 +1,42 @@
+local csv = require("hwc.forever.csv")
+
+describe("forever.csv.parse", function()
+  it("splits header and rows, ignoring a trailing newline", function()
+    local t = csv.parse("a,b\n1,2\n3,4\n")
+    assert.same({ "a", "b" }, t.header)
+    assert.same({ { "1", "2" }, { "3", "4" } }, t.rows)
+  end)
+
+  it("keeps a quoted comma inside one field", function()
+    local t = csv.parse('Name_lang,ID\n"Stormwind, Elwynn",2\n')
+    assert.same({ { "Stormwind, Elwynn", "2" } }, t.rows)
+  end)
+
+  it("unescapes doubled quotes", function()
+    local t = csv.parse('a\n"say ""hi"""\n')
+    assert.same({ { 'say "hi"' } }, t.rows)
+  end)
+
+  it("handles CRLF line endings", function()
+    local t = csv.parse("a,b\r\n1,2\r\n3,4\r\n")
+    assert.same({ "a", "b" }, t.header)
+    assert.same({ { "1", "2" }, { "3", "4" } }, t.rows)
+  end)
+
+  it("keeps empty fields and a newline inside quotes", function()
+    local t = csv.parse('a,b,c\n1,,"x\ny"')
+    assert.same({ { "1", "", "x\ny" } }, t.rows)
+  end)
+
+  it("errors on an unterminated quote with the line number", function()
+    local ok, err = pcall(csv.parse, 'a,b\n1,2\n3,"oops\n')
+    assert.is_false(ok)
+    assert.matches("^hwc: csv: line 3: unterminated quote", err)
+  end)
+
+  it("errors on text after a closing quote", function()
+    local ok, err = pcall(csv.parse, 'a\n"x"y\n')
+    assert.is_false(ok)
+    assert.matches("^hwc: csv: line 2: ", err)
+  end)
+end)

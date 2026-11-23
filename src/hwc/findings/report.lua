@@ -29,10 +29,11 @@ report.GAPS = {
   "reputation is gained from quest rewards only (no kills, item turn-ins or encounters)",
 }
 
--- Harness notices are about the client's WoW API stubs, not guides: kept out of
+-- Harness notices are about the client's WoW API stubs, arrival data or emulation, not guides: kept out of
 -- every count and shown only in their own folded section.
 function report.is_harness(f)
-  return f.signal == "missing-global" or (f.signal == "lua-error" and f.harness == true)
+  return f.signal == "missing-global" or f.signal == "arrival-data-gap" or f.signal == "emulation-gap"
+    or (f.signal == "lua-error" and f.harness == true)
 end
 local is_harness = report.is_harness
 
@@ -254,7 +255,7 @@ end
 
 -- The folded sections' descriptions; the page puts the count in front.
 report.FOLDS = {
-  harness = "gaps in this client's WoW API stubs, not guide bugs",
+  harness = "gaps in this client's WoW API stubs, arrival data or emulation, not guide bugs",
   expected = "the client clicked off by design (notes, repair-or-restock stops, guide ends)",
 }
 

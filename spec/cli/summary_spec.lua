@@ -8,15 +8,23 @@ local function fixture(name)
   return doc
 end
 
-local NOTE = " (gaps in hwc's stubs, not guide bugs)"
+local NOTE = " (gaps in hwc's stubs, arrival data or emulation, not guide bugs)"
 
 describe("summary.lines", function()
   it("counts findings and root causes, then severities in rank order, then harness notices", function()
     assert.same({
-      "Dwarf Warrior: 24 findings, 17 root causes",
-      "  11 high · 2 medium-high · 8 medium · 3 low",
-      "  harness: 1 missing global" .. NOTE,
+      "Dwarf Warrior: 25 findings, 18 root causes",
+      "  11 high · 2 medium-high · 9 medium · 3 low",
+      "  harness: 1 missing global, 1 arrival data gap" .. NOTE,
     }, summary.lines(fixture("single.json")))
+  end)
+
+  it("counts emulation gaps on the harness line", function()
+    local doc = { header = { matrix = { combos = { "Dwarf WARRIOR none" } } },
+      summary = { findings = 0, roots = 0, by_severity = {} },
+      findings = { { signal = "emulation-gap", severity = "low" }, { signal = "emulation-gap", severity = "low" } } }
+    local lines = summary.lines(doc)
+    assert.equal("  harness: 2 emulation gaps" .. NOTE, lines[#lines])
   end)
 
   it("leaves out zero severities, adds the stop reason and both harness counts", function()

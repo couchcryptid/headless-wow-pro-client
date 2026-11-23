@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { childrenShown } from "../../src/logic/filter";
 import { guideSections } from "../../src/logic/order";
-import { counted, defaultState, location } from "../../src/logic/state";
+import { counted, defaultState, isHarness, location } from "../../src/logic/state";
 import { load, pick } from "./helpers";
 
 describe("state", () => {
+  it("isHarness holds arrival data gaps, out of the counts", () => {
+    expect(isHarness({ signal: "arrival-data-gap" } as never)).toBe(true);
+    expect(counted({ signal: "arrival-data-gap", severity: "low" } as never)).toBe(false);
+    expect(isHarness({ signal: "emulation-gap" } as never)).toBe(true);
+    expect(counted({ signal: "emulation-gap", severity: "low" } as never)).toBe(false);
+  });
+
   it("defaultState turns every option on", () => {
     const doc = load("matrix");
     const s = defaultState(doc);

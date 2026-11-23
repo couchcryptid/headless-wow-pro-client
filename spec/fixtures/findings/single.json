@@ -321,6 +321,35 @@
       },
       "title":"\"Clear the Tunnel\" doesn't advance"
     },{
+      "action":"R",
+      "arrived":{
+        "subzone":"Goldshire",
+        "zone":"Elwynn Forest"
+      },
+      "causes":[],
+      "combos":["Dwarf WARRIOR none"],
+      "confidence":"verified",
+      "explains":0,
+      "file":"WoWPro_Leveling/Guides/Alliance/Dun_11_14.lua",
+      "gid":"Dun Morogh 11-14",
+      "id":"F-8e87c122",
+      "line":580,
+      "name":"Stormwind",
+      "named":{
+        "name":"Stormwind",
+        "tz":"1453; Stormwind City"
+      },
+      "reasons":["arrival-mismatch"],
+      "resolved_by":"zone",
+      "sentence":"The step names \"Stormwind\" (TZ \"1453; Stormwind City\"), but the player arrived in Elwynn Forest / Goldshire, so the addon didn't complete it and the client clicked it off.",
+      "severity":"medium",
+      "signal":"did-not-advance",
+      "step":{
+        "action":"R",
+        "name":"Stormwind"
+      },
+      "title":"\"Stormwind\" doesn't advance"
+    },{
       "action":"T",
       "after":{
         "action":"C",
@@ -555,6 +584,20 @@
       },
       "title":"Quest \"Ore for Ironforge\" (470) is left in the log"
     },{
+      "causes":[],
+      "combos":["Dwarf WARRIOR none"],
+      "explains":0,
+      "id":"F-8beb377c",
+      "name":"start-node-unknown: Gnome",
+      "reasons":["start-node-unknown"],
+      "sentence":"hwc has no arrival data for this: the character's starting taxi node isn't known.",
+      "severity":"low",
+      "signal":"arrival-data-gap",
+      "step":{
+        "name":"start-node-unknown: Gnome"
+      },
+      "title":"No arrival data: start-node-unknown: Gnome"
+    },{
       "causes":["F-96f9c1f4"],
       "combos":["Dwarf WARRIOR none"],
       "explains":1,
@@ -656,7 +699,7 @@
     },
     "notes":{
       "rank":"Guide rank: 2 (WoWPro's setting for which optional steps are shown).",
-      "unverified":"Unverified findings: 1 of 24. Their quest's data is incomplete (no XP, level or name in QuestieDB, or an objective count assumed or guessed), or a heuristic raised them."
+      "unverified":"Unverified findings: 1 of 25. Their quest's data is incomplete (no XP, level or name in QuestieDB, or an objective count assumed or guessed), or a heuristic raised them."
     },
     "paths_relative_to":"headless-wow-pro-client",
     "rank":2,
@@ -698,7 +741,7 @@
     },
     "folds":{
       "expected":"the client clicked off by design (notes, repair-or-restock stops, guide ends)",
-      "harness":"gaps in this client's WoW API stubs, not guide bugs"
+      "harness":"gaps in this client's WoW API stubs, arrival data or emulation, not guide bugs"
     },
     "severities":{
       "high":"High",
@@ -708,8 +751,10 @@
     },
     "signals":{
       "accept-refused":"Can't be taken",
+      "arrival-data-gap":"Arrival data missing",
       "below-level":"Offered below level",
       "did-not-advance":"Doesn't advance",
+      "emulation-gap":"Not emulated",
       "hidden-use-step":"Use step never shown",
       "leftover-quests":"Left in log",
       "level-check":"Level check reached short",
@@ -745,7 +790,7 @@
         },
         "medium":{
           "follow":3,
-          "primary":5
+          "primary":6
         },
         "medium-high":{
           "follow":0,
@@ -765,7 +810,7 @@
         },
         "medium":{
           "follow":0,
-          "primary":1
+          "primary":2
         },
         "medium-high":{
           "follow":0,
@@ -804,13 +849,13 @@
     "by_severity":{
       "high":11,
       "low":3,
-      "medium":8,
+      "medium":9,
       "medium-high":2
     },
     "by_signal":{
       "accept-refused":1,
       "below-level":2,
-      "did-not-advance":6,
+      "did-not-advance":7,
       "hidden-use-step":1,
       "leftover-quests":3,
       "log-full":1,
@@ -821,7 +866,7 @@
       "stuck":1,
       "wrong-race-class":1
     },
-    "findings":24,
-    "roots":17
+    "findings":25,
+    "roots":18
   }
 }

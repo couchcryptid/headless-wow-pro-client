@@ -67,3 +67,40 @@ describe("driver.run against the real engine #slow", function()
     end
   end)
 end)
+
+-- WoW-Pro 2026.11.21.A (upstream 4a96ff716) adds BUFF|1229451 to C The Great Outdoors
+-- (01_12_Dun_Morogh.lua:112). Before the C_UnitAuras stub the addon raised on every
+-- BUFF check and the run stuck on A The Great Outdoors (aura stub design, 2026-11-23).
+-- Pinned worktree: tools/addon-worktree.sh 4a96ff716.
+describe("driver.run on WoW-Pro 2026.11.21.A #slow", function()
+  local addon = require("hwc.config").repo_root() .. "/local/addon/4a96ff716"
+  local why = flow.absent()
+  if not why and require("lfs").attributes(addon .. "/WoWPro/WoWPro.toc", "mode") == nil then
+    why = "addon worktree absent at " .. addon .. " (tools/addon-worktree.sh 4a96ff716)"
+  end
+  if why then
+    pending(why)
+    return
+  end
+
+  local log
+  local function get()
+    if log then return log end
+    local cfg = require("hwc.config").load({ addon_path = addon, race = "Dwarf", class = "WARRIOR" })
+    log = require("hwc.driver.run").character(cfg, { max_guides = 2 })
+    return log
+  end
+
+  it("plays past The Great Outdoors to the next guide with no harness lua-error", function()
+    local l = get()
+    for _, s in ipairs(signals(l, "lua-error")) do
+      assert.is_nil(s.reason, "harness lua-error: " .. tostring(s.message))
+    end
+    for _, s in ipairs(signals(l, "stuck")) do
+      assert.are_not.equal(96608, s.qid, "stuck on The Great Outdoors")
+    end
+    assert.equal("ClassicDunMorogh0112", l.guides[1])
+    assert.is_string(l.guides[2])
+    assert.equal("max-guides", l.stop.reason)
+  end)
+end)

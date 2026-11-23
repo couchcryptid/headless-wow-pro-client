@@ -48,6 +48,12 @@ export interface Finding {
   /** Count of counted descendants (primary findings only). */
   explains?: number;
   expected?: boolean;
+  /** Arrival steps: what the step named, where the player arrived, what resolved it. */
+  named?: { name: string; tz?: string };
+  arrived?: { zone?: string; subzone?: string; map_id?: number };
+  resolved_by?: string;
+  /** arrival-data-mismatch: what disagreed. */
+  detail?: string;
   /** Set on a lua-error raised in harness code rather than the addon. */
   harness?: boolean;
 }

@@ -1,0 +1,4 @@
+AreaName_lang,ID,WMOID,NameSetID,WMOGroupID,SoundProviderPref,SoundProviderPrefUnderwater,AmbienceID,UwAmbience,ZoneMusic,UwZoneMusic,IntroSound,UwIntroSound,AreaTableID,Flags
+Trade District,43651,5207,0,24127,0,0,0,675,0,0,0,0,0,0
+Trade District,43652,5207,0,24128,75,0,0,675,0,0,0,0,0,0
+Trade District,43653,5207,0,24129,75,0,0,675,0,0,0,0,0,0

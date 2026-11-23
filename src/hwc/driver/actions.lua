@@ -3,7 +3,8 @@
 --
 -- Fidelity: nothing here writes engine state. The engine is touched only by
 -- firing events, settling the virtual clock and the player-equivalent
--- E:update_guide() after a level-up (the addon has no level-up handler).
+-- E:update_guide() after a level-up (the addon has no level-up handler). F and f
+-- live in hwc.driver.flight, b and P in hwc.driver.crossing, under the same rule.
 --
 -- Event sequences, checked against the handlers in ~/Projects/WoW-Pro-Guides:
 --   QUEST_ACCEPTED(qlidx, qid)  WoWPro_Events.lua:783-793 (args read at :784); with
@@ -22,10 +23,12 @@
 --   ZONE_CHANGED / ZONE_CHANGED_NEW_AREA  WoWPro_Events.lua:301-316 (also _INDOORS): the
 --       handler runs AutoCompleteZone (AutoComplete.lua:488-530), which matches the
 --       step name or TZ against GetZoneText / GetSubZoneText and the map id.
---   TAXIMAP_OPENED              WoWPro_Events.lua:806-815 (F/b: RecordTaxiLocations).
---   HEARTHSTONE_BOUND           WoWPro_Events.lua:861-872 reads GetBindLocation() and runs
+--   TAXIMAP_OPENED              WoWPro_Events.lua:815-826: RecordTaxiLocations (AutoComplete.lua
+--       :9-29) and, on an F/b step with AutoSelect, TakeTaxiClassic (:32-53).
+--   PLAYER_CONTROL_LOST / _GAINED  WoWPro_Events.lua:828-866: the F flight (hwc.driver.flight).
+--   HEARTHSTONE_BOUND           WoWPro_Events.lua:868-879 reads GetBindLocation() and runs
 --       AutoCompleteSetHearth.
---   UI_INFO_MESSAGE(idx, msg)   WoWPro_Events.lua:908-911; AutoCompleteGetFP reads
+--   UI_INFO_MESSAGE(idx, msg)   WoWPro_Events.lua:915-918; AutoCompleteGetFP reads
 --       `_event, _idx, msg` and tests msg == ERR_NEWTAXIPATH (AutoComplete.lua:94-98).
 --
 -- Tag value forms (WoWPro_Parser.lua DefineTag, 416-620; the engine stores the parsed
@@ -46,7 +49,10 @@
 local kills = require("hwc.world.kills")
 local xp = require("hwc.world.xp")
 local gap = require("hwc.findings.gap")
-local stubs_core = require("hwc.stubs.core")
+local flight = require("hwc.driver.flight")
+local crossing = require("hwc.driver.crossing")
+local hearth = require("hwc.driver.hearth")
+local arrival = require("hwc.driver.arrival")
 
 local actions = {}
 
@@ -60,6 +66,19 @@ end
 local function fire(ctx, out, event, ...)
   ctx.engine:fire(event, ...)
   out.events[#out.events + 1] = event
+end
+
+-- Settles the virtual clock. out.settle keeps the last result, with hit_limit OR-ed across
+-- every settle of the step (an F flight settles mid-action, hwc.driver.flight).
+local function settle(ctx, out)
+  local r = ctx.engine:settle()
+  if out.settle and out.settle.hit_limit and type(r) == "table" and not r.hit_limit then
+    local copy = {}
+    for k, v in pairs(r) do copy[k] = v end
+    copy.hit_limit = true
+    r = copy
+  end
+  out.settle = r
 end
 
 -- Forces the engine to re-evaluate after a ding (spec §5.2 "Level-up"). An addon
@@ -483,24 +502,23 @@ end
 
 -- Rules ---------------------------------------------------------------------
 
--- Ruling Y: F, b and P land the player at the destination. Their Z and M tags say
--- where the player departs from (the flight master, the boat dock), so they are not
--- used. AutoCompleteZone completes F/H/b/P/R when the step name or the TZ tag's
--- first ";" part equals GetZoneText() or GetSubZoneText(), or a numeric TZ equals
--- the map id (WoWPro_AutoComplete.lua:499-526; TZ is DefineTag("TZ","targetzone")
--- at WoWPro_Parser.lua:484). An F step completes there only while
--- UnitOnTaxi("player") is false (:507-512; the stub returns false). TZ joins the
--- Global Constraints' Z/M exception: it says where the player goes.
--- subzone = step name; zone = TZ when it names one, else the current zone; map id
--- = TZ when it is numeric, else the current one; x/y are kept.
-local function perform_arrival(ctx, step, out)
+-- Where a step's Z/M puts the player, shared by depart and R (perform_travel): nil when
+-- the step has no Z, map id or usable M. The zone name comes from the map id through the
+-- Forever tables (DB:zone_of_map) when they are installed and name it: the Z text is the
+-- guide's own, the step being judged. Without the tables, or for a map they don't name,
+-- the Z text; with neither, the current zone. A new zone or map: the subzone is unknown,
+-- so it is cleared. The same zone and map: the player walks within it and keeps the
+-- subzone (nothing says which subzone an arbitrary M is in).
+local function destination(ctx, tags)
+  local zone, map_id = parse_zone(tags.zone)
+  local x, y = parse_coords(tags.map)
+  if not (zone or map_id or x) then return nil end
   local p = ctx.world.player
-  local tz_name, tz_map = parse_zone(step.tags and step.tags.targetzone)
-  p:set_zone(tz_name or p.zone, step.name or "", tz_map or p.map_id, p.x, p.y)
-  out.kind = "acted"
-  if step.action == "F" then fire(ctx, out, "TAXIMAP_OPENED") end
-  fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
-  fire(ctx, out, "ZONE_CHANGED")
+  local db = ctx.world.catalog and ctx.world.catalog.forever
+  if map_id and db then zone = db:zone_of_map(map_id) or zone end
+  local to_zone, to_map = zone or p.zone, map_id or p.map_id
+  local same_area = to_zone == p.zone and to_map == p.map_id
+  return { zone = to_zone, subzone = same_area and p.subzone or "", map_id = to_map, x = x or p.x, y = y or p.y }
 end
 
 -- Spec §5.1: the player's position is the step's M coordinate when it has one. A
@@ -510,25 +528,33 @@ end
 -- on the engine's "already there" check (WoWPro_Broker.lua:2531-2537,
 -- AutoCompleteZone at WoWPro_AutoComplete.lua:499-526) without being acted on.
 -- No Z, no usable M, or the current spot: no move and no zone events.
-local TRAVEL = { R = true, F = true, b = true, P = true, H = true }
-local function walk_to_step(ctx, step, out)
-  if TRAVEL[step.action] then return end
+-- depart is the same move for a travel step whose Z/M say where it leaves from
+-- (spec section 8: F and f call it from hwc.driver.flight).
+local function depart(ctx, step, out)
   local tags = step.tags or {}
-  local zone, map_id = parse_zone(tags.zone)
-  local x, y = parse_coords(tags.map)
-  if not (zone or map_id or x) then return end
+  local to = destination(ctx, tags)
+  if not to then return end
   local p = ctx.world.player
-  -- A new zone or map: the subzone is unknown, so it is cleared. The same zone and map:
-  -- the player walks within it and keeps the subzone (the catalog has no subzone for an
-  -- arbitrary M). A numeric-only Z keeps the previous zone name (no map-name catalog).
-  local same_area = (zone or p.zone) == p.zone and (map_id or p.map_id) == p.map_id
-  local to = { zone or p.zone, same_area and p.subzone or "", map_id or p.map_id, x or p.x, y or p.y }
   -- Already standing on that spot (subzone included): stay put.
-  if to[1] == p.zone and to[3] == p.map_id and to[4] == p.x and to[5] == p.y then return end
-  p:set_zone(to[1], to[2], to[3], to[4], to[5])
+  if to.zone == p.zone and to.map_id == p.map_id and to.x == p.x and to.y == p.y then return end
+  p:set_zone(to.zone, to.subzone, to.map_id, to.x, to.y)
   fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
   fire(ctx, out, "ZONE_CHANGED")
 end
+
+-- R, b, P and H land somewhere else; F and f depart from their handler (depart).
+local TRAVEL = { R = true, F = true, f = true, b = true, P = true, H = true }
+local function walk_to_step(ctx, step, out)
+  if TRAVEL[step.action] then return end
+  depart(ctx, step, out)
+end
+
+-- F and f (hwc.driver.flight), with this module's helpers.
+local FLIGHT_HELPERS = { fire = fire, depart = depart, settle = settle }
+local function perform_flight(ctx, step, out) flight.fly(ctx, step, out, FLIGHT_HELPERS) end
+local function perform_flight_point(ctx, step, out) flight.learn(ctx, step, out, FLIGHT_HELPERS) end
+-- b and P (hwc.driver.crossing): land at a real crossing arrival (spec section 6).
+local function perform_crossing(ctx, step, out) crossing.perform(ctx, step, out, FLIGHT_HELPERS) end
 
 -- The actions that work on their quest's objectives: a C, K, U, l or B step with the
 -- quest's QID (its qids, ACTIVE included for the fallback actions, Engine.qids_of).
@@ -606,41 +632,37 @@ local function credit_arrival(ctx, step, out)
   if #out.arrivals > 0 then fire(ctx, out, "QUEST_LOG_UPDATE") end
 end
 
+-- R: run to Z/M (destination: the zone name from the map id through DB:zone_of_map when
+-- the tables are installed, else the Z text); the subzone is "" on a zone or map change
+-- and kept otherwise, never the step name, and never reported in out.arrived. out.arrived/out.classify/out.named feed the
+-- driver's arrival grading (spec section 8); waypcomplete 1 or 2 cannot be emulated
+-- (waypoint-arrival-not-emulated, key "<gid>:<line>"), otherwise the driver decides from
+-- out.classify. WoWPro_Events.lua:301-316 / WoWPro_AutoComplete.lua:488-530.
 local function perform_travel(ctx, step, out)
   local p = ctx.world.player
   local tags = step.tags or {}
-  local zone, map_id = parse_zone(tags.zone)
-  local x, y = parse_coords(tags.map)
-  if step.action == "H" then
-    -- The hearth takes the player to the bind location (zone = bind name).
-    local bind = p.bind
-    if bind then
-      zone, map_id = bind.name, bind.map_id
-    elseif not zone and not map_id then
-      out.kind, out.reason = "refused", "no-bind"
-      return
-    end
-  end
-  local subzone = (step.action == "R") and (step.name or "") or ""
-  p:set_zone(zone or p.zone, subzone, map_id or p.map_id, x or p.x, y or p.y)
+  local db = ctx.world.catalog and ctx.world.catalog.forever
+  local to = destination(ctx, tags)
+  if to then p:set_zone(to.zone, to.subzone, to.map_id, to.x, to.y) end
   out.kind = "acted"
+  out.named = { name = step.name, tz = tags.targetzone }
+  -- subzone nil: a kept subzone is some earlier landing's, not a capture of this one, so
+  -- §3 never reads it (spec section 7: name-not-an-area or subzone-unknown only).
+  out.arrived = { zone = p.zone, map_id = p.map_id }
+  out.classify = db and arrival.classify(db, out.arrived, step.name, tags.targetzone) or nil
+  local wc = tags.waypcomplete
+  if wc == 1 or wc == 2 then
+    out.data_gap = { reason = "waypoint-arrival-not-emulated",
+      key = arrival.step_key(step) }
+  end
   fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
   fire(ctx, out, "ZONE_CHANGED")
-  if step.action == "R" then credit_arrival(ctx, step, out) end
+  credit_arrival(ctx, step, out)
 end
 
-local function perform_flight_point(ctx, step, out)
-  ctx.world.player:learn_flight_point(step.name)
-  out.kind = "acted"
-  fire(ctx, out, "UI_INFO_MESSAGE", 0, stubs_core.ERR_NEWTAXIPATH)
-end
-
-local function perform_bind(ctx, step, out)
-  local _, map_id = parse_zone(step.tags and step.tags.zone)
-  ctx.world.player:set_bind(step.name, map_id or ctx.world.player.map_id)
-  out.kind = "acted"
-  fire(ctx, out, "HEARTHSTONE_BOUND")
-end
+-- h and H (hwc.driver.hearth): bind at, and hearth to, real inns (spec section 7).
+local function perform_bind(ctx, step, out) hearth.bind(ctx, step, out, FLIGHT_HELPERS) end
+local function perform_home(ctx, step, out) hearth.home(ctx, step, out, FLIGHT_HELPERS) end
 
 -- U: the use item is in the bags (added when missing); a quest in the log gets the C
 -- objective rule, then one use item is consumed unless it is also the L item.
@@ -801,7 +823,7 @@ function actions.is_quest_step(step)
   return QUEST_HANDLERS[step.action] ~= nil
 end
 local OTHER_HANDLERS = {
-  R = perform_travel, F = perform_arrival, b = perform_arrival, P = perform_arrival, H = perform_travel,
+  R = perform_travel, F = perform_flight, b = perform_crossing, P = perform_crossing, H = perform_home,
   f = perform_flight_point, h = perform_bind, U = perform_use, L = perform_level,
   l = perform_item_step, B = perform_item_step, ["*"] = perform_trash, ["="] = perform_trainer,
 }
@@ -826,8 +848,11 @@ end
 
 -- ctx = { engine = E, world = W, cfg = cfg }; step is an Engine:step() record.
 -- Returns { kind = "acted"|"refused"|"noop", reason, qid, events = {names...},
--- levels, grind = {kills, to}|nil, elite, settle = <E:settle() result> }.
--- Every call settles exactly once at the end and leaves world.dialog nil.
+-- levels, grind = {kills, to}|nil, elite, settle = <E:settle() result> }; travel steps add
+-- the arrival fields (hwc.driver.flight header: data_gap, named, arrived, resolved_by,
+-- classify). Every call settles once at the end and leaves world.dialog nil; an F step also
+-- settles mid-flight (after TAXIMAP_OPENED, and past PLAYER_CONTROL_LOST when it flies), and
+-- out.settle keeps the last result with hit_limit OR-ed across them.
 function actions.perform(ctx, step)
   local qids = step.qids or {}
   local out = new_outcome(qids[1])
@@ -854,7 +879,7 @@ function actions.perform(ctx, step)
   end
   finish_bags(ctx, out)
   out.elite = out.elite or (step.tags ~= nil and step.tags.elite ~= nil and step.tags.elite ~= false)
-  out.settle = ctx.engine:settle()
+  settle(ctx, out)
   ctx.world.dialog = nil
   return out
 end

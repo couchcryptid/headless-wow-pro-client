@@ -1,0 +1,9 @@
+Name_lang,ID,ParentUiMapID,Flags,System,Type,BountySetID,BountyDisplayLocation,VisibilityPlayerConditionID,HelpTextPosition,BkgAtlasID,AlternateUiMapGroup,ContentTuningID,AdventureMapTextureKitID,MapArtZoneTextPosition
+Azeroth,947,0,2304,0,1,0,0,0,0,0,0,0,0,0
+The Barrens,1413,1414,2,0,3,0,0,0,0,0,0,0,0,0
+Kalimdor,1414,947,0,0,2,0,0,0,0,0,0,0,0,0
+Eastern Kingdoms,1415,947,0,0,2,0,0,0,0,0,0,0,0,0
+Dun Morogh,1426,1415,2,0,3,0,0,0,0,0,0,0,0,0
+Loch Modan,1432,1415,2,0,3,0,0,0,0,0,0,0,0,0
+Stormwind City,1453,1415,0,0,3,0,0,0,0,0,0,0,0,0
+Ironforge,1455,1415,0,0,3,0,0,0,0,0,0,0,0,0

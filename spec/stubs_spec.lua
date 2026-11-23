@@ -23,6 +23,22 @@ describe("stubs", function()
     assert.equal("New flight path discovered!", env.ERR_NEWTAXIPATH)
   end)
 
+  it("C_UnitAuras.GetAuraDataByIndex answers from player.auras; no UnitAura (Forever, user 2026-11-23)", function()
+    assert.is_nil(rawget(env, "UnitAura"))
+    assert.is_nil(env.C_UnitAuras.GetAuraDataByIndex("player", 1, "HELPFUL"))
+    sb.world.player.auras = { { name = "Boosted Rest", spellId = 1229451, applications = 0 },
+      { name = "Burning", spellId = 7, harmful = true } }
+    local a = env.C_UnitAuras.GetAuraDataByIndex("player", 1, "HELPFUL")
+    assert.same({ "Boosted Rest", 1229451 }, { a.name, a.spellId })
+    assert.equal("Burning", env.C_UnitAuras.GetAuraDataByIndex("player", 1, "HARMFUL").name)
+    assert.is_nil(env.C_UnitAuras.GetAuraDataByIndex("player", 2, "HARMFUL"))
+    assert.is_nil(env.C_UnitAuras.GetAuraDataByIndex("player", 2, "HELPFUL"))
+    assert.is_nil(env.C_UnitAuras.GetAuraDataByIndex("player", 0, "HELPFUL"))
+    assert.is_nil(env.C_UnitAuras.GetAuraDataByIndex("target", 1, "HELPFUL"))
+    assert.is_nil(env.C_UnitAuras.GetAuraDataByIndex("player", "x", "HELPFUL"))
+    assert.is_nil(env.C_UnitAuras.GetAuraDataByIndex("player", 1, "MAW"))
+  end)
+
   it("IsPlayerSpell coerces the string spell id the engine passes (Broker.lua:3332-3340)", function()
     sb.world.player:learn_spell(3273)
     assert.is_true(env.IsPlayerSpell("3273"))
@@ -202,19 +218,61 @@ describe("stubs", function()
     assert.is_nil(sb.override_bindings[owner])
   end)
 
-  it("lists the learned flight points on the taxi map in sorted order (AutoComplete.lua:9-30)", function()
+  it("lists no taxi nodes without the Forever tables, and never mounts", function()
     assert.equal(0, env.NumTaxiNodes())
-    sb.world.player:learn_flight_point("Thelsamar")
-    sb.world.player:learn_flight_point("Ironforge")
-    assert.equal(2, env.NumTaxiNodes())
-    assert.same({ "Ironforge", "Thelsamar" }, { env.TaxiNodeName(1), env.TaxiNodeName(2) })
-    assert.equal("REACHABLE", env.TaxiNodeGetType(1))
-    assert.equal(1, env.GetNumRoutes(2))
-    assert.equal(2, env.TaxiGetNodeSlot(2, 1, false))
+    assert.is_nil(env.TaxiNodeName(1))
+    assert.equal("NONE", env.TaxiNodeGetType(1))
     assert.is_false(env.IsMounted())
     env.Dismount()
-    env.TakeTaxiNode(2)
-    assert.same({ "Thelsamar" }, sb.taxi_taken)
+  end)
+
+  -- WoWPro_AutoComplete.lua:9-29 (RecordTaxiLocations) and :32-53 (TakeTaxiClassic) on
+  -- TAXIMAP_OPENED (WoWPro_Events.lua:815-827). Spec section 5 / hwc.world.arrivals taxi_map.
+  describe("with the Forever tables", function()
+    local World = require("hwc.world")
+    local DB = require("hwc.forever.db").open("spec/fixtures/forever/installed")
+    local function install(arrivals)
+      local cfg = config.load({ race = "Dwarf", class = "WARRIOR" })
+      cfg.arrivals = arrivals
+      sb = sandbox.new(cfg)
+      sb.world = World.new(cfg, { forever = DB }, sb.clock)
+      env = sb.env
+      stubs.install(sb, cfg)
+      sb.world.player:set_zone("Ironforge", "", 1455, 0.5, 0.5)
+    end
+
+    it("the taxi map lists the continent's faction nodes in ID order, NONE for undiscovered", function()
+      install()
+      assert.equal(3, env.NumTaxiNodes())
+      assert.same({ "Stormwind, Elwynn", "Ironforge, Dun Morogh", "Thelsamar, Loch Modan" },
+        { env.TaxiNodeName(1), env.TaxiNodeName(2), env.TaxiNodeName(3) })
+      assert.same({ "NONE", "REACHABLE", "NONE" },
+        { env.TaxiNodeGetType(1), env.TaxiNodeGetType(2), env.TaxiNodeGetType(3) })
+      assert.equal(1, env.GetNumRoutes(2))
+      assert.equal(2, env.TaxiGetNodeSlot(2, 1, false))
+      env.TakeTaxiNode(3)
+      assert.same({ "Thelsamar, Loch Modan" }, sb.taxi_taken)
+    end)
+
+    it("lists only learned nodes when the client hides undiscovered ones", function()
+      install({ start_nodes = { Dwarf = "Ironforge, Dun Morogh" }, start_bind = {},
+        taxi_map = { lists_undiscovered = false } })
+      assert.equal(1, env.NumTaxiNodes())
+      assert.equal("Ironforge, Dun Morogh", env.TaxiNodeName(1))
+    end)
+
+    it("lists nothing on a map the tables don't place on a continent", function()
+      install()
+      sb.world.player:set_zone("Nowhere", "", 9999, 0.5, 0.5)
+      assert.equal(0, env.NumTaxiNodes())
+    end)
+
+    it("UnitOnTaxi reads the player's taxi flag", function()
+      install()
+      assert.is_false(env.UnitOnTaxi("player"))
+      sb.world.player:set_on_taxi(true)
+      assert.is_true(env.UnitOnTaxi("player"))
+    end)
   end)
 
   it("reports no item cooldown and no area names (CompatUtil.lua:231-237, Broker.lua:2559)", function()

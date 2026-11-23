@@ -318,13 +318,15 @@ describe("group.findings", function()
       { signal = "lua-error", message = "boom", stack = "x.lua:1" },
       { signal = "missing-global", global = "FooBar" },
       { signal = "rep-faction-unmet", gid = "G", file = "f", line = 6, action = "C", name = "r", qid = 3, faction = 91 },
+      { signal = "arrival-data-gap", gid = "G", file = "f", line = 7, action = "R", name = "x", reason = "subzone-unknown",
+        key = "G:7" },
     }
     local fs = group.findings({ runlog("Dwarf", "WARRIOR", sigs) })
     local sev = {}
     for _, f in ipairs(fs) do sev[#sev + 1] = f.signal .. ":" .. tostring(f.severity) .. ":" .. tostring(f.expected) end
     table.sort(sev)
     assert.same({
-      "below-level:medium-high:nil", "leftover-quests:low:nil", "lua-error:high:nil",
+      "arrival-data-gap:low:nil", "below-level:medium-high:nil", "leftover-quests:low:nil", "lua-error:high:nil",
       "manual-completion:medium:nil", "manual-completion:nil:true", "missing-global:low:nil",
       "rep-faction-unmet:medium:nil", "stuck:medium:nil",
     }, sev)
@@ -410,5 +412,59 @@ describe("group.findings", function()
     for _, f in ipairs(fs) do got[#got + 1] = f.signal .. "@" .. tostring(f.file) end
     assert.same({ "never-shown-accept@Z.lua", "lua-error@nil", "below-level@B.lua", "did-not-advance@Z.lua",
       "leftover-quests@A.lua", "missing-global@nil", "manual-completion@A.lua" }, got)
+  end)
+
+  it("groups emulation-gap per (reason, key) as an uncounted low notice", function()
+    local report = require("hwc.findings.report")
+    local function eg(key) return { signal = "emulation-gap", gid = "G", file = "f", line = 7, action = "C",
+      name = "The Great Outdoors", reason = "aura-not-emulated", key = key, buff = "1229451" } end
+    local fs = group.findings({
+      runlog("Dwarf", "WARRIOR", { eg("G:7") }),
+      runlog("Gnome", "MAGE", { eg("G:7"), eg("G:9") }),
+    })
+    local gaps = by_signal(fs, "emulation-gap")
+    assert.equal(2, #gaps)
+    for _, f in ipairs(gaps) do
+      assert.equal("low", f.severity)
+      assert.is_false(report.counted(f))
+      assert.is_true(report.is_harness(f))
+      assert.equal("1229451", f.buff)
+    end
+    local names = { gaps[1].name, gaps[2].name }
+    table.sort(names)
+    assert.same({ "aura-not-emulated: G:7", "aura-not-emulated: G:9" }, names)
+  end)
+
+  it("groups arrival-data-gap per (reason, key) across combos, as an uncounted notice", function()
+    local report = require("hwc.findings.report")
+    local function gap(reason, key) return { signal = "arrival-data-gap", reason = reason, key = key, detail = "d" } end
+    local fs = group.findings({
+      runlog("Dwarf", "WARRIOR", { gap("start-node-unknown", "Dwarf"), gap("subzone-unknown", "G:7") }),
+      runlog("Gnome", "MAGE", { gap("start-node-unknown", "Dwarf"), gap("start-node-unknown", "Gnome") }),
+    })
+    local gaps = by_signal(fs, "arrival-data-gap")
+    assert.equal(3, #gaps)
+    local names = {}
+    for _, f in ipairs(gaps) do
+      names[#names + 1] = f.name
+      assert.equal("low", f.severity)
+      assert.is_false(report.counted(f))
+      assert.is_true(report.is_harness(f))
+      assert.equal("d", f.detail)
+    end
+    table.sort(names)
+    assert.same({ "start-node-unknown: Dwarf", "start-node-unknown: Gnome", "subzone-unknown: G:7" }, names)
+    for _, f in ipairs(gaps) do
+      if f.name == "start-node-unknown: Dwarf" then assert.equal(2, #f.combos) end
+    end
+  end)
+
+  it("copies the arrival fields of a did-not-advance", function()
+    local fs = group.findings({ runlog("Dwarf", "WARRIOR", { dna({ named = { name = "n", tz = "t" },
+      arrived = { zone = "z" }, resolved_by = "zone" }) }) })
+    assert.same({ name = "n", tz = "t" }, fs[1].named)
+    assert.same({ zone = "z" }, fs[1].arrived)
+    assert.equal("zone", fs[1].resolved_by)
+    assert.is_nil(fs[1].expected)
   end)
 end)

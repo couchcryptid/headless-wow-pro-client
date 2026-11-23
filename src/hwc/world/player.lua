@@ -95,7 +95,9 @@ function Player.new(cfg, record)
     class = titlecase(cfg.class), class_token = cfg.class:upper(),
     faction = cfg.faction or race.faction, sex = cfg.sex,
     level = Player.START_LEVEL, xp = 0, zone = start[1], subzone = "", map_id = start[2], x = start[3], y = start[4],
-    bind = nil, flight_points = {}, skills = {}, spells = {}, bags = {},
+    -- flight_points: learned taxi node names as Forever's TaxiNodes writes them
+    -- ("Thelsamar, Loch Modan"); on_taxi: what UnitOnTaxi("player") answers.
+    bind = nil, flight_points = {}, on_taxi = false, skills = {}, spells = {}, bags = {}, auras = {},
     _record = record or function() end,
   }, Player)
 end
@@ -178,14 +180,23 @@ function Player:learn_spell(id)
   self._record("learn_spell", { id = id })
 end
 
+-- name: a taxi node name ("Thelsamar, Loch Modan"), never a guide step's text.
 function Player:learn_flight_point(name)
   self.flight_points[name] = true
   self._record("learn_flight_point", { name = name })
 end
 
-function Player:set_bind(name, map_id)
-  self.bind = { name = name, map_id = map_id }
-  self._record("set_bind", { name = name, map_id = map_id })
+-- Boarding (true) or leaving (false) a flight; UnitOnTaxi("player") reads it.
+function Player:set_on_taxi(on)
+  self.on_taxi = on
+  self._record("taxi", { on = on })
+end
+
+-- entry: an inn or start_bind fact { bind, zone, subzone, map_id, x, y, ... }.
+-- GetBindLocation returns bind.name.
+function Player:set_bind(entry)
+  self.bind = { name = entry.bind, map_id = entry.map_id, entry = entry }
+  self._record("set_bind", { name = entry.bind, map_id = entry.map_id })
 end
 
 return Player

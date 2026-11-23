@@ -4,9 +4,13 @@ local catalog = require("hwc.catalog")
 local World = require("hwc.world")
 
 local FIX = "spec/fixtures/catalog"
+-- The fixture Forever tables (spec/fixtures/forever/README.md): Alliance nodes Stormwind (map
+-- 1453), Ironforge (1455) and Thelsamar (1432) on Eastern Kingdoms (1415), plus Horde nodes.
+local FOREVER = "spec/fixtures/forever/installed"
 
--- The fixture QuestieDB Source plus the driver specs' own quests (actions_quests.lua).
-local function new_catalog()
+-- The fixture QuestieDB Source plus the driver specs' own quests (actions_quests.lua), and
+-- the fixture Forever tables unless opts.forever == false (the no-tables variant).
+local function new_catalog(opts)
   local src = dofile(FIX .. "/questie_source.lua")
   local extra = dofile(FIX .. "/actions_quests.lua")
   local quest, xp = src.quest, src.xp
@@ -22,13 +26,15 @@ local function new_catalog()
     if e then return { e[1], e[2] } end
     return xp(self, id)
   end
-  return catalog.load({ catalog = { questie_source = src } })
+  local forever_dir = not (opts and opts.forever == false) and FOREVER or nil
+  return catalog.load({ catalog = { questie_source = src, forever_dir = forever_dir } })
 end
 
 -- Fake engine: fire records { event, args... }, settle reports no limit hit,
--- step/num_steps serve a scripted guide, update_guide counts calls.
+-- step/num_steps serve a scripted guide, update_guide counts calls. sb.taxi_taken stands in
+-- for the sandbox's TakeTaxiNode record (Engine.new keeps sb, engine.lua:63).
 local function fake_engine(steps)
-  local E = { fired = {}, settles = 0, updates = 0, steps = steps or {} }
+  local E = { fired = {}, settles = 0, updates = 0, steps = steps or {}, sb = { taxi_taken = {} } }
   function E:fire(event, ...) self.fired[#self.fired + 1] = { event, ... } end
   function E:settle() self.settles = self.settles + 1; return { ran = 0, now = 0, hit_limit = false } end
   function E:step(i) return self.steps[i] end
@@ -41,8 +47,12 @@ local function step(action, qids, tags, name)
   return { index = 1, action = action, name = name or "x", qids = qids, tags = tags or {} }
 end
 
-local function setup(race, steps)
-  local w = World.new({ race = race or "Dwarf", class = "WARRIOR", faction = "Alliance", sex = 2 }, new_catalog())
+-- opts.forever = false: no Forever tables; opts.arrivals: first-party facts in place of
+-- hwc.world.arrivals.
+local function setup(race, steps, opts)
+  opts = opts or {}
+  local cfg = { race = race or "Dwarf", class = "WARRIOR", faction = "Alliance", sex = 2, arrivals = opts.arrivals }
+  local w = World.new(cfg, new_catalog(opts))
   local E = fake_engine(steps)
   return { engine = E, world = w, cfg = {} }, E, w
 end
@@ -156,7 +166,12 @@ local function scripted_engine(guides, script, start, world)
     local o = s.outcome or { kind = "acted" }
     local out = { kind = o.kind, reason = o.reason, qid = (step.qids or {})[1], events = {}, levels = 0,
       grind = o.grind, level_grind = o.level_grind, elite = false, abstracted_turnin = o.abstracted_turnin, missing = o.missing,
-      missing_any = o.missing_any, arrivals = o.arrivals }
+      missing_any = o.missing_any, arrivals = o.arrivals,
+      -- Travel steps' arrival fields (hwc.driver.flight header).
+      data_gap = o.data_gap, named = o.named, arrived = o.arrived, resolved_by = o.resolved_by,
+      classify = o.classify }
+    E.performed = E.performed or {}
+    E.performed[#E.performed + 1] = step
     -- o.records: world events this step's action leaves behind (quest_accept / quest_turn_in).
     for _, rec in ipairs(o.records or {}) do ctx.world.events[#ctx.world.events + 1] = rec end
     out.settle = E:settle()

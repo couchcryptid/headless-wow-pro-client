@@ -262,7 +262,7 @@
     },
     "folds":{
       "expected":"the client clicked off by design (notes, repair-or-restock stops, guide ends)",
-      "harness":"gaps in this client's WoW API stubs, not guide bugs"
+      "harness":"gaps in this client's WoW API stubs, arrival data or emulation, not guide bugs"
     },
     "severities":{
       "high":"High",
@@ -272,8 +272,10 @@
     },
     "signals":{
       "accept-refused":"Can't be taken",
+      "arrival-data-gap":"Arrival data missing",
       "below-level":"Offered below level",
       "did-not-advance":"Doesn't advance",
+      "emulation-gap":"Not emulated",
       "hidden-use-step":"Use step never shown",
       "leftover-quests":"Left in log",
       "level-check":"Level check reached short",

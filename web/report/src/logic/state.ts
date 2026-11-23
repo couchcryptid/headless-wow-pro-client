@@ -40,7 +40,8 @@ export function fileKey(f: Finding): string {
 
 /** Mirrors Lua's report.is_harness. */
 export function isHarness(f: Finding): boolean {
-  return f.signal === "missing-global" || (f.signal === "lua-error" && f.harness === true);
+  return f.signal === "missing-global" || f.signal === "arrival-data-gap" || f.signal === "emulation-gap"
+    || (f.signal === "lua-error" && f.harness === true);
 }
 
 /** Only counted findings are shown, listed or tallied. */

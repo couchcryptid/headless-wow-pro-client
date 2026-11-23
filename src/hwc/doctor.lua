@@ -179,6 +179,18 @@ local function questie_checks(env, deps, out)
   end
 end
 
+-- The Forever client tables: present, every table parses.
+local function forever_check(env)
+  local root, rerr = home.root({ hwc_home = env.hwc_home, home = env.home })
+  if not root then return check("forever", "fail", rerr) end
+  local fhome = require("hwc.forever.home")
+  local dir, derr = fhome.active_dir(root)
+  if not dir then return check("forever", "fail", derr, "hwc update") end
+  local ok, verr = require("hwc.forever.install").verify(dir)
+  if not ok then return check("forever", "fail", verr, "hwc update") end
+  return check("forever", "ok", fhome.active(root) .. " at " .. dir)
+end
+
 -- The hand-checked objective counts file: optional; every entry must be valid.
 local function check_counts(deps)
   local path = deps.counts_path or require("hwc.config").load({}).catalog.counts
@@ -220,6 +232,7 @@ function M.run(env, deps)
     check_addon(env, deps),
   }
   questie_checks(env, deps, checks)
+  checks[#checks + 1] = forever_check(env)
   checks[#checks + 1] = check_counts(deps)
   local failed = false
   for _, c in ipairs(checks) do
