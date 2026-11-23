@@ -360,7 +360,6 @@ local GAP_CLAUSES = {
   ["destination-unresolved"] = "the step's destination couldn't be resolved to a place",
   ["arrival-unknown"] = "no captured crossing leaves from here",
   ["inn-unknown"] = "no captured inn is near here",
-  ["waypoint-arrival-not-emulated"] = "arrival by waypoint isn't emulated",
   ["subzone-unknown"] = "the landing subzone isn't captured",
   ["taxi-not-taken"] = "the step names a real flight point but the addon never took the flight "
     .. "(for example, this F step wasn't the active row)",

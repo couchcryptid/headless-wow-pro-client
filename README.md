@@ -492,6 +492,16 @@ notice `emulation-gap` (`aura-not-emulated`, keyed `<gid>:<line>`), out of every
 finding. Modelling buff sources (for example `/sit` at a campfire granting Boosted Rest) is a later
 option if these notices show it's worth it (`docs/superpowers/specs/2026-11-23-aura-stub-design.md`).
 
+## TomTom
+
+WoW-Pro expects TomTom on Classic-type clients, so hwc stubs it (`src/hwc/stubs/tomtom.lua`). WoW-Pro
+adds one waypoint per coordinate of the active step's `M` tag. The stub's `OnUpdate` fires WoW-Pro's
+distance callback when the player comes within range, measured in yards on the Forever maps
+(`UiMapAssignment` regions), so `R` steps tagged `CC`/`CS` complete on arrival as in game. An `R`
+walks its `M` coordinates in order and ends on the last. The stub's default settings
+(`cleardistance` 10, arrow arrival 15) are TomTom's defaults, unverified for Forever. Without the
+Forever tables no distance is known, and a stalled `R` is the `tables-missing` notice.
+
 ## World and catalog
 
 The stubs answer from a simulated world (`src/hwc/world/`): the player, bags,
@@ -668,7 +678,7 @@ load.
 |---|---|
 | `LibStub`, `WoWProDB`, `WoWProData`, `TourGuide` | addon/library probes before they're defined |
 | `GetNumQuestLogEntries`, `GetQuestLogTitle` | probed by `WoWPro_CompatUtil.lua`; Forever uses the `C_QuestLog` path |
-| `TomTom`, `Nx` (Carbonite), `Grail` | optional integrations, absent |
+| `Nx` (Carbonite), `Grail` | optional integrations, absent |
 | `PlayerGetTimerunningSeasonID`, `C_Seasons`, `C_PetBattles`, `C_Covenants`, `C_QuestLine`, `C_QuestInfoSystem`, `C_Garrison`, `SetSuperTrackedQuestID` | guarded probes for other flavors |
 | `LE_EXPANSION_*` (12 constants) | feed `guide.expansion` (`WoWPro_GuideRegistry.lua:309`), read only by the guide-list UI |
 | `FACTION_HORDE`, `FACTION_ALLIANCE`, `OKAY`, `CANCEL`, `GameFontNormal`, `GameFontNormalSmall`, `BackdropTemplateMixin` | UI strings, fonts and templates |
@@ -681,8 +691,8 @@ error (a gap in hwc, not an addon bug) only when the name is not the addon's own
 (no `WoWPro` prefix) and not in `boot.EXPECTED_ABSENT` (`src/hwc/boot.lua`): the
 APIs absent in Forever (`GetFactionInfoByID`, checked in game 2026-11-18; the
 retail-only probes above, unverified for Forever), the other addons (`Grail`,
-`Nx`, `TourGuide`) and `LibStub`, which the addon ships. `TomTom` is not in that
-set: the guides expect it installed, so it stays a harness gap until stubbed.
+`Nx`, `TourGuide`) and `LibStub`, which the addon ships. `TomTom` is stubbed (see
+[TomTom](#tomtom)), since the guides expect it installed.
 
 Frame methods the mock doesn't model show up as `Frame:<Name>`, and
 unstubbed namespaced APIs show up as `<Namespace>.<Field>`. The Dwarf Warrior load

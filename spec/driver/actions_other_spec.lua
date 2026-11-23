@@ -29,13 +29,27 @@ describe("actions.perform: travel", function()
     assert.are.equal(1, E.settles)
   end)
 
-  it("takes the first coordinate of a multi-point M and accepts a bare map id Z", function()
+  -- TomTom stub design (2026-11-23): R walks the guide's own waypoints in order, so TomTom
+  -- sees each arrival (CS needs them in order), and ends on the last, the destination.
+  it("R walks a multi-point M in order, settling after each, and ends on the last", function()
     local ctx, E, w = setup()
-    actions.perform(ctx, step("R", {}, { zone = "1455", map = "10.5, 20;30,40" }))
+    actions.perform(ctx, step("R", {}, { zone = "1455", map = "10.5, 20;30,40;50,60" }))
+    local moves = {}
+    for _, e in ipairs(w.events) do
+      if e.kind == "zone" then moves[#moves + 1] = { e.x, e.y } end
+    end
+    assert.are.same({ { 0.105, 0.2 }, { 0.3, 0.4 }, { 0.5, 0.6 } }, moves)
     assert.are.equal(1455, w.player.map_id)
     assert.are.equal(ctx.world.catalog.forever:zone_of_map(1455), w.player.zone)
-    assert.are.equal(0.105, w.player.x)
-    assert.are.equal(0.2, w.player.y)
+    assert.are.same({ 0.5, 0.6 }, { w.player.x, w.player.y })
+    assert.are.equal(3, E.settles)
+    assert.are.same({ "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED" }, names(E)) -- once, on the first move
+  end)
+
+  it("a non-travel step still moves to the first coordinate of a multi-point M", function()
+    local ctx, _, w = setup()
+    actions.perform(ctx, step("N", {}, { zone = "1455", map = "10.5, 20;30,40" }))
+    assert.are.same({ 0.105, 0.2 }, { w.player.x, w.player.y })
   end)
 
   it("R without M (or M|PLAYER|) keeps the previous x/y", function()
@@ -168,14 +182,13 @@ describe("actions.perform: R arrival", function()
     assert.are.equal(ctx.world.catalog.forever:zone_of_map(1455), w.player.zone)
   end)
 
-  it("R with CC carries waypoint-arrival-not-emulated", function()
+  it("R with CC or CS carries no data gap: TomTom's arrival decides", function()
     local ctx = setup()
-    local s = step("R", {}, { zone = "1426; Dun Morogh", waypcomplete = 1 }, "Kharanos")
-    s.gid, s.line = "G", 7
-    local o = actions.perform(ctx, s)
-    assert.are.same({ reason = "waypoint-arrival-not-emulated", key = "G:7" }, o.data_gap)
-    local o0 = actions.perform(ctx, step("R", {}, { zone = "1426; Dun Morogh", waypcomplete = 0 }, "Kharanos"))
-    assert.is_nil(o0.data_gap)
+    for _, wc in ipairs({ 0, 1, 2 }) do
+      local s = step("R", {}, { zone = "1426; Dun Morogh", waypcomplete = wc }, "Kharanos")
+      s.gid, s.line = "G", 7
+      assert.is_nil(actions.perform(ctx, s).data_gap)
+    end
   end)
 
   it("R named after a non-area classifies name-not-an-area", function()
