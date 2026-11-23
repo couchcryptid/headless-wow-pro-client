@@ -500,7 +500,10 @@ distance callback when the player comes within range, measured in yards on the F
 (`UiMapAssignment` regions), so `R` steps tagged `CC`/`CS` complete on arrival as in game. An `R`
 walks its `M` coordinates in order and ends on the last. The stub's default settings
 (`cleardistance` 10, arrow arrival 15) are TomTom's defaults, unverified for Forever. Without the
-Forever tables no distance is known, and a stalled `R` is the `tables-missing` notice.
+Forever tables no distance is known, and a stalled `R` is the `tables-missing` notice. With the
+tables, a `CC`/`CS` `R` that stalls while none of its waypoints can be measured (the player is on
+another map, or the map has no size in the tables) is the `waypoint-unmeasurable` notice, not a guide
+finding: real TomTom would measure across those maps.
 
 ## World and catalog
 

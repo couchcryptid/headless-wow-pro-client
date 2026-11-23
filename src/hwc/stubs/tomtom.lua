@@ -13,15 +13,17 @@
 -- it as busy (in game OnUpdate runs every frame).
 local M = {}
 
+-- The state lives on the world, so the travel action can ask measurable(world).
 local function state(sb)
-  sb.tomtom = sb.tomtom or { waypoints = {}, version = 0 }
-  return sb.tomtom
+  local w = sb.world
+  w.tomtom = w.tomtom or { waypoints = {}, version = 0 }
+  return w.tomtom
 end
 M.state = state
 
-local function yards(sb, wp, p)
+local function yards(world, wp, p)
   if p.map_id ~= wp.map then return nil end
-  local db = sb.world.catalog and sb.world.catalog.forever
+  local db = world.catalog and world.catalog.forever
   if not (db and db.map_yards) then return nil end
   local w, h = db:map_yards(wp.map)
   if not w then return nil end
@@ -32,6 +34,18 @@ end
 local function position(sb)
   local p = sb.world.player
   return tostring(p.map_id) .. ":" .. tostring(p.x) .. ":" .. tostring(p.y)
+end
+
+-- Whether the player can be measured against any current waypoint: nil with no waypoints,
+-- false when none can (another map, a map with no region, or no tables), else true. A CC/CS
+-- step stalled with false is hwc's gap, not the guide's (final review, 2026-11-23).
+function M.measurable(world)
+  local st = world.tomtom
+  if not st or #st.waypoints == 0 then return nil end
+  for _, wp in ipairs(st.waypoints) do
+    if yards(world, wp, world.player) then return true end
+  end
+  return false
 end
 
 function M.pending(sb)
@@ -48,7 +62,7 @@ function M.tick(sb)
   for _, wp in ipairs(st.waypoints) do list[#list + 1] = wp end
   for _, wp in ipairs(list) do
     if not wp.removed then
-      local d = yards(sb, wp, p)
+      local d = yards(sb.world, wp, p)
       local cbs = wp.opts and wp.opts.callbacks and wp.opts.callbacks.distance
       if cbs then
         local ranges = {}
@@ -96,7 +110,7 @@ function M.install(sb)
   function TomTom:GetClosestWaypoint()
     local best, best_d
     for _, wp in ipairs(st.waypoints) do
-      local d = yards(sb, wp, sb.world.player)
+      local d = yards(sb.world, wp, sb.world.player)
       if d and (not best_d or d < best_d) then best, best_d = wp.uid, d end
     end
     return best

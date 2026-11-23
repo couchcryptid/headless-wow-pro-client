@@ -182,6 +182,18 @@ describe("actions.perform: R arrival", function()
     assert.are.equal(ctx.world.catalog.forever:zone_of_map(1455), w.player.zone)
   end)
 
+  -- Final review (2026-11-23): a CC/CS R whose waypoints the TomTom stub can't measure
+  -- (another map, or no region) would stall on hwc's own gap, so it is a notice, not the guide's.
+  it("R with CC/CS whose TomTom waypoints can't be measured carries waypoint-unmeasurable", function()
+    local ctx, _, w = setup()
+    w.tomtom = { waypoints = { { map = 999999, x = 0.5, y = 0.5, inside = {} } }, version = 1 }
+    local s = step("R", {}, { zone = "1426; Dun Morogh", map = "50,50", waypcomplete = 2 }, "Kharanos")
+    s.gid, s.line = "G", 7
+    assert.are.same({ reason = "waypoint-unmeasurable", key = "G:7" }, actions.perform(ctx, s).data_gap)
+    w.tomtom.waypoints[2] = { map = 1426, x = 0.5, y = 0.5, inside = {} }
+    assert.is_nil(actions.perform(ctx, s).data_gap)
+  end)
+
   it("R with CC or CS carries no data gap: TomTom's arrival decides", function()
     local ctx = setup()
     for _, wc in ipairs({ 0, 1, 2 }) do

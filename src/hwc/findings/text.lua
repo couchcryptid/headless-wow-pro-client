@@ -361,6 +361,8 @@ local GAP_CLAUSES = {
   ["arrival-unknown"] = "no captured crossing leaves from here",
   ["inn-unknown"] = "no captured inn is near here",
   ["subzone-unknown"] = "the landing subzone isn't captured",
+  ["waypoint-unmeasurable"] = "hwc couldn't measure the distance to the step's waypoints "
+    .. "(another map, or a map with no size in the tables)",
   ["taxi-not-taken"] = "the step names a real flight point but the addon never took the flight "
     .. "(for example, this F step wasn't the active row)",
   ["arrival-data-mismatch"] = "two arrival data tables disagree",

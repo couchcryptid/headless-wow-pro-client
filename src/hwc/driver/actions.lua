@@ -53,6 +53,7 @@ local flight = require("hwc.driver.flight")
 local crossing = require("hwc.driver.crossing")
 local hearth = require("hwc.driver.hearth")
 local arrival = require("hwc.driver.arrival")
+local tomtom = require("hwc.stubs.tomtom")
 
 local actions = {}
 
@@ -672,6 +673,12 @@ local function perform_travel(ctx, step, out)
       settle(ctx, out)
       p:set_zone(p.zone, p.subzone, p.map_id, points[i][1], points[i][2])
     end
+  end
+  -- CC/CS completes only through TomTom's distance callback: when the stub can't measure
+  -- any of the step's waypoints, a stall is hwc's gap, not the guide's (final review).
+  local wc = tags.waypcomplete
+  if (wc == 1 or wc == 2) and tomtom.measurable(ctx.world) == false then
+    out.data_gap = { reason = "waypoint-unmeasurable", key = arrival.step_key(step) }
   end
   credit_arrival(ctx, step, out)
 end
