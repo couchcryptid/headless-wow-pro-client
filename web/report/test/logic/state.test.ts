@@ -8,6 +8,8 @@ describe("state", () => {
   it("isHarness holds arrival data gaps, out of the counts", () => {
     expect(isHarness({ signal: "arrival-data-gap" } as never)).toBe(true);
     expect(counted({ signal: "arrival-data-gap", severity: "low" } as never)).toBe(false);
+    expect(isHarness({ signal: "emulation-gap" } as never)).toBe(true);
+    expect(counted({ signal: "emulation-gap", severity: "low" } as never)).toBe(false);
   });
 
   it("defaultState turns every option on", () => {

@@ -35,6 +35,7 @@ describe("text constants", function()
       ["missing-global"] = "Missing global",
       ["rep-faction-unmet"] = "REP faction never met",
       ["arrival-data-gap"] = "Arrival data missing",
+      ["emulation-gap"] = "Not emulated",
     }, text.SIGNALS)
   end)
   it("labels every early stop reason, and not the normal end", function()
@@ -624,6 +625,14 @@ describe("arrival finding text (spec section 10)", function()
       .. "already knows, so no new flight path was discovered and the client clicked the step off.",
       text.sentence(dnaf("flight-point-already-known", { action = "f", named = { name = "Ironforge, Dun Morogh" } }),
         {}))
+  end)
+  it("words an emulation-gap", function()
+    local f = { signal = "emulation-gap", reasons = { "aura-not-emulated" }, buff = "1229451",
+      name = "aura-not-emulated: G:7" }
+    assert.equal("Not emulated", text.SIGNALS["emulation-gap"])
+    assert.equal("Not emulated: aura-not-emulated: G:7", text.title(f))
+    assert.equal("hwc doesn't emulate auras, so the buff this step checks (BUFF 1229451) never appears; "
+      .. "the client clicked the step off.", text.sentence(f, {}))
   end)
   it("words the gap reasons", function()
     assert.equal("The Forever client tables aren't installed, so arrival steps aren't judged. Run hwc update.",

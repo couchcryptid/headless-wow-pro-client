@@ -32,6 +32,7 @@ Engine.TAG_KEYS = {
   "targetzone", -- TZ  :484 (Ruling Y: where F/b/P land)
   "map",       -- M    :481
   "waypcomplete", -- CC/CS/CN :486-488 (1, 2, 0; the R arrival rule reads it)
+  "buff",      -- BUFF :535 (a stalled BUFF step is an emulation-gap notice)
   "level",     -- LVL  :547
   "elite",     -- ELITE:516
   "noncombat", -- NC   :521

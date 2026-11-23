@@ -63,6 +63,7 @@ text.SIGNALS = {
   ["missing-global"] = "Missing global",
   ["rep-faction-unmet"] = "REP faction never met",
   ["arrival-data-gap"] = "Arrival data missing",
+  ["emulation-gap"] = "Not emulated",
 }
 
 -- Why a character's run stopped early: every stop reason driver/run.lua passes
@@ -341,6 +342,8 @@ function text.title(f)
     return "REP step checks " .. checks .. ", which this character never met"
   elseif s == "arrival-data-gap" then
     return "No arrival data: " .. tostring(f.name or "")
+  elseif s == "emulation-gap" then
+    return "Not emulated: " .. tostring(f.name or "")
   elseif s == "lua-error" then
     local first = tostring(f.message or f.name or ""):match("^[^\n]*")
     if #first > 80 then first = first:sub(1, 80) .. "…" end
@@ -558,6 +561,10 @@ local function clauses(f, ctx)
       "Reputation from kills and encounters isn't modelled; if the guide meant another faction, the id is wrong."
   elseif s == "arrival-data-gap" then
     return gap_sentence(f)
+  elseif s == "emulation-gap" then
+    -- aura-not-emulated is the only reason (aura stub design, 2026-11-23).
+    return "hwc doesn't emulate auras, so the buff this step checks (BUFF " .. tostring(f.buff or "?")
+      .. ") never appears; the client clicked the step off."
   elseif s == "lua-error" then
     return "WoWPro raised an error during the run.", "The message and stack are in the detail below."
   end

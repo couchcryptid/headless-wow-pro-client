@@ -1680,3 +1680,49 @@ describe("driver.run: arrival signals", function()
     assert.same({ "G1", 101 }, { E.performed[1].gid, E.performed[1].line })
   end)
 end)
+
+-- Aura stub design (2026-11-23): hwc models no auras, so a BUFF step that didn't advance is
+-- the harness notice emulation-gap (aura-not-emulated), never a guide finding.
+describe("driver.run: emulation-gap for BUFF steps", function()
+  local function world()
+    local w = fx.fake_world()
+    w.catalog.forever = {}
+    w.catalog.arrival_problems = function() return {} end
+    w.player.race_key = "Dwarf"
+    return w
+  end
+  local function stalled(step) return drive(one_guide({ step }), {}, nil, world()) end
+
+  it("a stalled C step with a BUFF tag records emulation-gap, not did-not-advance", function()
+    local log, E = stalled({ action = "C", name = "The Great Outdoors", qids = { 96608 },
+      tags = { buff = "1229451" }, outcome = { kind = "acted", qid = 96608 } })
+    assert.same({}, signals(log, "did-not-advance"))
+    local g = signals(log, "emulation-gap")
+    assert.equal(1, #g)
+    assert.same({ "aura-not-emulated", "G1:101", "1229451", "C", 96608 },
+      { g[1].reason, g[1].key, g[1].buff, g[1].action, g[1].qid })
+    assert.same({ "G1:1", "G1:2" }, E.manual) -- still clicked off once
+  end)
+
+  it("an arrival gap wins over the BUFF tag (one notice)", function()
+    local log = stalled({ action = "F", name = "Stormwind", tags = { buff = "1" }, outcome = { kind = "acted",
+      data_gap = { reason = "destination-unresolved", key = "Stormwind" }, named = { name = "Stormwind" } } })
+    assert.equal(1, #signals(log, "arrival-data-gap"))
+    assert.same({}, signals(log, "emulation-gap"))
+  end)
+
+  it("an expected manual step with a BUFF tag stays manual-completion", function()
+    local log = stalled({ action = "N", name = "Note", tags = { buff = "1" }, outcome = { kind = "acted" } })
+    local n = 0
+    for _, m in ipairs(signals(log, "manual-completion")) do if m.action == "N" then n = n + 1 end end
+    assert.equal(1, n)
+    assert.same({}, signals(log, "emulation-gap"))
+  end)
+
+  it("a refusal already signalled gets no emulation-gap", function()
+    local log = stalled({ action = "A", name = "Q", qids = { 7 }, tags = { buff = "1" },
+      outcome = { kind = "refused", reason = "race", qid = 7 } })
+    assert.equal(1, #signals(log, "accept-refused"))
+    assert.same({}, signals(log, "emulation-gap"))
+  end)
+end)

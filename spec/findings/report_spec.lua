@@ -189,7 +189,7 @@ describe("labels and notes for wording the markdown carried", function()
   it("labels severities and the folds", function()
     local labels = report.build({}, {}).labels
     assert.same({ high = "High", ["medium-high"] = "Medium-high", medium = "Medium", low = "Low" }, labels.severities)
-    assert.same({ harness = "gaps in this client's WoW API stubs or arrival data, not guide bugs",
+    assert.same({ harness = "gaps in this client's WoW API stubs, arrival data or emulation, not guide bugs",
       expected = "the client clicked off by design (notes, repair-or-restock stops, guide ends)" }, labels.folds)
   end)
 

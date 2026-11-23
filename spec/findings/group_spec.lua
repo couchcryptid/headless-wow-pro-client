@@ -414,6 +414,27 @@ describe("group.findings", function()
       "leftover-quests@A.lua", "missing-global@nil", "manual-completion@A.lua" }, got)
   end)
 
+  it("groups emulation-gap per (reason, key) as an uncounted low notice", function()
+    local report = require("hwc.findings.report")
+    local function eg(key) return { signal = "emulation-gap", gid = "G", file = "f", line = 7, action = "C",
+      name = "The Great Outdoors", reason = "aura-not-emulated", key = key, buff = "1229451" } end
+    local fs = group.findings({
+      runlog("Dwarf", "WARRIOR", { eg("G:7") }),
+      runlog("Gnome", "MAGE", { eg("G:7"), eg("G:9") }),
+    })
+    local gaps = by_signal(fs, "emulation-gap")
+    assert.equal(2, #gaps)
+    for _, f in ipairs(gaps) do
+      assert.equal("low", f.severity)
+      assert.is_false(report.counted(f))
+      assert.is_true(report.is_harness(f))
+      assert.equal("1229451", f.buff)
+    end
+    local names = { gaps[1].name, gaps[2].name }
+    table.sort(names)
+    assert.same({ "aura-not-emulated: G:7", "aura-not-emulated: G:9" }, names)
+  end)
+
   it("groups arrival-data-gap per (reason, key) across combos, as an uncounted notice", function()
     local report = require("hwc.findings.report")
     local function gap(reason, key) return { signal = "arrival-data-gap", reason = reason, key = key, detail = "d" } end

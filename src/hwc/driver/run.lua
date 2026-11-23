@@ -829,8 +829,11 @@ function Driver:iterate()
     -- A refused step whose refusal is already a signal (accept-refused, log-full,
     -- orphan-turnin) gets no second one for the same click. An arrival step whose stall
     -- is hwc's own missing data is an arrival-data-gap notice instead (spec section 10).
+    -- Otherwise a step with a BUFF tag is the emulation-gap notice aura-not-emulated: hwc
+    -- models no auras, so the buff it checks never appears (aura stub design, 2026-11-23).
     local expected = actions.expects_manual(cur)
     local gap = not expected and not out.explained and self:arrival_gap(cur, out)
+    local buff = cur.tags and cur.tags.buff
     local sig
     if expected then
       sig = self:signal("manual-completion", cur,
@@ -838,6 +841,10 @@ function Driver:iterate()
     elseif gap then
       self:signal("arrival-data-gap", cur, { qid = out.qid, reason = gap.reason, key = gap.key, outcome = out.kind,
         named = out.named, arrived = out.arrived, resolved_by = out.resolved_by })
+      out.explained = true
+    elseif buff and not out.explained then
+      self:signal("emulation-gap", cur, { qid = out.qid, reason = "aura-not-emulated",
+        key = arrival.step_key(cur, self.gid), buff = tostring(buff), outcome = out.kind })
       out.explained = true
     elseif not out.explained then
       sig = self:signal("did-not-advance", cur, { qid = out.qid, reason = stall_reason(out), outcome = out.kind,
