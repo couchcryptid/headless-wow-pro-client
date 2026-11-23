@@ -680,8 +680,7 @@ load.
 | `GetNumQuestLogEntries`, `GetQuestLogTitle` | probed by `WoWPro_CompatUtil.lua`; Forever uses the `C_QuestLog` path |
 | `Nx` (Carbonite), `Grail` | optional integrations, absent |
 | `PlayerGetTimerunningSeasonID`, `C_Seasons`, `C_PetBattles`, `C_Covenants`, `C_QuestLine`, `C_QuestInfoSystem`, `C_Garrison`, `SetSuperTrackedQuestID` | guarded probes for other flavors |
-| `LE_EXPANSION_*` (12 constants) | feed `guide.expansion` (`WoWPro_GuideRegistry.lua:309`), read only by the guide-list UI |
-| `FACTION_HORDE`, `FACTION_ALLIANCE`, `OKAY`, `CANCEL`, `GameFontNormal`, `GameFontNormalSmall`, `BackdropTemplateMixin` | UI strings, fonts and templates |
+| `UnitAura`, `GetSpellInfo` | probed by `WoWPro_CompatUtil.lua`; Forever uses `C_UnitAuras` (no `UnitAura`, checked in game 2026-11-23) and `C_Spell` |
 | `GetItemCooldown` | probed by `WoWPro_CompatUtil.lua:232`; Forever uses `C_Container.GetItemCooldown` |
 | `issecretvalue` | guarded probe (`WoWPro_AutoComplete.lua:118`, `:131`, `:432`) |
 | `GetBindLocation` | guarded probe (`WoWPro_Events.lua:249`). The hearth location is player state for a later plan, so `WoWProDB.char.hearth` stays unset. |
@@ -689,10 +688,15 @@ load.
 A Lua error that indexes or calls one of these nil names counts as a harness
 error (a gap in hwc, not an addon bug) only when the name is not the addon's own
 (no `WoWPro` prefix) and not in `boot.EXPECTED_ABSENT` (`src/hwc/boot.lua`): the
-APIs absent in Forever (`GetFactionInfoByID`, checked in game 2026-11-18; the
+APIs absent in Forever (`GetFactionInfoByID`, checked in game 2026-11-18; `UnitAura`,
+checked 2026-11-23; the
 retail-only probes above, unverified for Forever), the other addons (`Grail`,
 `Nx`, `TourGuide`) and `LibStub`, which the addon ships. `TomTom` is stubbed (see
 [TomTom](#tomtom)), since the guides expect it installed.
+
+The client's interface globals (`CANCEL`, `OKAY`, `FACTION_ALLIANCE`, `FACTION_HORDE`,
+`GameFontNormal`, `GameFontNormalSmall`, `BackdropTemplateMixin` and `LE_EXPANSION_*` as 0 to 11,
+unverified for Forever) are stubbed in `src/hwc/stubs/core.lua`, so they no longer appear.
 
 Frame methods the mock doesn't model show up as `Frame:<Name>`, and
 unstubbed namespaced APIs show up as `<Namespace>.<Field>`. The Dwarf Warrior load

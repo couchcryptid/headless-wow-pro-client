@@ -95,7 +95,9 @@ local HARNESS = "src/hwc/"
 -- the addon's behaviour, not a harness gap. TomTom is deliberately left out: the
 -- guides expect it installed, so its absence is a harness gap until it is stubbed.
 M.EXPECTED_ABSENT = {
-  -- Absent in the Forever client: GetFactionInfoByID by in-game check, 2026-11-18.
+  -- Absent in the Forever client: GetFactionInfoByID by in-game check, 2026-11-18;
+  -- UnitAura by in-game check, 2026-11-23 (C_UnitAuras is stubbed instead).
+  UnitAura = true,
   -- The rest are retail-only APIs WoWPro probes (unverified for Forever).
   GetFactionInfoByID = true, GetQuestLogTitle = true, GetNumQuestLogEntries = true,
   C_PetBattles = true, C_Covenants = true, C_Garrison = true, C_Seasons = true,

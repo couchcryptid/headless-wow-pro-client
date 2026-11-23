@@ -39,6 +39,22 @@ describe("stubs", function()
     assert.is_nil(env.C_UnitAuras.GetAuraDataByIndex("player", 1, "MAW"))
   end)
 
+  it("defines the client's interface strings, fonts and expansion constants (TomTom stub design §5)", function()
+    assert.same({ "Cancel", "Okay", "Alliance", "Horde" },
+      { env.CANCEL, env.OKAY, env.FACTION_ALLIANCE, env.FACTION_HORDE })
+    assert.equal(0, env.LE_EXPANSION_CLASSIC)
+    assert.equal(1, env.LE_EXPANSION_BURNING_CRUSADE)
+    assert.equal(10, env.LE_EXPANSION_WAR_WITHIN)
+    assert.equal(11, env.LE_EXPANSION_MIDNIGHT)
+    assert.equal("table", type(env.GameFontNormal))
+    assert.equal("table", type(env.GameFontNormalSmall))
+    assert.equal("table", type(env.BackdropTemplateMixin))
+  end)
+
+  it("expects UnitAura absent in Forever (in game, 2026-11-23)", function()
+    assert.is_true(require("hwc.boot").EXPECTED_ABSENT.UnitAura)
+  end)
+
   it("IsPlayerSpell coerces the string spell id the engine passes (Broker.lua:3332-3340)", function()
     sb.world.player:learn_spell(3273)
     assert.is_true(env.IsPlayerSpell("3273"))

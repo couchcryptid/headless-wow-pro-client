@@ -295,6 +295,22 @@ function M.install(sb, cfg)
     end,
   })
 
+  -- Interface globals every client defines (TomTom stub design §5, 2026-11-23). WoWPro only
+  -- reads them for UI: button labels (WoWPro_Broker.lua:825-826), zone suffixes for maps 943
+  -- and 1044 (WoWPro_Zones.lua:545-546), font objects and the backdrop template choice
+  -- (WoWPro_Frames.lua:1008), and guide.expansion for the guide list
+  -- (WoWPro_GuideRegistry.lua:18-30). LE_EXPANSION_* are the client's enum order 0..11,
+  -- unverified for Forever.
+  env.CANCEL, env.OKAY = "Cancel", "Okay"
+  env.FACTION_ALLIANCE, env.FACTION_HORDE = "Alliance", "Horde"
+  env.GameFontNormal, env.GameFontNormalSmall = {}, {}
+  env.BackdropTemplateMixin = {}
+  for i, name in ipairs({ "CLASSIC", "BURNING_CRUSADE", "WRATH_OF_THE_LICH_KING", "CATACLYSM",
+    "MISTS_OF_PANDARIA", "WARLORDS_OF_DRAENOR", "LEGION", "BATTLE_FOR_AZEROTH", "SHADOWLANDS",
+    "DRAGONFLIGHT", "WAR_WITHIN", "MIDNIGHT" }) do
+    env["LE_EXPANSION_" .. name] = i - 1
+  end
+
   -- Forever has no UnitAura and has C_UnitAuras.GetAuraDataByIndex (user, in game, 2026-11-23), so
   -- WoWPro.UnitAura (WoWPro_CompatUtil.lua:385-400) always takes this branch; UnitAura stays undefined.
   -- WoWPro.AuraScan (WoWPro_AutoComplete.lua:126-145) walks index 1.. per filter until nil, for the
