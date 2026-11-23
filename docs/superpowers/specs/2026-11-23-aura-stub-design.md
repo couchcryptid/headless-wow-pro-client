@@ -44,7 +44,9 @@ the addon always takes the `C_UnitAuras` branch, and `UnitAura` stays absent.
    `applications`, `spellId`, ...), else nil. `world.player.auras` starts `{}`; no
    action adds to it. `UnitAura` is not defined.
 2. `buff` joins `Engine.TAG_KEYS` (Parser `DefineTag("BUFF","buff",...)`, `:535`).
-3. A step with a `buff` tag that didn't advance gets the harness notice reason
+3. A step with a `buff` tag that didn't advance, and has no stall reason of its own (a
+   refusal such as `not-in-log`, or an arrival mismatch, stays a `did-not-advance` so the
+   notice never hides a guide bug; final review, 2026-11-23), gets the harness notice reason
    `aura-not-emulated`, key `<gid>:<line>`, in place of `did-not-advance`, out of every
    count like the arrival notices. Wording: "the buff the step checks isn't emulated".
    *My call:* it is a new harness signal `emulation-gap`, not an `arrival-data-gap`

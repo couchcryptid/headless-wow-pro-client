@@ -1719,6 +1719,23 @@ describe("driver.run: emulation-gap for BUFF steps", function()
     assert.same({}, signals(log, "emulation-gap"))
   end)
 
+  it("a BUFF step with a guide stall reason stays a did-not-advance with that reason", function()
+    local log = stalled({ action = "T", name = "Q", qids = { 7 }, tags = { buff = "1" },
+      outcome = { kind = "refused", reason = "incomplete", qid = 7 } })
+    local d = signals(log, "did-not-advance")
+    assert.equal(1, #d)
+    assert.equal("incomplete", d[1].reason)
+    assert.same({}, signals(log, "emulation-gap"))
+    log = stalled({ action = "T", name = "Q", qids = { 7 }, tags = { buff = "1" },
+      outcome = { kind = "refused", reason = "not-in-log", qid = 7 } })
+    assert.equal(1, #signals(log, "orphan-turnin"))
+    assert.same({}, signals(log, "emulation-gap"))
+    log = stalled({ action = "R", name = "Kharanos", tags = { buff = "1" }, outcome = { kind = "acted",
+      named = { name = "Kharanos" }, arrived = { zone = "Dun Morogh", map_id = 1426 } } })
+    assert.equal("arrival-mismatch", signals(log, "did-not-advance")[1].reason)
+    assert.same({}, signals(log, "emulation-gap"))
+  end)
+
   it("a refusal already signalled gets no emulation-gap", function()
     local log = stalled({ action = "A", name = "Q", qids = { 7 }, tags = { buff = "1" },
       outcome = { kind = "refused", reason = "race", qid = 7 } })
