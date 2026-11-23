@@ -299,8 +299,8 @@ function M.install(sb, cfg)
   -- reads them for UI: button labels (WoWPro_Broker.lua:825-826), zone suffixes for maps 943
   -- and 1044 (WoWPro_Zones.lua:545-546), font objects and the backdrop template choice
   -- (WoWPro_Frames.lua:1008), and guide.expansion for the guide list
-  -- (WoWPro_GuideRegistry.lua:18-30). LE_EXPANSION_* are the client's enum order 0..11,
-  -- unverified for Forever.
+  -- (WoWPro_GuideRegistry.lua:18-30). LE_EXPANSION_* are the client's enum order 0..11;
+  -- LE_EXPANSION_CLASSIC == 0 checked in game (2026-11-23), the rest unverified for Forever.
   env.CANCEL, env.OKAY = "Cancel", "Okay"
   env.FACTION_ALLIANCE, env.FACTION_HORDE = "Alliance", "Horde"
   env.GameFontNormal, env.GameFontNormalSmall = {}, {}

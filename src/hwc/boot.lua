@@ -98,10 +98,10 @@ M.EXPECTED_ABSENT = {
   -- Absent in the Forever client, by in-game check: GetFactionInfoByID (2026-11-18);
   -- UnitAura (2026-11-23, C_UnitAuras is stubbed instead); C_Seasons, GetItemCooldown
   -- (C_Container.GetItemCooldown is stubbed instead), GetQuestLogTitle and
-  -- SetSuperTrackedQuestID (2026-11-23).
+  -- SetSuperTrackedQuestID (2026-11-23); GetSpellInfo (C_Spell.GetSpellInfo is stubbed instead)
+  -- and GetNumQuestLogEntries (C_QuestLog's is stubbed instead) (2026-11-23).
   UnitAura = true, GetFactionInfoByID = true, C_Seasons = true, GetItemCooldown = true,
-  GetQuestLogTitle = true, SetSuperTrackedQuestID = true,
-  -- Unverified for Forever.
+  GetQuestLogTitle = true, SetSuperTrackedQuestID = true, GetSpellInfo = true,
   GetNumQuestLogEntries = true,
   -- Present in Forever (in-game check, 2026-11-23), so deliberately not listed: a nil one
   -- in hwc is a harness gap. C_QuestInfoSystem, C_QuestLine, PlayerGetTimerunningSeasonID,

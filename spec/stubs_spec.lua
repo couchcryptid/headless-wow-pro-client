@@ -68,7 +68,9 @@ describe("stubs", function()
 
   it("expects only the globals the in-game dump found missing (2026-11-23)", function()
     local absent = require("hwc.boot").EXPECTED_ABSENT
-    for _, name in ipairs({ "C_Seasons", "GetItemCooldown", "GetQuestLogTitle", "SetSuperTrackedQuestID" }) do
+    assert.equal(0, env.LE_EXPANSION_CLASSIC)
+    for _, name in ipairs({ "C_Seasons", "GetItemCooldown", "GetQuestLogTitle", "SetSuperTrackedQuestID",
+                            "GetSpellInfo", "GetNumQuestLogEntries" }) do
       assert.is_true(absent[name], name)
     end
     for _, name in ipairs({ "C_QuestInfoSystem", "C_QuestLine", "PlayerGetTimerunningSeasonID",
