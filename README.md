@@ -483,6 +483,15 @@ Date every entry in its `checked` field, for example `user, 2026-11-19: ...`. Tw
 to capture: the Skyborne skycutter departures from Valanaar's harbour, Alliance to Dalaran (from 64.9, 80.9)
 and Horde to Thunder Bluff (from 58.2, 79.5).
 
+## Auras
+
+Forever has no `UnitAura` and has `C_UnitAuras.GetAuraDataByIndex` (checked in game, 2026-11-23), so
+hwc stubs only the latter. It answers from the player's aura list, which starts empty and which nothing
+in hwc fills: hwc models no buffs. A step with a `BUFF` tag that doesn't advance is therefore the harness
+notice `emulation-gap` (`aura-not-emulated`, keyed `<gid>:<line>`), out of every count, never a guide
+finding. Modelling buff sources (for example `/sit` at a campfire granting Boosted Rest) is a later
+option if these notices show it's worth it (`docs/superpowers/specs/2026-11-23-aura-stub-design.md`).
+
 ## World and catalog
 
 The stubs answer from a simulated world (`src/hwc/world/`): the player, bags,
