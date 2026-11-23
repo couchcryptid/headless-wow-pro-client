@@ -97,7 +97,7 @@ function Player.new(cfg, record)
     level = Player.START_LEVEL, xp = 0, zone = start[1], subzone = "", map_id = start[2], x = start[3], y = start[4],
     -- flight_points: learned taxi node names as Forever's TaxiNodes writes them
     -- ("Thelsamar, Loch Modan"); on_taxi: what UnitOnTaxi("player") answers.
-    bind = nil, flight_points = {}, on_taxi = false, skills = {}, spells = {}, bags = {},
+    bind = nil, flight_points = {}, on_taxi = false, skills = {}, spells = {}, bags = {}, auras = {},
     _record = record or function() end,
   }, Player)
 end

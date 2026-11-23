@@ -295,6 +295,29 @@ function M.install(sb, cfg)
     end,
   })
 
+  -- Forever has no UnitAura and has C_UnitAuras.GetAuraDataByIndex (user, in game, 2026-11-23), so
+  -- WoWPro.UnitAura (WoWPro_CompatUtil.lua:385-400) always takes this branch; UnitAura stays undefined.
+  -- WoWPro.AuraScan (WoWPro_AutoComplete.lua:126-145) walks index 1.. per filter until nil, for the
+  -- BUFF tag (Broker.lua:3481-3496, AutoCompleteBuff). Answers from world.player.auras, entries
+  -- { name, icon, applications, spellId, harmful }; nothing in hwc adds one (aura stub design, approach A).
+  -- HARMFUL lists the harmful entries, HELPFUL the rest; any other unit or filter answers nil.
+  env.C_UnitAuras = trap(sb, "C_UnitAuras", {
+    GetAuraDataByIndex = function(unit, index, filter)
+      index = tonumber(index)
+      if unit ~= "player" or not index or (filter ~= "HELPFUL" and filter ~= "HARMFUL") then return nil end
+      local want, n = filter == "HARMFUL", 0
+      for _, a in ipairs(sb.world.player.auras or {}) do
+        if (a.harmful == true) == want then
+          n = n + 1
+          if n == index then
+            return { name = a.name, icon = a.icon, applications = a.applications or 0, spellId = a.spellId }
+          end
+        end
+      end
+      return nil
+    end,
+  })
+
   -- WoWPro_CompatUtil.lua:231-237 (GetItemCooldown falls back to C_Container.GetItemCooldown), read by
   -- the U-step item button (RowUpdate.lua:555). The world models no cooldowns: start 0, duration 0, enabled true.
   env.C_Container = trap(sb, "C_Container", {

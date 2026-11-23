@@ -23,6 +23,22 @@ describe("stubs", function()
     assert.equal("New flight path discovered!", env.ERR_NEWTAXIPATH)
   end)
 
+  it("C_UnitAuras.GetAuraDataByIndex answers from player.auras; no UnitAura (Forever, user 2026-11-23)", function()
+    assert.is_nil(rawget(env, "UnitAura"))
+    assert.is_nil(env.C_UnitAuras.GetAuraDataByIndex("player", 1, "HELPFUL"))
+    sb.world.player.auras = { { name = "Boosted Rest", spellId = 1229451, applications = 0 },
+      { name = "Burning", spellId = 7, harmful = true } }
+    local a = env.C_UnitAuras.GetAuraDataByIndex("player", 1, "HELPFUL")
+    assert.same({ "Boosted Rest", 1229451 }, { a.name, a.spellId })
+    assert.equal("Burning", env.C_UnitAuras.GetAuraDataByIndex("player", 1, "HARMFUL").name)
+    assert.is_nil(env.C_UnitAuras.GetAuraDataByIndex("player", 2, "HARMFUL"))
+    assert.is_nil(env.C_UnitAuras.GetAuraDataByIndex("player", 2, "HELPFUL"))
+    assert.is_nil(env.C_UnitAuras.GetAuraDataByIndex("player", 0, "HELPFUL"))
+    assert.is_nil(env.C_UnitAuras.GetAuraDataByIndex("target", 1, "HELPFUL"))
+    assert.is_nil(env.C_UnitAuras.GetAuraDataByIndex("player", "x", "HELPFUL"))
+    assert.is_nil(env.C_UnitAuras.GetAuraDataByIndex("player", 1, "MAW"))
+  end)
+
   it("IsPlayerSpell coerces the string spell id the engine passes (Broker.lua:3332-3340)", function()
     sb.world.player:learn_spell(3273)
     assert.is_true(env.IsPlayerSpell("3273"))
