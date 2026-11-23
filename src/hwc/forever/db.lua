@@ -51,7 +51,7 @@ end
 
 function DB:_index(t)
   self._maps, self._area_name, self._first_assign, self._area_map = {}, {}, {}, {}
-  self._names = {}
+  self._names, self._yards = {}, {}
   for _, m in ipairs(t.UiMap) do
     self._maps[m.ID] = m
     self._names[m.Name_lang] = true
@@ -66,8 +66,21 @@ function DB:_index(t)
   for _, a in ipairs(t.UiMapAssignment) do
     if self._first_assign[a.UiMapID] == nil then self._first_assign[a.UiMapID] = a end
     if a.AreaID ~= 0 and self._area_map[a.AreaID] == nil then self._area_map[a.AreaID] = a.UiMapID end
+    local w, h = math.abs(a.Region_4 - a.Region_1), math.abs(a.Region_3 - a.Region_0)
+    local best = self._yards[a.UiMapID]
+    if w > 0 and h > 0 and (not best or w * h > best[1] * best[2]) then self._yards[a.UiMapID] = { w, h } end
   end
   self._taxi = t.TaxiNodes
+end
+
+-- A map's width and height in yards (TomTom stub design, 2026-11-23): the largest
+-- UiMapAssignment region assigned to it, taken as the whole map (the installed JSON keeps
+-- no UiMin/UiMax, as the node placement assumes). Width spans Region_1..4 (the map's x),
+-- height Region_0..3 (its y). nil when the map has no region.
+function DB:map_yards(ui_map_id)
+  local r = self._yards[ui_map_id]
+  if r then return r[1], r[2] end
+  return nil
 end
 
 function DB:continent_of(ui_map_id)
