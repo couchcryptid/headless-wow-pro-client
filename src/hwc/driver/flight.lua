@@ -6,13 +6,14 @@
 -- spec section 8) and settle(ctx, out) (out.settle keeps the last result, hit_limit OR-ed).
 --
 -- Outcome fields set here (read by the driver):
---   out.reason    guide reason: "no-taxi-node" | "flight-point-undiscovered"
+--   out.reason    guide reason: "no-taxi-node" | "flight-point-undiscovered" (F),
+--                 "flight-point-already-known" (f)
 --   out.data_gap  { reason, key }: hwc's own data is missing ("tables-missing", "fp-unknown",
 --                 "start-node-unknown", "destination-unresolved", "arrival-unknown" for a
 --                 departure map on no continent), or "taxi-not-taken": the
 --                 addon never tried to pick a node it would have matched (ruling R12). The
 --                 first gap recorded wins.
---   out.named     { name, tz }: what the step asks for (F)
+--   out.named     { name, tz }: what the step asks for (F); { name } the known node (f)
 --   out.arrived   { zone, subzone, map_id }: where the player landed; subzone nil when no
 --                 capture says what it is (ruling R4)
 --   out.resolved_by "loose" when the landing came from arrival.loose (spec section 9)
@@ -171,14 +172,15 @@ end
 -- arrival.RADIUS). This stands in for spec section 4's "nearest QuestieDB flight master":
 -- QuestieDB has no index by NPC flag.
 --
--- Found: learn the real node name. A new node fires UI_INFO_MESSAGE(0, ERR_NEWTAXIPATH),
+-- Found and new: learn the real node name and fire UI_INFO_MESSAGE(0, ERR_NEWTAXIPATH),
 -- which AutoCompleteGetFP reads as `_event, _idx, msg` (WoWPro_Events.lua:915-918,
--- WoWPro_AutoComplete.lua:94-112), then TAXIMAP_OPENED, whose RecordTaxiLocations
--- (WoWPro_AutoComplete.lua:9-29) completes the f step when its name is a known location.
--- The discovery message goes first: AutoCompleteGetFP completes the first visible
--- uncompleted f row of up to 15, so after RecordTaxiLocations has completed the step it
--- could take a later f row. The in-game order is not confirmed for Forever. A known node
--- gives no discovery message, as in game.
+-- WoWPro_AutoComplete.lua:94-112) and completes the first visible uncompleted f row.
+-- In game the node is discovered on first talking to the flight master; opening the taxi
+-- map is a separate choice from its screen (user, 2026-11-20), so f never fires
+-- TAXIMAP_OPENED: its RecordTaxiLocations (WoWPro_AutoComplete.lua:9-29) would complete
+-- an f by name, a path the player didn't take.
+-- Found and already known: nothing fires, as in game, and the step is the guide's
+-- (flight-point-already-known).
 function flight.learn(ctx, step, out, h)
   local w, p = ctx.world, ctx.world.player
   out.kind = "acted"
@@ -201,12 +203,13 @@ function flight.learn(ctx, step, out, h)
     w.fp_unknown[continent] = true
     return
   end
-  local new = not p.flight_points[node.name]
-  if new then
-    p:learn_flight_point(node.name)
-    h.fire(ctx, out, "UI_INFO_MESSAGE", 0, stubs_core.ERR_NEWTAXIPATH)
+  if p.flight_points[node.name] then
+    out.reason = "flight-point-already-known"
+    out.named = { name = node.name }
+    return
   end
-  h.fire(ctx, out, "TAXIMAP_OPENED")
+  p:learn_flight_point(node.name)
+  h.fire(ctx, out, "UI_INFO_MESSAGE", 0, stubs_core.ERR_NEWTAXIPATH)
 end
 
 return flight

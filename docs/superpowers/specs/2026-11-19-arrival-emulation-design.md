@@ -145,9 +145,13 @@ The area names (§1) settle many steps without any capture:
 - The departure is the step's `Z`/`M` (§8). The flight master is the QuestieDB NPC with
   the flight-master flag (`npcFlags` bit 8) nearest that spot. The node is the taxi node
   of the player's faction nearest that NPC on the same map.
-- Found: learn the node's real name. Fire `TAXIMAP_OPENED`, and if the node is new, also
-  `UI_INFO_MESSAGE(ERR_NEWTAXIPATH)`. A node already known gives no discovery message, as
-  in game. The addon decides whether the step advances.
+- Found and new: learn the node's real name and fire `UI_INFO_MESSAGE(ERR_NEWTAXIPATH)`.
+  In game the node is discovered on first talking to the flight master; opening the taxi
+  map is a separate choice from its screen (user, 2026-11-20), so `f` never fires
+  `TAXIMAP_OPENED` (its `RecordTaxiLocations` would complete an `f` by name, a path the
+  player didn't take). The addon decides whether the step advances.
+- Found and already known: nothing fires, as in game. If the step doesn't advance, it is
+  the guide finding `flight-point-already-known` (user, 2026-11-20).
 - Not found: learn nothing. Notice `fp-unknown`.
 
 ### 5. `F`: flying
@@ -218,7 +222,7 @@ emulated. Only the end point matters.
 
 - **Guide findings:** `did-not-advance` with reason `name-not-an-area`,
   `arrival-mismatch` (traveled, the name is a real area, the addon didn't complete it),
-  `flight-point-undiscovered` or `no-taxi-node`. Each carries `expected` (name, TZ),
+  `flight-point-undiscovered`, `no-taxi-node` or `flight-point-already-known`. Each carries `expected` (name, TZ),
   `arrived` (zone, subzone, map id) and `resolved_by` when set.
 - **Harness notices:** signal `arrival-data-gap`, with reason `tables-missing`,
   `fp-unknown`, `subzone-unknown`, `inn-unknown`, `arrival-unknown`,

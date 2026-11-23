@@ -524,6 +524,10 @@ local function clauses(f, ctx)
         return "The guide flies to a flight point the character hasn't discovered" .. tail
       end
       return "No flight point on the taxi map matches " .. quoted(named.name or "") .. tail
+    elseif r == "flight-point-already-known" then
+      return "The guide asks you to get the flight point at " .. quoted(named.name or "")
+        .. ", which the character already knows, so no new flight path was discovered and the client clicked "
+        .. "the step off."
     elseif r == "incomplete" and f.action == "T" then
       return "The turn-in was refused because " .. own .. " wasn't complete, so the client clicked the step off."
     elseif r == "incomplete" then

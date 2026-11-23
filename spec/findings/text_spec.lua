@@ -619,6 +619,12 @@ describe("arrival finding text (spec section 10)", function()
     assert.equal('No flight point on the taxi map matches "Stormwind", so the client clicked the step off.',
       text.sentence(dnaf("no-taxi-node"), {}))
   end)
+  it("words an f for a flight point the character already knows", function()
+    assert.equal('The guide asks you to get the flight point at "Ironforge, Dun Morogh", which the character '
+      .. "already knows, so no new flight path was discovered and the client clicked the step off.",
+      text.sentence(dnaf("flight-point-already-known", { action = "f", named = { name = "Ironforge, Dun Morogh" } }),
+        {}))
+  end)
   it("words the gap reasons", function()
     assert.equal("The Forever client tables aren't installed, so arrival steps aren't judged. Run hwc update.",
       text.sentence(gapf("tables-missing"), {}))
