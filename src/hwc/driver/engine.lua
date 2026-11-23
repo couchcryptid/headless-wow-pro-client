@@ -15,6 +15,7 @@
 -- Everything else is a read of WoWPro.*, WoWProDB and WoWProCharDB tables, plus
 -- firing client events through the sandbox's frames (fire).
 local guide_source = require("hwc.driver.guide_source")
+local tomtom = require("hwc.stubs.tomtom")
 
 local Engine = {}
 Engine.__index = Engine
@@ -78,9 +79,11 @@ function Engine:settle()
   local env = self.env
   return self.sb.clock:settle({
     max_virtual = Engine.SETTLE_MAX_VIRTUAL,
+    -- Also busy until the TomTom stub's OnUpdate has seen the latest player move or
+    -- waypoint (hwc.stubs.tomtom pending), as TomTom's OnUpdate would in game.
     busy = function()
       local w = rawget(env, "WoWPro")
-      return type(w) == "table" and w.LockdownTimer ~= nil
+      return (type(w) == "table" and w.LockdownTimer ~= nil) or tomtom.pending(self.sb)
     end,
   })
 end

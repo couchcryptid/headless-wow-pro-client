@@ -8,6 +8,7 @@ local catalog = require("hwc.catalog")
 local stubs = require("hwc.stubs.core")
 local hbd = require("hwc.stubs.hbd")
 local standins = require("hwc.stubs.standins")
+local tomtom = require("hwc.stubs.tomtom")
 
 local M = {}
 
@@ -167,6 +168,8 @@ function M.run(cfg)
   end
   sb.world = World.new(cfg, cat, sb.clock)
   stubs.install(sb, cfg)
+  -- TomTom loads before WoW-Pro (OptionalDeps), so it exists when WoW-Pro's files run.
+  tomtom.install(sb)
   env.math = seeded_math(cfg.seed)
   local function phase(name)
     if cfg.on_phase then cfg.on_phase(name, sb) end
@@ -215,9 +218,11 @@ function M.run(cfg)
   -- The startup lockdown (WoWPro_Events.lua:279) is released by an OnUpdate
   -- handler (WoWPro_Broker.lua:4840-4874), not a timer: keep frames ticking
   -- while it is pending. Read only; the engine's own handler clears it.
+  -- TomTom's OnUpdate also runs every frame in game: keep ticking until it has seen the
+  -- latest move or waypoint (hwc.stubs.tomtom pending).
   local function lockdown_pending()
     local w = rawget(env, "WoWPro")
-    return type(w) == "table" and w.LockdownTimer ~= nil
+    return (type(w) == "table" and w.LockdownTimer ~= nil) or tomtom.pending(sb)
   end
   result.settle = sb.clock:settle({ max_virtual = SETTLE_MAX_VIRTUAL, busy = lockdown_pending })
 
