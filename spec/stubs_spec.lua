@@ -55,6 +55,17 @@ describe("stubs", function()
     assert.is_true(require("hwc.boot").EXPECTED_ABSENT.UnitAura)
   end)
 
+  it("expects only the globals the in-game dump found missing (2026-11-23)", function()
+    local absent = require("hwc.boot").EXPECTED_ABSENT
+    for _, name in ipairs({ "C_Seasons", "GetItemCooldown", "GetQuestLogTitle", "SetSuperTrackedQuestID" }) do
+      assert.is_true(absent[name], name)
+    end
+    for _, name in ipairs({ "C_QuestInfoSystem", "C_QuestLine", "PlayerGetTimerunningSeasonID",
+                            "C_Covenants", "C_Garrison", "C_PetBattles" }) do
+      assert.is_nil(absent[name], name)
+    end
+  end)
+
   it("IsPlayerSpell coerces the string spell id the engine passes (Broker.lua:3332-3340)", function()
     sb.world.player:learn_spell(3273)
     assert.is_true(env.IsPlayerSpell("3273"))

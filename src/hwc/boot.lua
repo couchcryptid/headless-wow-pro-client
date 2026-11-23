@@ -93,16 +93,19 @@ local HARNESS = "src/hwc/"
 
 -- Globals a real Forever player's client also lacks, so the addon meeting them nil is
 -- the addon's behaviour, not a harness gap. TomTom is deliberately left out: the
--- guides expect it installed, so its absence is a harness gap until it is stubbed.
+-- guides expect it installed, and it is stubbed (stubs/tomtom.lua).
 M.EXPECTED_ABSENT = {
-  -- Absent in the Forever client: GetFactionInfoByID by in-game check, 2026-11-18;
-  -- UnitAura by in-game check, 2026-11-23 (C_UnitAuras is stubbed instead).
-  UnitAura = true,
-  -- The rest are retail-only APIs WoWPro probes (unverified for Forever).
-  GetFactionInfoByID = true, GetQuestLogTitle = true, GetNumQuestLogEntries = true,
-  C_PetBattles = true, C_Covenants = true, C_Garrison = true, C_Seasons = true,
-  C_QuestLine = true, C_QuestInfoSystem = true, SetSuperTrackedQuestID = true,
-  PlayerGetTimerunningSeasonID = true,
+  -- Absent in the Forever client, by in-game check: GetFactionInfoByID (2026-11-18);
+  -- UnitAura (2026-11-23, C_UnitAuras is stubbed instead); C_Seasons, GetItemCooldown
+  -- (C_Container.GetItemCooldown is stubbed instead), GetQuestLogTitle and
+  -- SetSuperTrackedQuestID (2026-11-23).
+  UnitAura = true, GetFactionInfoByID = true, C_Seasons = true, GetItemCooldown = true,
+  GetQuestLogTitle = true, SetSuperTrackedQuestID = true,
+  -- Unverified for Forever.
+  GetNumQuestLogEntries = true,
+  -- Present in Forever (in-game check, 2026-11-23), so deliberately not listed: a nil one
+  -- in hwc is a harness gap. C_QuestInfoSystem, C_QuestLine, PlayerGetTimerunningSeasonID,
+  -- C_Covenants, C_Garrison, C_PetBattles.
   -- Other addons a player may not run; WoWPro checks for them.
   Grail = true, Nx = true, TourGuide = true,
   -- Libraries the addon ships itself (WoWPro/Libraries), so a nil one is the addon's.
