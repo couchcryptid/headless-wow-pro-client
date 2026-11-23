@@ -55,6 +55,17 @@ describe("stubs", function()
     assert.is_true(require("hwc.boot").EXPECTED_ABSENT.UnitAura)
   end)
 
+  it("answers the Forever-present retail APIs as the in-game dump did (2026-11-23)", function()
+    assert.is_false(env.C_PetBattles.IsInBattle())
+    assert.is_false(env.C_Garrison.IsPlayerInGarrison(2))
+    assert.is_nil(env.PlayerGetTimerunningSeasonID())
+    assert.equal(0, env.C_Covenants.GetActiveCovenantID())
+    assert.equal("table", type(env.Enum.QuestClassification))
+    assert.is_nil(env.C_QuestInfoSystem.GetQuestClassification(96608))
+    assert.is_nil(env.C_QuestLine.GetQuestLineInfo(96608, 1426))
+    assert.same({}, sb.missing_order)
+  end)
+
   it("expects only the globals the in-game dump found missing (2026-11-23)", function()
     local absent = require("hwc.boot").EXPECTED_ABSENT
     for _, name in ipairs({ "C_Seasons", "GetItemCooldown", "GetQuestLogTitle", "SetSuperTrackedQuestID" }) do
