@@ -638,7 +638,7 @@ describe("arrival finding text (spec section 10)", function()
     assert.equal("The Forever client tables aren't installed, so arrival steps aren't judged. Run hwc update.",
       text.sentence(gapf("tables-missing"), {}))
     for _, r in ipairs({ "fp-unknown", "start-node-unknown", "destination-unresolved", "arrival-unknown", "inn-unknown",
-      "waypoint-arrival-not-emulated", "subzone-unknown", "taxi-not-taken", "arrival-data-mismatch" }) do
+      "subzone-unknown", "waypoint-unmeasurable", "taxi-not-taken", "arrival-data-mismatch" }) do
       assert.matches("^hwc has no arrival data for this: .+%.$", text.sentence(gapf(r), {}))
     end
     assert.matches("never took the flight", text.sentence(gapf("taxi-not-taken"), {}), 1, true)

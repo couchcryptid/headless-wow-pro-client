@@ -295,6 +295,38 @@ function M.install(sb, cfg)
     end,
   })
 
+  -- Interface globals every client defines (TomTom stub design §5, 2026-11-23). WoWPro only
+  -- reads them for UI: button labels (WoWPro_Broker.lua:825-826), zone suffixes for maps 943
+  -- and 1044 (WoWPro_Zones.lua:545-546), font objects and the backdrop template choice
+  -- (WoWPro_Frames.lua:1008), and guide.expansion for the guide list
+  -- (WoWPro_GuideRegistry.lua:18-30). LE_EXPANSION_* are the client's enum order 0..11;
+  -- LE_EXPANSION_CLASSIC == 0 checked in game (2026-11-23), the rest unverified for Forever.
+  env.CANCEL, env.OKAY = "Cancel", "Okay"
+  env.FACTION_ALLIANCE, env.FACTION_HORDE = "Alliance", "Horde"
+  env.GameFontNormal, env.GameFontNormalSmall = {}, {}
+  env.BackdropTemplateMixin = {}
+  for i, name in ipairs({ "CLASSIC", "BURNING_CRUSADE", "WRATH_OF_THE_LICH_KING", "CATACLYSM",
+    "MISTS_OF_PANDARIA", "WARLORDS_OF_DRAENOR", "LEGION", "BATTLE_FOR_AZEROTH", "SHADOWLANDS",
+    "DRAGONFLIGHT", "WAR_WITHIN", "MIDNIGHT" }) do
+    env["LE_EXPANSION_" .. name] = i - 1
+  end
+
+  -- Retail-named APIs Forever also has, answered as the in-game dump did (user, 2026-11-23):
+  -- IsInBattle false, IsPlayerInGarrison false, PlayerGetTimerunningSeasonID nil,
+  -- GetActiveCovenantID 0, Enum.QuestClassification present (members not dumped, unread while
+  -- GetQuestClassification answers nil). GetQuestClassification and GetQuestLineInfo dumped nil for the
+  -- first quest-log entry, which may have been a header: nil is unverified for a real quest.
+  -- Forever reaches: ShouldPetBattleHide (WoWPro.lua:1117), InGarrisonInstance (:1076), the Legion Remix
+  -- starter check (WoWPro_Leveling.lua:177), quest icons via GetQuestInfo (WoWPro_Parser.lua:115-160,
+  -- WoWPro_CurrentGuide.lua:108-118). Covenant filtering and the season purge are retail-only.
+  env.C_PetBattles = trap(sb, "C_PetBattles", { IsInBattle = function() return false end })
+  env.C_Garrison = trap(sb, "C_Garrison", { IsPlayerInGarrison = function() return false end })
+  env.PlayerGetTimerunningSeasonID = function() return nil end
+  env.C_Covenants = trap(sb, "C_Covenants", { GetActiveCovenantID = function() return 0 end })
+  env.Enum.QuestClassification = {}
+  env.C_QuestInfoSystem = trap(sb, "C_QuestInfoSystem", { GetQuestClassification = function() return nil end })
+  env.C_QuestLine = trap(sb, "C_QuestLine", { GetQuestLineInfo = function() return nil end })
+
   -- Forever has no UnitAura and has C_UnitAuras.GetAuraDataByIndex (user, in game, 2026-11-23), so
   -- WoWPro.UnitAura (WoWPro_CompatUtil.lua:385-400) always takes this branch; UnitAura stays undefined.
   -- WoWPro.AuraScan (WoWPro_AutoComplete.lua:126-145) walks index 1.. per filter until nil, for the

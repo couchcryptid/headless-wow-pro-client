@@ -53,6 +53,7 @@ local flight = require("hwc.driver.flight")
 local crossing = require("hwc.driver.crossing")
 local hearth = require("hwc.driver.hearth")
 local arrival = require("hwc.driver.arrival")
+local tomtom = require("hwc.stubs.tomtom")
 
 local actions = {}
 
@@ -484,6 +485,18 @@ local function parse_coords(value)
   return frac(x), frac(y)
 end
 
+-- Every coordinate of an M tag ("x,y;x,y;..."), in order, as { x, y } fractions; unusable
+-- ones are skipped.
+local function parse_all_coords(value)
+  local out = {}
+  if type(value) ~= "string" then return out end
+  for part in value:gmatch("[^;]+") do
+    local x, y = parse_coords(part)
+    if x then out[#out + 1] = { x, y } end
+  end
+  return out
+end
+
 -- L: { [itemID] = qty } as the engine stores it, or the raw "id qty;id qty" text.
 -- Returns a list of { id, n } sorted by id (deterministic).
 function parse_loot(value)
@@ -635,14 +648,17 @@ end
 -- R: run to Z/M (destination: the zone name from the map id through DB:zone_of_map when
 -- the tables are installed, else the Z text); the subzone is "" on a zone or map change
 -- and kept otherwise, never the step name, and never reported in out.arrived. out.arrived/out.classify/out.named feed the
--- driver's arrival grading (spec section 8); waypcomplete 1 or 2 cannot be emulated
--- (waypoint-arrival-not-emulated, key "<gid>:<line>"), otherwise the driver decides from
--- out.classify. WoWPro_Events.lua:301-316 / WoWPro_AutoComplete.lua:488-530.
+-- driver's arrival grading (spec section 8), from out.classify. WoWPro_Events.lua:301-316 /
+-- WoWPro_AutoComplete.lua:488-530. A multi-point M is walked in order, settling between
+-- points, and ends on the last (TomTom stub design, 2026-11-23): the guide's own path, so the
+-- TomTom stub's OnUpdate sees each waypoint arrival, which CC/CS completion needs
+-- (WoWPro_Mapping.lua:103-170). The zone events fire once, on the first move.
 local function perform_travel(ctx, step, out)
   local p = ctx.world.player
   local tags = step.tags or {}
   local db = ctx.world.catalog and ctx.world.catalog.forever
   local to = destination(ctx, tags)
+  local points = parse_all_coords(tags.map)
   if to then p:set_zone(to.zone, to.subzone, to.map_id, to.x, to.y) end
   out.kind = "acted"
   out.named = { name = step.name, tz = tags.targetzone }
@@ -650,13 +666,20 @@ local function perform_travel(ctx, step, out)
   -- §3 never reads it (spec section 7: name-not-an-area or subzone-unknown only).
   out.arrived = { zone = p.zone, map_id = p.map_id }
   out.classify = db and arrival.classify(db, out.arrived, step.name, tags.targetzone) or nil
-  local wc = tags.waypcomplete
-  if wc == 1 or wc == 2 then
-    out.data_gap = { reason = "waypoint-arrival-not-emulated",
-      key = arrival.step_key(step) }
-  end
   fire(ctx, out, "ZONE_CHANGED_NEW_AREA")
   fire(ctx, out, "ZONE_CHANGED")
+  if to then
+    for i = 2, #points do
+      settle(ctx, out)
+      p:set_zone(p.zone, p.subzone, p.map_id, points[i][1], points[i][2])
+    end
+  end
+  -- CC/CS completes only through TomTom's distance callback: when the stub can't measure
+  -- any of the step's waypoints, a stall is hwc's gap, not the guide's (final review).
+  local wc = tags.waypcomplete
+  if (wc == 1 or wc == 2) and tomtom.measurable(ctx.world) == false then
+    out.data_gap = { reason = "waypoint-unmeasurable", key = arrival.step_key(step) }
+  end
   credit_arrival(ctx, step, out)
 end
 

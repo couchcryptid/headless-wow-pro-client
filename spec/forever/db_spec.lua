@@ -71,6 +71,30 @@ describe("forever db", function()
   end)
 end)
 
+-- TomTom stub design (2026-11-23): arrival distance in yards needs each map's size.
+describe("forever db map_yards", function()
+  local d = assert(db.open(FIX))
+  -- The installed JSON keeps no UiMin/UiMax, so a region is taken as the whole map, as the
+  -- node placement does; the largest region assigned to the map wins.
+  it("sizes a map from its largest UiMapAssignment region", function()
+    local row
+    for line in io.lines("spec/fixtures/forever/UiMapAssignment.csv") do
+      local f = {}
+      for v in line:gmatch("[^,]+") do f[#f + 1] = v end
+      if f[12] == "1426" then row = f break end
+    end
+    assert.is_truthy(row, "fixture has no 1426 row")
+    local n = function(i) return tonumber(row[i]) end
+    local w, h = d:map_yards(1426)
+    assert.near(math.abs(n(9) - n(6)), w, 1e-6)
+    assert.near(math.abs(n(8) - n(5)), h, 1e-6)
+    assert.is_true(w > 0 and h > 0)
+  end)
+  it("is nil for a map with no region", function()
+    assert.is_nil(d:map_yards(999999))
+  end)
+end)
+
 describe("catalog forever", function()
   local function cfg(over)
     local c = { questie_source = dofile("spec/fixtures/catalog/questie_source.lua") }

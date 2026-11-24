@@ -8,6 +8,7 @@ local catalog = require("hwc.catalog")
 local stubs = require("hwc.stubs.core")
 local hbd = require("hwc.stubs.hbd")
 local standins = require("hwc.stubs.standins")
+local tomtom = require("hwc.stubs.tomtom")
 
 local M = {}
 
@@ -92,14 +93,19 @@ local HARNESS = "src/hwc/"
 
 -- Globals a real Forever player's client also lacks, so the addon meeting them nil is
 -- the addon's behaviour, not a harness gap. TomTom is deliberately left out: the
--- guides expect it installed, so its absence is a harness gap until it is stubbed.
+-- guides expect it installed, and it is stubbed (stubs/tomtom.lua).
 M.EXPECTED_ABSENT = {
-  -- Absent in the Forever client: GetFactionInfoByID by in-game check, 2026-11-18.
-  -- The rest are retail-only APIs WoWPro probes (unverified for Forever).
-  GetFactionInfoByID = true, GetQuestLogTitle = true, GetNumQuestLogEntries = true,
-  C_PetBattles = true, C_Covenants = true, C_Garrison = true, C_Seasons = true,
-  C_QuestLine = true, C_QuestInfoSystem = true, SetSuperTrackedQuestID = true,
-  PlayerGetTimerunningSeasonID = true,
+  -- Absent in the Forever client, by in-game check: GetFactionInfoByID (2026-11-18);
+  -- UnitAura (2026-11-23, C_UnitAuras is stubbed instead); C_Seasons, GetItemCooldown
+  -- (C_Container.GetItemCooldown is stubbed instead), GetQuestLogTitle and
+  -- SetSuperTrackedQuestID (2026-11-23); GetSpellInfo (C_Spell.GetSpellInfo is stubbed instead)
+  -- and GetNumQuestLogEntries (C_QuestLog's is stubbed instead) (2026-11-23).
+  UnitAura = true, GetFactionInfoByID = true, C_Seasons = true, GetItemCooldown = true,
+  GetQuestLogTitle = true, SetSuperTrackedQuestID = true, GetSpellInfo = true,
+  GetNumQuestLogEntries = true,
+  -- Present in Forever (in-game check, 2026-11-23), so deliberately not listed: a nil one
+  -- in hwc is a harness gap. C_QuestInfoSystem, C_QuestLine, PlayerGetTimerunningSeasonID,
+  -- C_Covenants, C_Garrison, C_PetBattles.
   -- Other addons a player may not run; WoWPro checks for them.
   Grail = true, Nx = true, TourGuide = true,
   -- Libraries the addon ships itself (WoWPro/Libraries), so a nil one is the addon's.
@@ -167,6 +173,8 @@ function M.run(cfg)
   end
   sb.world = World.new(cfg, cat, sb.clock)
   stubs.install(sb, cfg)
+  -- TomTom loads before WoW-Pro (OptionalDeps), so it exists when WoW-Pro's files run.
+  tomtom.install(sb)
   env.math = seeded_math(cfg.seed)
   local function phase(name)
     if cfg.on_phase then cfg.on_phase(name, sb) end
@@ -215,9 +223,11 @@ function M.run(cfg)
   -- The startup lockdown (WoWPro_Events.lua:279) is released by an OnUpdate
   -- handler (WoWPro_Broker.lua:4840-4874), not a timer: keep frames ticking
   -- while it is pending. Read only; the engine's own handler clears it.
+  -- TomTom's OnUpdate also runs every frame in game: keep ticking until it has seen the
+  -- latest move or waypoint (hwc.stubs.tomtom pending).
   local function lockdown_pending()
     local w = rawget(env, "WoWPro")
-    return type(w) == "table" and w.LockdownTimer ~= nil
+    return (type(w) == "table" and w.LockdownTimer ~= nil) or tomtom.pending(sb)
   end
   result.settle = sb.clock:settle({ max_virtual = SETTLE_MAX_VIRTUAL, busy = lockdown_pending })
 

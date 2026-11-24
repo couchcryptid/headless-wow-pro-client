@@ -39,6 +39,46 @@ describe("stubs", function()
     assert.is_nil(env.C_UnitAuras.GetAuraDataByIndex("player", 1, "MAW"))
   end)
 
+  it("defines the client's interface strings, fonts and expansion constants (TomTom stub design §5)", function()
+    assert.same({ "Cancel", "Okay", "Alliance", "Horde" },
+      { env.CANCEL, env.OKAY, env.FACTION_ALLIANCE, env.FACTION_HORDE })
+    assert.equal(0, env.LE_EXPANSION_CLASSIC)
+    assert.equal(1, env.LE_EXPANSION_BURNING_CRUSADE)
+    assert.equal(10, env.LE_EXPANSION_WAR_WITHIN)
+    assert.equal(11, env.LE_EXPANSION_MIDNIGHT)
+    assert.equal("table", type(env.GameFontNormal))
+    assert.equal("table", type(env.GameFontNormalSmall))
+    assert.equal("table", type(env.BackdropTemplateMixin))
+  end)
+
+  it("expects UnitAura absent in Forever (in game, 2026-11-23)", function()
+    assert.is_true(require("hwc.boot").EXPECTED_ABSENT.UnitAura)
+  end)
+
+  it("answers the Forever-present retail APIs as the in-game dump did (2026-11-23)", function()
+    assert.is_false(env.C_PetBattles.IsInBattle())
+    assert.is_false(env.C_Garrison.IsPlayerInGarrison(2))
+    assert.is_nil(env.PlayerGetTimerunningSeasonID())
+    assert.equal(0, env.C_Covenants.GetActiveCovenantID())
+    assert.equal("table", type(env.Enum.QuestClassification))
+    assert.is_nil(env.C_QuestInfoSystem.GetQuestClassification(96608))
+    assert.is_nil(env.C_QuestLine.GetQuestLineInfo(96608, 1426))
+    assert.same({}, sb.missing_order)
+  end)
+
+  it("expects only the globals the in-game dump found missing (2026-11-23)", function()
+    local absent = require("hwc.boot").EXPECTED_ABSENT
+    assert.equal(0, env.LE_EXPANSION_CLASSIC)
+    for _, name in ipairs({ "C_Seasons", "GetItemCooldown", "GetQuestLogTitle", "SetSuperTrackedQuestID",
+                            "GetSpellInfo", "GetNumQuestLogEntries" }) do
+      assert.is_true(absent[name], name)
+    end
+    for _, name in ipairs({ "C_QuestInfoSystem", "C_QuestLine", "PlayerGetTimerunningSeasonID",
+                            "C_Covenants", "C_Garrison", "C_PetBattles" }) do
+      assert.is_nil(absent[name], name)
+    end
+  end)
+
   it("IsPlayerSpell coerces the string spell id the engine passes (Broker.lua:3332-3340)", function()
     sb.world.player:learn_spell(3273)
     assert.is_true(env.IsPlayerSpell("3273"))
